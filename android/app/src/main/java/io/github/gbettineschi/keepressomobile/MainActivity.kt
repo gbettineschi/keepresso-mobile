@@ -204,10 +204,10 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
         }
     }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        val checked = parsed(triggers.text("checkedAt")); val status = triggers.text("state")
+        val checked = parsed(triggers.text("checkedAt")); val status = if(state.checkingTriggers)"checking" else triggers.text("state")
         Text("Active triggers",style=MaterialTheme.typography.titleSmall,modifier=Modifier.weight(1f))
         Text(when{status=="checking"->"Checking…";checked==null->"Not checked";else->"Checked ${time(checked)}"},style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.semantics{contentDescription=if(checked==null)"Triggers not checked" else "Triggers checked at ${time(checked)}${if(status in setOf("stale","error") || !reachable) ", stale" else ""}"})
-        TextButton(onClick = { Companion.service?.send("refresh_triggers") }, enabled = can("refreshTriggers")) { Text("Check") }
+        TextButton(onClick = { Companion.service?.send("refresh_triggers") }, enabled = can("refreshTriggers") && !state.checkingTriggers) { Text("Check") }
     }
     val rules = triggers?.get("rules")?.jsonArray?.map { it.jsonObject }.orEmpty()
     rules.forEach { rule ->

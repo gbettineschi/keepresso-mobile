@@ -26,10 +26,11 @@ class VirtualMacPeerTest {
         var deviceId="";var transcript="";var channel:SecureChannel?=null
     }
     private val peers=mutableMapOf<String,Peer>();private val keys=mutableMapOf<String,ByteArray>()
-    private var active=false;private var paused=true;private var end:Instant?=null;private var checked:Instant?=null
+    private var active=false;private var paused=true;private var end:Instant?=null;private var checked:Instant?=null;private var startCount=0
     private var interval=3600;private var delay=300;private var routine=true;private var snoozed:Instant?=null
     private fun snapshot()=buildJsonObject{
         put("capturedAt",Instant.now().toString());put("macName","Emulated Mac")
+        put("fixtureStartCount",startCount)
         put("mac",buildJsonObject{put("lock","locked");put("display","off");put("lid","closed");put("batteryPercent",83);put("powerSource","ac");put("temperatureC",JsonNull);put("temperatureSensor",JsonNull);put("thermal","normal")})
         put("keepresso",buildJsonObject{put("appRunning",true);put("version","1.27.0");put("isActive",active);put("endsAt",end?.let{JsonPrimitive(it.toString())}?:JsonNull);put("triggersEnabled",true);put("triggersPaused",paused);put("sessionKind",if(end!=null)"manual" else if(active)"automatic" else "unknown");put("safetyPause","none")})
         put("capabilities",buildJsonObject{for(name in listOf("startManual","stopManual","pauseTriggers","resumeTriggers","refreshTriggers"))put(name,true);put("sleepNow",false)})
@@ -51,7 +52,7 @@ class VirtualMacPeerTest {
             message=obj(peer.channel!!.open(text));Requests.validate(message.toString(),Instant.now())
             val action=message.string("action")
             when(action){
-                "start_manual"->{active=true;paused=true;end=Instant.now().plusSeconds(message.getValue("durationMinutes").jsonPrimitive.int*60L)}
+                "start_manual"->{startCount++;active=true;paused=true;end=Instant.now().plusSeconds(message.getValue("durationMinutes").jsonPrimitive.int*60L)}
                 "stop_manual"->{active=false;end=null}
                 "resume_triggers"->{paused=false;active=false;end=null}
                 "pause_triggers"->{paused=true;active=false;end=null}
@@ -60,7 +61,9 @@ class VirtualMacPeerTest {
                 "resume_reminders"->snoozed=null
                 "set_reminder_settings"->{val settings=message.getValue("reminderSettings").jsonObject;routine=settings.getValue("enabled").jsonPrimitive.boolean;interval=settings.getValue("intervalSeconds").jsonPrimitive.int;delay=settings.getValue("endedAwakeDelaySeconds").jsonPrimitive.int}
             }
-            send(peer,buildJsonObject{put("type","response");put("id",message.string("id"));put("status","ok");put("snapshot",snapshot())},true)
+            val response=buildJsonObject{put("type","response");put("id",message.string("id"));put("status","ok");put("snapshot",snapshot())}
+            if(action=="status" && InstrumentationRegistry.getArguments().getString("mode")=="slow")main.postDelayed({if(peers[peer.device.address]===peer)send(peer,response,true)},1500)
+            else send(peer,response,true)
             if(action=="start_manual"){
                 val event=buildJsonObject{put("type","event");put("event",buildJsonObject{put("id",java.util.UUID.randomUUID().toString());put("kind","hourly");put("createdAt",Instant.now().toString());put("title","Keepresso test reminder");put("body","Synthetic virtual Mac reminder")})}
                 send(peer,event,true);send(peer,event,true)

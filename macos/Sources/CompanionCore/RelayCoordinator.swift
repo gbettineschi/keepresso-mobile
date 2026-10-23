@@ -12,6 +12,7 @@ import Foundation
     private var active=true,busy=false;private var enrolledDevices:Set<String>=[];private var freshDevices:Set<String>=[]
     private var statusProofs:Set<String>=[];private var lastContact:TimeInterval?;private var epochStarted:TimeInterval
     private var nextPoll:TimeInterval=0;private var lastStates:[String:TimeInterval]=[:];private var revision:Int64=0
+    private var foregroundUntil:[String:TimeInterval]=[:]
     public init(macId:String,api:RelayAPI,outbox:RelayOutbox,devices:@escaping()->[AuthorizedDevice],nearby:@escaping()->Set<String>,snapshot:@escaping()->[String:Any],execute:@escaping(CommandRequest,String,Data,String?)async->CommandResponse,now:@escaping()->Date=Date.init,monotonic:@escaping()->TimeInterval={ProcessInfo.processInfo.systemUptime},enrolled:@escaping(String)->Void={_ in})throws {
         guard WireCrypto.validID(macId) else{throw CompanionError.invalid}
         self.macId=macId;self.api=api;self.outbox=outbox;self.devices=devices;self.nearby=nearby;self.snapshot=snapshot;self.execute=execute;self.now=now;self.monotonic=monotonic;self.enrolled=enrolled
@@ -24,12 +25,12 @@ import Foundation
     public func enqueue(_ event:CompanionEvent)throws{guard active else{throw CompanionError.closed};try outbox.enqueue(event,devices:devices(),macId:macId,epoch:epoch,now:now())}
     public func pendingNearbyEvents(_ device:String)->[CompanionEvent]{guard authorized(device) != nil else{return []};return outbox.events(deviceId:device,epoch:epoch,now:now())}
     public func revoke(_ device:String)async {
-        enrolledDevices.remove(device);freshDevices.remove(device);lastStates.removeValue(forKey:device)
+        enrolledDevices.remove(device);freshDevices.remove(device);lastStates.removeValue(forKey:device);foregroundUntil.removeValue(forKey:device)
         try? outbox.revoke(device,now:now())
         try? await api.revoke(macId:macId,deviceId:device)
     }
     private func authorized(_ device:String)->AuthorizedDevice?{devices().first{$0.deviceId==device}}
-    private func rotateEpoch(){epoch=UUID().uuidString.lowercased();epochStarted=monotonic();lastContact=nil;lastStates=[:];freshDevices=[];statusProofs=[];revision=0}
+    private func rotateEpoch(){epoch=UUID().uuidString.lowercased();epochStarted=monotonic();lastContact=nil;lastStates=[:];foregroundUntil=[:];freshDevices=[];statusProofs=[];revision=0}
     private func contactGap()->Bool{monotonic()-(lastContact ?? epochStarted)>=15}
     public func tick()async {
         guard active,!busy,monotonic()>=nextPoll else{return}
@@ -53,7 +54,7 @@ import Foundation
             if !remote.isEmpty {
                 // Capture only the lightweight native snapshot. An explicit
                 // refresh_triggers command is the only observer entry point.
-                let due=remote.filter{stamp-(lastStates[$0.deviceId] ?? -Double.greatestFiniteMagnitude)>=10}
+                let due=remote.filter{stamp-(lastStates[$0.deviceId] ?? -Double.greatestFiniteMagnitude)>=(stamp<(foregroundUntil[$0.deviceId] ?? 0) ? 5:10)}
                 if !due.isEmpty {
                     revision+=1
                     let body=try WireJSON.data(["type":"relay_state","epoch":sentEpoch,"revision":revision,"snapshot":snapshot()])
@@ -79,6 +80,7 @@ import Foundation
                     let request=try WireJSON.decoder.decode(CommandRequest.self,from:body)
                     guard request.id==envelope.id else{throw CompanionError.mismatch};try request.validate(now:now())
                     if try outbox.response(id:request.id,deviceId:device.deviceId,epoch:sentEpoch,body:body,now:now()) != nil{continue}
+                    if request.action=="status"{foregroundUntil[device.deviceId]=monotonic()+20}
                     let rejection=request.isMutation && !freshDevices.contains(device.deviceId) ? "Refresh status through the internet connection before issuing controls.":nil
                     let response=await execute(request,device.deviceId,body,rejection)
                     guard active,epoch==sentEpoch,authorized(device.deviceId) != nil,!contactGap() else{continue}

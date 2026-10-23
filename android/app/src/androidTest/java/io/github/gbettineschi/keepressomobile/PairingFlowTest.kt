@@ -82,4 +82,23 @@ class PairingFlowTest {
         Assert.assertNull(CredentialStore(InstrumentationRegistry.getInstrumentation().targetContext).load())
         Assert.assertFalse(Companion.state.value.authenticated)
     }
+    @Test fun quietPollKeepsControlsEnabledAndTapWaitsBehindReadWithoutDuplicates(){
+        Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("virtualPeer")=="true")
+        scan()
+        try{ui.waitUntil(25000){Companion.state.value.reachable(Instant.now())}}
+        catch(error:Throwable){throw AssertionError("Synthetic peer connection: ${Companion.state.value.connection}; ${Companion.state.value.result}",error)}
+        val service=requireNotNull(Companion.service)
+        val pending=NearbyService::class.java.getDeclaredField("pending").apply{isAccessible=true}
+        fun statusPending():Boolean{
+            val value=pending.get(service)?:return false
+            return value.javaClass.getDeclaredField("action").apply{isAccessible=true}.get(value)=="status"
+        }
+        ui.waitUntil(7000){statusPending() && Companion.state.value.reachable(Instant.now())}
+        Assert.assertFalse("Quiet reads must not mark the UI busy",Companion.state.value.busy)
+        ui.onNodeWithText("Start").performScrollTo().assertIsEnabled().performClick()
+        ui.waitUntil(8000){Companion.state.value.snapshot?.get("fixtureStartCount")?.jsonPrimitive?.int==1}
+        ui.onNodeWithText("Stop manual session").assertIsEnabled()
+        Assert.assertEquals(1,Companion.state.value.snapshot!!.getValue("fixtureStartCount").jsonPrimitive.int)
+        ui.onAllNodesWithText("Checking Mac",substring=true).assertCountEquals(0)
+    }
 }

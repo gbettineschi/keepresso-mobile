@@ -13,14 +13,14 @@ This checklist is the work ledger; no item is complete without recorded evidence
 | 05 | Temperature neutral/amber/red using system thermal pressure; no invented universal temperature limits | Verified: 57 Swift tests; live read-only CPU temperature; generic worker error and retained assessment |
 | 06 | Technical trigger-worker errors logged; concise user error | Verified: 57 Swift tests; live read-only CPU temperature; generic worker error and retained assessment |
 | 07 | Configured trigger names only, native-style tick/circle; no agent/session details | UI verified: five emulator tests in light and dark; backend dependencies tracked separately |
-| 08 | Quick ordinary status; heavier trigger assessment stays explicit and bounded | Pending |
+| 08 | Quick ordinary status; heavier trigger assessment stays explicit and bounded | Verified: 64 core / 58 Swift tests, slow-read BLE and fallback-routing emulator checks |
 | 09 | Active triggers, checked time and Check on one line | UI verified: five emulator tests in light and dark; backend dependencies tracked separately |
 | 10 | Remove Unknown/input unavailable prose without treating unknown as inactive | UI verified: five emulator tests in light and dark; backend dependencies tracked separately |
-| 11 | No disabled-button flicker from polling; bounded in-memory command wait behind a read | Pending |
+| 11 | No disabled-button flicker from polling; bounded in-memory command wait behind a read | Verified: 64 core / 58 Swift tests, slow-read BLE and fallback-routing emulator checks |
 | 12 | Measure Bluetooth and live Vercel latency; test duplicates/failover; state physical gaps honestly | Pending |
 | 13 | Compact duration stepper, fixed-width duration and Start, space between controls | UI verified: five emulator tests in light and dark; backend dependencies tracked separately |
 | 14 | Implement safe Sleep now rather than hardcoded unavailable | Pending |
-| 15 | Remove Checking Mac and other transient read boilerplate | Pending |
+| 15 | Remove Checking Mac and other transient read boilerplate | Verified: 64 core / 58 Swift tests, slow-read BLE and fallback-routing emulator checks |
 | 16 | Native vs helper reminder responsibilities, no duplicate routine notification owners | Pending |
 | 17 | One lid-close warning: Mac sound plus best-effort haptic and phone warning | Pending |
 | 18 | Strong Android warning channel: sound/vibration, DND setup and truthful limits | Pending |

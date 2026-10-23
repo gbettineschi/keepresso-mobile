@@ -134,6 +134,20 @@ extension RelayRoutingTests {
 }
 
 extension RelayRoutingTests {
+    @MainActor @Test func foregroundStatusChecksSpeedSnapshotsWithoutPermanentFasterWrites()async throws{
+        let directory=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString);defer{try? FileManager.default.removeItem(at:directory)}
+        let api=RelayFakeAPI(),clock=RelayTestClock()
+        let paired=AuthorizedDevice(deviceId:device,name:"Fixture",key:Data(repeating:7,count:32),approvedAt:clock.wall)
+        let coordinator=try RelayCoordinator(macId:mac,api:api,outbox:RelayOutbox(url:directory.appendingPathComponent("outbox")),devices:{[paired]},nearby:{[]},snapshot:{["capturedAt":WireJSON.iso(clock.wall)]},execute:{r,_,_,_ in CommandResponse(id:r.id,status:"ok")},now:{clock.wall},monotonic:{clock.mono})
+        await coordinator.tick()
+        let request=CommandRequest(id:UUID().uuidString.lowercased(),action:"status",issuedAt:clock.wall,expiresAt:clock.wall.addingTimeInterval(30))
+        api.commands=[try RelayEnvelope.seal(WireJSON.encoder.encode(request),key:paired.key,macId:mac,deviceId:device,id:request.id,epoch:coordinator.epoch,direction:"c2s",kind:"command",now:clock.wall,lifetime:30)]
+        clock.advance(5);await coordinator.tick();api.commands=[]
+        clock.advance(1);await coordinator.tick();#expect(api.batches.last!.states.count==1)
+        for _ in 0..<3{clock.advance(5);await coordinator.tick();#expect(api.batches.last!.states.count==1)}
+        clock.advance(5);await coordinator.tick();#expect(api.batches.last!.states.isEmpty)
+        clock.advance(5);await coordinator.tick();#expect(api.batches.last!.states.count==1)
+    }
     @MainActor @Test func persistedCommandResponseUploadsOnNextTimerTickBeforeFiveSecondPoll()async throws {
         let directory=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString);defer{try? FileManager.default.removeItem(at:directory)}
         let api=RelayFakeAPI(),clock=RelayTestClock();var reads=0

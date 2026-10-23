@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.*
 
 data class ActivityEntry(val time: Instant, val text: String)
-data class UiState(val connection: String = "Not connected", val transport: String = "Nearby Bluetooth", val internetConfigured: Boolean = false, val authenticated: Boolean = false, val snapshot: JsonObject? = null, val receivedAt: Instant? = null, val lastContact: Instant? = null, val pairedName: String? = null, val macId: String? = null, val localSnoozedUntil: Instant? = null, val result: String? = null, val busy: Boolean = false, val serverOffsetSeconds: Long = 0, val activity: List<ActivityEntry> = emptyList()) {
+data class UiState(val connection: String = "Not connected", val transport: String = "Nearby Bluetooth", val internetConfigured: Boolean = false, val authenticated: Boolean = false, val snapshot: JsonObject? = null, val receivedAt: Instant? = null, val lastContact: Instant? = null, val pairedName: String? = null, val macId: String? = null, val localSnoozedUntil: Instant? = null, val result: String? = null, val busy: Boolean = false, val checkingTriggers:Boolean=false, val serverOffsetSeconds: Long = 0, val activity: List<ActivityEntry> = emptyList()) {
     fun reachable(now: Instant): Boolean = authenticated && receivedAt?.let { java.time.Duration.between(it, now).toMillis() in 0..15000 } == true
 }
 object Companion {
@@ -45,6 +45,9 @@ class NearbyService : Service() {
     private var remoteBusy = false
     private var nextRemotePoll = 0L
     private var nextNearbyPoll = 0L
+    private var nextRemoteStatus=0L
+    private val waitingCommand=UserCommandWait()
+    private var triggerCheckRequestedAt:Long?=null
     private val reconciledThisConnection = mutableSetOf<String>()
     private data class Pending(val id: String, val action: String, val mutation: Boolean, val route: String, val epoch: String?, val sent: Instant, val operationId: String? = null, val fastPoll: Boolean = false)
     private var pending: Pending? = null
@@ -52,14 +55,20 @@ class NearbyService : Service() {
     private val poll = object : Runnable { override fun run() {
         if (!enabled) return
         val now = Instant.now()
-        pending?.takeIf { now > it.sent.plusSeconds(30) }?.let { deliveryLost() }
-        if (session?.ready == true && now.epochSecond >= nextNearbyPoll) { nextNearbyPoll = now.epochSecond + 10; send("status", quiet = true) }
+        if(waitingCommand.expire(SystemClock.elapsedRealtime()))Companion.update{it.copy(busy=false,result="Mac is busy. Your command wasn't sent; tap again.")}
+        triggerCheckRequestedAt?.takeIf{SystemClock.elapsedRealtime()-it>=8000}?.let{triggerCheckRequestedAt=null;Companion.update{it.copy(checkingTriggers=pending?.action=="refresh_triggers")}}
+        pending?.takeIf {
+            val timeout=if(it.mutation || it.operationId!=null)30L else if(it.action=="refresh_triggers")12L else if(it.route=="nearby")5L else 15L
+            now>it.sent.plusSeconds(timeout)
+        }?.let { val nearby=it.route=="nearby";deliveryLost();if(nearby)ble.close("Unreachable") }
+        if (session?.ready == true && now.epochSecond >= nextNearbyPoll) { nextNearbyPoll = now.epochSecond + if(foregroundActivity)2 else 10; send("status", quiet = true) }
         if (foregroundActivity && (credential?.relayUrl != null && credential?.relayAuthTicket != null) && (session?.ready != true || pending?.route == "relay")) {
             if (now.epochSecond >= nextRemotePoll) {
                 nextRemotePoll = now.epochSecond + if (pending?.route == "relay" && pending?.fastPoll == true) 1 else 5
                 pollRelay()
             }
             if (session?.ready != true && !relayFresh.reachable(now.plus(serverOffset))) Companion.update { it.copy(authenticated = false, connection = "Internet status is stale or unavailable") }
+            if(session?.ready!=true && relayFresh.epoch!=null && now.epochSecond>=nextRemoteStatus){nextRemoteStatus=now.epochSecond+10;send("status",quiet=true)}
         }
         main.postDelayed(this, 1000)
     } }
@@ -106,6 +115,9 @@ class NearbyService : Service() {
         foregroundActivity = value
         if (value) { nextRemotePoll = 0; PushRegistration.configurationChanged(this) }
         else {
+            triggerCheckRequestedAt=null
+            if(waitingCommand.clear())Companion.update{it.copy(busy=pending?.mutation==true,result="Your command wasn't sent.")}
+            Companion.update{it.copy(checkingTriggers=pending?.action=="refresh_triggers")}
             relayFresh.disconnect()
             if (session?.ready != true) Companion.update { it.copy(authenticated = false) }
             if (!bluetoothAllowed()) stopSelf()
@@ -214,7 +226,17 @@ class NearbyService : Service() {
         val relay = foregroundActivity && (credential?.relayUrl != null && credential?.relayAuthTicket != null) && relayFresh.reachable(serverNow)
         val canReadRelay = action == "status" && foregroundActivity && (credential?.relayUrl != null && credential?.relayAuthTicket != null) && relayFresh.epoch != null
         if ((!nearby && !relay && !canReadRelay) || (action != "status" && !Companion.state.value.reachable(now))) { if (!quiet) Companion.update { it.copy(result = "Mac unreachable. No command was queued.") }; return }
-        if (pending != null) { if (!quiet) Companion.update { it.copy(result = "Wait for the current Mac response") }; return }
+        if (pending != null) {
+            if(quiet || action=="status")return
+            if(action=="refresh_triggers"){
+                if(pending?.action!="refresh_triggers" && foregroundActivity && triggerCheckRequestedAt==null){triggerCheckRequestedAt=SystemClock.elapsedRealtime();Companion.update{it.copy(checkingTriggers=true)}}
+                return
+            }
+            if(pending?.mutation==false && foregroundActivity && waitingCommand.offer(WaitingCommand(action,duration,settings),SystemClock.elapsedRealtime(),routeIdentity())){
+                Companion.update{it.copy(busy=true,result="Sending…")}
+            }
+            return
+        }
         if (!commandStorageAvailable && action !in setOf("status", "refresh_triggers", "operation_status")) { Companion.update { it.copy(result = "Controls disabled because saved command outcomes are unavailable") }; return }
         val raw = Requests.create(action, serverNow, duration, settings)
         transmit(CommandSubmission(raw, nearby, relay || canReadRelay), quiet)
@@ -229,7 +251,7 @@ class NearbyService : Service() {
             submission.transmit(journal) {
                 pending = Pending(id, action, mutation, route, epoch, Instant.now(), operationId, !quiet || mutation)
                 if (route == "relay" && action == "status") relayFresh.expectStatus(id, Instant.now().plus(serverOffset))
-                Companion.update { it.copy(busy = true, result = if (mutation) "Waiting for Mac acknowledgement…" else if (!quiet) "Checking Mac…" else it.result) }
+                Companion.update { it.copy(busy = mutation || waitingCommand.hasCommand,checkingTriggers=action=="refresh_triggers" || triggerCheckRequestedAt!=null,result = if (mutation) "Sending…" else it.result) }
                 if (route == "nearby") ble.send(record)
                 else network.execute {
                     val result = runCatching { require(http(c).call("send", envelope = record).boolOrNull("accepted") == true) }
@@ -251,9 +273,25 @@ class NearbyService : Service() {
         parsed.snapshot?.let { updateSnapshot(it) }
         PhoneReminders.filter(this).acknowledge(credential?.macId ?: return, p.action, parsed.status)
         pending = null
-        Companion.update { it.copy(busy = false, lastContact = now, result = if (p.operationId != null) message.stringOrNull("operationMessage") ?: when (message.stringOrNull("operationStatus")) { "ok" -> "Earlier command acknowledged by Mac"; "error" -> "Earlier command failed on the Mac"; else -> "Command outcome remains uncertain. It will never be retried automatically." } else if (p.mutation) parsed.message ?: when (parsed.status) { "ok" -> "Mac acknowledged the command"; "error" -> "Mac could not complete the command"; else -> "Command outcome uncertain. It will never be retried automatically." } else it.result) }
+        Companion.update { it.copy(busy = waitingCommand.hasCommand,checkingTriggers=triggerCheckRequestedAt!=null,lastContact = now, result = if (p.operationId != null) message.stringOrNull("operationMessage") ?: when (message.stringOrNull("operationStatus")) { "ok" -> "Earlier command acknowledged by Mac"; "error" -> "Earlier command failed on the Mac"; else -> "Command outcome remains uncertain. It will never be retried automatically." } else if (p.mutation) parsed.message ?: when (parsed.status) { "ok" -> "Mac acknowledged the command"; "error" -> "Mac could not complete the command"; else -> "Command outcome uncertain. It will never be retried automatically." } else if(p.action=="refresh_triggers" && parsed.status=="error")"Couldn't check triggers" else it.result) }
         if (p.mutation || p.operationId != null) Companion.activity("Command outcome: ${if (p.operationId != null) message.stringOrNull("operationStatus") ?: parsed.status else parsed.status}")
-        if ((p.action == "status" || p.operationId != null) && (route == "nearby" || relayFresh.reachable(now.plus(serverOffset)))) reconcileNext(route)
+        dispatchWaitingCommand()
+        if (pending==null && (p.action == "status" || p.operationId != null) && (route == "nearby" || relayFresh.reachable(now.plus(serverOffset)))) reconcileNext(route)
+    }
+    private fun routeIdentity()=if(session?.ready==true)"nearby:$reconnectGeneration" else "relay:${relayFresh.epoch}"
+    private fun dispatchWaitingCommand(){
+        if(pending!=null)return
+        if(waitingCommand.hasCommand){
+            val command=waitingCommand.take(SystemClock.elapsedRealtime(),routeIdentity(),foregroundActivity && Companion.state.value.reachable(Instant.now()))
+            Companion.update{it.copy(busy=false)}
+            if(command!=null)send(command.action,command.duration,command.settings)
+            else Companion.update{it.copy(result="Connection changed. Your command wasn't sent; tap again.")}
+        }
+        if(pending==null && triggerCheckRequestedAt!=null){
+            triggerCheckRequestedAt=null
+            if(foregroundActivity && Companion.state.value.reachable(Instant.now()))send("refresh_triggers")
+            else Companion.update{it.copy(checkingTriggers=false)}
+        }
     }
     private fun reconcileNext(route: String) {
         val operation = journal.unresolved().firstOrNull { it.id !in reconciledThisConnection } ?: return
@@ -269,18 +307,26 @@ class NearbyService : Service() {
     }
     private fun deliveryLost() {
         val p = pending ?: return; pending = null
-        Companion.update { it.copy(busy = false, result = if (p.mutation || p.operationId != null) "Command outcome uncertain. It will never be retried automatically." else "Mac response unavailable") }
+        val unsent=waitingCommand.clear()
+        triggerCheckRequestedAt=null
+        Companion.update { it.copy(busy = false,checkingTriggers=false,result = if (p.mutation || p.operationId != null) "Command outcome uncertain. It will never be retried automatically." else if(unsent)"Mac didn't respond. Your command wasn't sent." else it.result) }
         if (p.mutation) Companion.activity("Connection lost before command acknowledgement — outcome uncertain")
     }
     private fun disconnected() {
+        val lostNearbyAuthority=session?.ready==true || pending?.route=="nearby"
+        if(lostNearbyAuthority){
+            triggerCheckRequestedAt=null;Companion.update{it.copy(checkingTriggers=false)}
+            if(waitingCommand.clear())Companion.update{it.copy(busy=false,result="Connection changed. Your command wasn't sent; tap again.")}
+        }
         reconnectGeneration++; session = null; invitation = null; reconciledThisConnection.clear()
         if (pending?.route == "nearby") deliveryLost()
-        Companion.update { it.copy(authenticated = false) }; nextRemotePoll = 0
+        val remoteReady=enabled && relayFresh.reachable(Instant.now().plus(serverOffset))
+        Companion.update { it.copy(authenticated = remoteReady,transport=if(remoteReady)"Internet" else it.transport) }; nextRemotePoll = 0
         val generation = reconnectGeneration
         if (enabled && nearbyEnabled && credential != null && bluetoothAllowed()) main.postDelayed({ if (enabled && nearbyEnabled && generation == reconnectGeneration && session == null && bluetoothAllowed()) ble.start() }, 15000)
     }
     override fun onDestroy() {
-        enabled = false; deliveryLost(); main.removeCallbacksAndMessages(null); if (::ble.isInitialized) ble.close(null); network.shutdownNow(); Companion.service = null; super.onDestroy()
+        enabled = false; waitingCommand.clear();deliveryLost(); main.removeCallbacksAndMessages(null); if (::ble.isInitialized) ble.close(null); network.shutdownNow(); Companion.service = null; super.onDestroy()
     }
 }
 object Notifications {
