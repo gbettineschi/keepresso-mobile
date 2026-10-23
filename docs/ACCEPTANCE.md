@@ -60,4 +60,3 @@ These are additional to the nearby checks below. Keep all real power changes own
 - Deliver the same reminder over BLE and FCM around handoff; it appears once. Expired warnings and incidents resolved by a newer authenticated snapshot must not reappear.
 - Revoke the phone on the Mac and verify both incoming controls and outgoing status stop, including during an in-flight request. Test local persistence/remote cleanup failures using fakes before performing the owner-run real-device check.
 - Confirm monitoring alone allows the Mac's ordinary sleep behavior. Unreachable does not claim a distinction between asleep, offline, powered off or disconnected. No wake feature is present.
-

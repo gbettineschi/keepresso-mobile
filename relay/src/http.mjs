@@ -1,6 +1,13 @@
 export const makeHandler=getRelay=>async(req,res)=>{
+  const started=performance.now(),cpuStart=process.cpuUsage();
   res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','application/json');res.setHeader('X-Content-Type-Options','nosniff');
-  const send=(status,body)=>{res.statusCode=status;res.end(JSON.stringify(body));};
+  const send=(status,body)=>{
+    const cpu=process.cpuUsage(cpuStart);
+    // Diagnostic timings only; process CPU includes any concurrent invocation
+    // sharing this instance and is not a provider billing measurement.
+    res.setHeader('Server-Timing',`relay;dur=${(performance.now()-started).toFixed(3)}, process_cpu;dur=${((cpu.user+cpu.system)/1000).toFixed(3)}`);
+    res.statusCode=status;res.end(JSON.stringify(body));
+  };
   if(req.method!=='POST'){res.setHeader('Allow','POST');return send(405,{error:'method_not_allowed'});}
   if(!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type']??''))return send(415,{error:'json_required'});
   if(!/^Bearer [^\r\n]{1,249}$/.test(req.headers.authorization??''))return send(401,{error:'unauthorized'});

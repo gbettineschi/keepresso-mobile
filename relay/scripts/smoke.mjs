@@ -11,7 +11,7 @@ const ticket=createHmac('sha256',sha(macBearer).toString('hex')).update(`keepres
 const auth={mac:macBearer,phone:`${phoneBearer}.${ticket}`},latencies=[];
 async function call(role,op,fields={},expected=200){
   const started=performance.now();const r=await fetch(new URL('/api/relay',url),{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${auth[role]}`},body:JSON.stringify({op,macId,...(role==='phone'?{deviceId}:{}),...fields}),redirect:'error',signal:AbortSignal.timeout(20000)});
-  const ms=performance.now()-started;latencies.push({op,ms:Math.round(ms),status:r.status});assert.equal(r.status,expected,`${op} returned unexpected HTTP status`);return r.json();
+  const ms=performance.now()-started;latencies.push({op,ms:Math.round(ms),status:r.status,serverTiming:r.headers.get('server-timing')});assert.equal(r.status,expected,`${op} returned unexpected HTTP status`);return r.json();
 }
 const aad=e=>Buffer.from(['keepresso-mobile/relay/v1',e.macId,e.deviceId,e.id,e.epoch,e.direction,e.kind,e.createdAt,e.expiresAt].join('\n'));
 function seal(kind,plaintext,id=randomUUID()){
