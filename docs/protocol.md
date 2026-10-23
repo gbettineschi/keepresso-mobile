@@ -12,6 +12,8 @@ Each logical record is 4-byte unsigned big-endian length followed by UTF-8 JSON,
 ## Pair invitation and authorization
 
 QR is `keespresso://pair?v=1&mac=<macUUID>&token=<standard-base64-percent-encoded-32-bytes>&expires=<unix-seconds>&name=<percent-encoded-name>`.
+
+The v1 invitation scheme retains its original spelling for compatibility with already installed phones. The product name is **Keepresso**; branding changes do not change pairing keys or the wire protocol.
 The token is valid for 300 seconds on the Mac, one successful approval only. Device names are <=80 UTF-8 bytes. IDs and nonces have strict length/format validation before use.
 
 Phone sends `{type:"pair",version:1,macId,deviceId,deviceName,clientNonce,proof}`.

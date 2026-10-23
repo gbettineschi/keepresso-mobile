@@ -68,6 +68,7 @@ import CoreGraphics
     func execute(_ r:CommandRequest) async -> CommandResponse {
         let issued=Date();let before=status.native()
         if r.action=="sleep_now" { return CommandResponse(id:r.id,status:"error",message:"Safe native sleep control is unavailable. Use Sleep on this Mac; no force-sleep fallback is used.") }
+        guard let original=status.runningApp(),let originalLaunch=original.launchDate else{return CommandResponse(id:r.id,status:"error",message:"The current Keepresso process could not be verified.")}
         do {
             switch r.action {
             case "start_manual":
@@ -83,6 +84,8 @@ import CoreGraphics
         } catch { return CommandResponse(id:r.id,status:"error",message:"Control unavailable. Keepresso must be installed and its native control must be unambiguous. Pause/Resume additionally needs Accessibility permission and an exposed native control.") }
         for _ in 0..<12 {
             try? await Task.sleep(nanoseconds:250_000_000)
+            let current=status.runningApp()
+            guard !Task.isCancelled,StatusEvidence.sameLaunch(pid:original.processIdentifier,launchDate:originalLaunch,currentPID:current?.processIdentifier,currentLaunchDate:current?.launchDate) else{return CommandResponse(id:r.id,status:"uncertain",message:"Keepresso stopped or restarted while the request was in progress. It will not be retried automatically.")}
             guard let after=status.native(),StatusEvidence.acknowledges(writtenAt:after.writtenAt,modifiedAt:(try? FileManager.default.attributesOfItem(atPath:StatusFile.defaultURL().path)[.modificationDate]) as? Date,issuedAt:issued) else {continue}
             let confirmed:Bool
             switch r.action {

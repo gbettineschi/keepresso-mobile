@@ -6,8 +6,8 @@ This is an unofficial companion. Keep the official Keepresso installation; the h
 
 The public repository's **Actions → Native companion builds** workflow produces development artifacts after the corresponding checks pass:
 
-- **Keespresso-Android-development** contains `app-debug.apk`.
-- **Keespresso-Mac-development** contains `KeespressoMac.zip`.
+- **Keepresso-Android-development** contains `app-debug.apk`.
+- **Keepresso-Mac-development** contains `KeepressoMobile.zip`.
 
 These are test builds, not Play Store or notarized releases. Downloading an artifact requires signing in to GitHub. Artifacts expire after 14 days; manually run the workflow to produce fresh ones.
 
@@ -23,10 +23,12 @@ From the repository root:
 python3 scripts/verify-upstream.py
 swift test --package-path macos
 bash macos/scripts/build-app.sh
-macos/artifacts/KeespressoMac.app/Contents/MacOS/KeespressoMac --self-check
+macos/artifacts/KeepressoMobile.app/Contents/MacOS/KeepressoMac --self-check
 ```
 
-The self-check does not start Bluetooth or run power operations. Normal launch opens the menu-bar helper and may request Bluetooth access. It does not grant that access itself. Accessibility access is a separate, optional permission for native controls that lack a public Keepresso interface; unavailable controls must stay unavailable until their adapter is supported and authorized.
+The self-check does not start Bluetooth or run power operations. Normal launch opens the Keepresso Mobile settings window. Closing the window hides it; Finder or the launcher reopens it. There is no menu bar icon. Nearby Bluetooth is enabled separately by the owner and may request Bluetooth access. It does not grant that access itself. Accessibility access is a separate, optional permission for native controls that lack a public Keepresso interface; unavailable controls must stay unavailable until their adapter is supported and authorized.
+
+**Follow Keepresso** is optional: click **Enable Follow Keepresso** once, then approve it in macOS Login Items if requested. Move the app to its intended Applications location first. The same app starts hidden at login, waits quietly for native Keepresso, and resumes saved connections when it opens. It restarts after abnormal exits; explicit **Quit Keepresso Mobile** stops it until a manual reopen or the next login. Initial managed startup can briefly disconnect the phone while ownership transfers to macOS. No background item is registered by the build or self-check. See [macOS lifecycle details](../macos/README.md).
 
 The development bundle is not notarized. Use a locally built copy or inspect the source and artifact before explicitly approving a downloaded development app in macOS. Future signed distribution is separate work.
 
@@ -52,12 +54,12 @@ cd android
 ./gradlew -PcoreOnly :core:test
 ```
 
-Keespresso needs Bluetooth/Nearby Devices access; older Android versions also use location permission for BLE discovery. Notifications require notification permission. The background connection uses a visible connected-device service. Denying a permission must leave a clear, recoverable state rather than simulated status.
+Keepresso needs Bluetooth/Nearby Devices access; older Android versions also use location permission for BLE discovery. Notifications require notification permission. The background connection uses a visible connected-device service. Denying a permission must leave a clear, recoverable state rather than simulated status.
 
 ## First pairing
 
 1. Open the Mac helper and initiate phone authorization locally.
-2. Open Keespresso on Android and scan the invitation QR; a pasted invitation is the fallback.
+2. Open Keepresso on Android and scan the invitation QR; a pasted invitation is the fallback.
 3. Approve the named phone on the Mac before the five-minute invitation expires.
 4. Wait for an authenticated status response. Confirm that the Mac name and displayed readings match the real Mac.
 5. Use **Refresh** under **Active triggers** for the separate bounded rule assessment. Ordinary status does not continuously run this engine.

@@ -12,7 +12,7 @@ import io.github.gbettineschi.keepressomobile.core.*
 import java.time.Instant
 import kotlinx.serialization.json.*
 
-class KeespressoApplication : Application() {
+class KeepressoApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         // Provider-specific setup is optional; no generated credentials or project enter git.

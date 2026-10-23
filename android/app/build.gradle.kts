@@ -6,23 +6,24 @@ plugins {
 android {
     namespace = "io.github.gbettineschi.keepressomobile"
     compileSdk = 35
-    defaultConfig { applicationId = namespace; minSdk = 28; targetSdk = 35; versionCode = 2; versionName = "0.2.0" }
+    defaultConfig { applicationId = namespace; minSdk = 28; targetSdk = 35; versionCode = 3; versionName = "0.3.0" }
     buildFeatures { compose = true; buildConfig = true }
     defaultConfig {
-        fun field(name: String, property: String) { buildConfigField("String", name, "\"" + providers.gradleProperty(property).orElse("").get().replace("\\", "\\\\").replace("\"", "\\\"") + "\"") }
-        field("FIREBASE_APPLICATION_ID", "keespresso.firebase.applicationId")
-        field("FIREBASE_API_KEY", "keespresso.firebase.apiKey")
-        field("FIREBASE_PROJECT_ID", "keespresso.firebase.projectId")
-        field("FIREBASE_SENDER_ID", "keespresso.firebase.senderId")
+        // Preserve existing owners' build configuration across the spelling fix.
+        fun field(name: String, property: String) { buildConfigField("String", name, "\"" + providers.gradleProperty(property).orElse(providers.gradleProperty(property.replace("keepresso.", "keespresso."))).orElse("").get().replace("\\", "\\\\").replace("\"", "\\\"") + "\"") }
+        field("FIREBASE_APPLICATION_ID", "keepresso.firebase.applicationId")
+        field("FIREBASE_API_KEY", "keepresso.firebase.apiKey")
+        field("FIREBASE_PROJECT_ID", "keepresso.firebase.projectId")
+        field("FIREBASE_SENDER_ID", "keepresso.firebase.senderId")
     }
-    val signingInputs = listOf("KEESPRESSO_SIGNING_STORE", "KEESPRESSO_SIGNING_PASSWORD", "KEESPRESSO_SIGNING_ALIAS", "KEESPRESSO_SIGNING_KEY_PASSWORD").associateWith { providers.environmentVariable(it).orNull?.takeIf(String::isNotBlank) }
-    require(signingInputs.values.all { it == null } || signingInputs.values.all { it != null }) { "Persistent signing requires all four KEESPRESSO_SIGNING environment variables" }
+    val signingInputs = listOf("KEEPRESSO_SIGNING_STORE", "KEEPRESSO_SIGNING_PASSWORD", "KEEPRESSO_SIGNING_ALIAS", "KEEPRESSO_SIGNING_KEY_PASSWORD").associateWith { providers.environmentVariable(it).orElse(providers.environmentVariable(it.replace("KEEPRESSO_", "KEESPRESSO_"))).orNull?.takeIf(String::isNotBlank) }
+    require(signingInputs.values.all { it == null } || signingInputs.values.all { it != null }) { "Persistent signing requires all four KEEPRESSO_SIGNING environment variables" }
     if (signingInputs.values.all { it != null }) {
         val persistentDebug = signingConfigs.create("persistentDebug") {
-            storeFile = file(signingInputs.getValue("KEESPRESSO_SIGNING_STORE")!!)
-            storePassword = signingInputs.getValue("KEESPRESSO_SIGNING_PASSWORD")!!
-            keyAlias = signingInputs.getValue("KEESPRESSO_SIGNING_ALIAS")!!
-            keyPassword = signingInputs.getValue("KEESPRESSO_SIGNING_KEY_PASSWORD")!!
+            storeFile = file(signingInputs.getValue("KEEPRESSO_SIGNING_STORE")!!)
+            storePassword = signingInputs.getValue("KEEPRESSO_SIGNING_PASSWORD")!!
+            keyAlias = signingInputs.getValue("KEEPRESSO_SIGNING_ALIAS")!!
+            keyPassword = signingInputs.getValue("KEEPRESSO_SIGNING_KEY_PASSWORD")!!
         }
         buildTypes.getByName("debug").signingConfig = persistentDebug
     }

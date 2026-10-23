@@ -1,9 +1,9 @@
 {
-  "displayName": "Keespresso — Firestore quota 80%",
+  "displayName": "Keepresso — Firestore quota 80%",
   "documentation": {
     "content": "A daily Firestore read, write or delete operation allowance exceeded 80% over the last rolling 24 hours. This may warn before the midnight-Pacific quota-day total reaches 80%. Check Firebase Usage. Keep Firebase on Spark without a billing account and Vercel on Hobby. Nearby Bluetooth remains independent of cloud quotas.",
     "mimeType": "text/markdown",
-    "subject": "Keespresso: Firestore quota above 80%"
+    "subject": "Keepresso: Firestore quota above 80%"
   },
   "conditions": [
     {

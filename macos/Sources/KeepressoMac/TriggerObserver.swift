@@ -54,16 +54,20 @@ import KeepressoCore
 /// child. Private async caches/subprocesses cannot outlive the worker group.
 @MainActor final class TriggerObserver {
     private(set) var preview=TriggerPreview();private var running=false
+    private var generation=0
+    func invalidate(){generation+=1;preview.state=preview.checkedAt==nil ? "unknown":"stale";preview.combined=nil;preview.message="Waiting for a fresh check after Keepresso restarts."}
     func markStale(){if preview.checkedAt != nil{preview.state="stale";preview.message="Native session or settings changed. Refresh conditions."}}
     func refresh(version:String?)async ->TriggerPreview{
         guard !running else{return preview};running=true;preview.state="checking";defer{running=false}
+        let began=generation
         guard version=="1.27.0",let executable=Bundle.main.executableURL else{return fail("The installed Keepresso version is incompatible with the bundled observer.")}
         do{
             let data=try await ObserverScratch.withDirectory{scratch in try await BoundedWorker.run(executable:executable,arguments:["--observe-triggers","--observer-scratch",scratch.path],timeout:5,outputLimit:65536)}
+            guard began==generation,!Task.isCancelled else{return preview}
             var result=try WireJSON.decoder.decode(TriggerPreview.self,from:data)
             if result.checkedAt==nil{result.checkedAt=preview.checkedAt;if preview.checkedAt != nil{result.state="stale"}}
             preview=result;return preview
-        }catch{return fail("Trigger refresh exceeded its five-second budget or its input/output was unavailable. Worker stopped; previous assessment time preserved.")}
+        }catch{guard began==generation,!Task.isCancelled else{return preview};return fail("Trigger refresh exceeded its five-second budget or its input/output was unavailable. Worker stopped; previous assessment time preserved.")}
     }
     private func fail(_ message:String)->TriggerPreview{preview.state=preview.checkedAt==nil ? "unknown":"stale";preview.combined=nil;preview.message=message;return preview}
 }

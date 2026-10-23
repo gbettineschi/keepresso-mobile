@@ -1,7 +1,27 @@
 import Foundation
+import CryptoKit
 import Testing
 @testable import CompanionCore
 struct MutationTests {
+    @MainActor @Test func lifecycleChangeDuringIssuedCommandPersistsUncertaintyWithoutRetry() async throws {
+        let url=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at:url) }
+        let now=Date();let request=CommandRequest(id:UUID().uuidString.lowercased(),action:"stop_manual",issuedAt:now,expiresAt:now.addingTimeInterval(30))
+        let body=try WireJSON.encoder.encode(request);let journal=try MutationJournal(url:url)
+        let executor=MutationExecutor(journal:journal);var authorized=true;var effects=0
+        let result=await executor.execute(request,device:"device",body:body,now:now,authorized:{authorized}) {
+            effects+=1;await Task.yield();authorized=false
+            return CommandResponse(id:request.id,status:"ok")
+        }
+        XCTAssertEqual(result.status,"uncertain")
+        authorized=true
+        let duplicate=await executor.execute(request,device:"device",body:body,now:now,authorized:{authorized}) {
+            effects+=1;return CommandResponse(id:request.id,status:"ok")
+        }
+        XCTAssertEqual(duplicate.status,"uncertain");XCTAssertEqual(effects,1)
+        let stored=try journal.lookup(id:request.id,device:"device",bodyDigest:Data(SHA256.hash(data:body)).base64EncodedString())
+        XCTAssertEqual(stored?.status,"uncertain")
+    }
     @MainActor @Test func duplicateMutationNeverInvokesAdapterTwiceAndCrashReservationNeverExecutes()async throws{
         let url=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString);defer{try? FileManager.default.removeItem(at:url)}
         let now=Date();let request=CommandRequest(id:UUID().uuidString.lowercased(),action:"stop_manual",issuedAt:now,expiresAt:now.addingTimeInterval(30));let body=try WireJSON.encoder.encode(request)

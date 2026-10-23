@@ -15,6 +15,7 @@ import kotlinx.serialization.json.*
 data class Credential(val macId: String, val deviceId: String, val name: String, val key: ByteArray, val relayUrl: String? = null, val relayAuthTicket: String? = null)
 class CredentialStore(context: Context) {
     private val prefs = context.getSharedPreferences("credentials", Context.MODE_PRIVATE)
+    // Stable Keystore alias: retain access to already encrypted pairing state.
     private val alias = "keespresso.credentials.v1"
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }

@@ -22,7 +22,7 @@ For Spark's default limits, 80% is **40,000 reads**, **16,000 writes**, or **16,
 ### Create the email channel
 
 1. In Google Cloud, select your Firebase project and open **Monitoring → Alerting → Manage notification channels**.
-2. Under **Email**, select **Add New**. Enter your own receiving address and a display name such as **Keespresso owner quota alerts**, then **Save**.
+2. Under **Email**, select **Add New**. Enter your own receiving address and a display name such as **Keepresso owner quota alerts**, then **Save**.
 3. Check that the email address is shown in the channels table. This saves the destination; it is not proof that a real incident email has arrived.
 
 ### Create the policy
@@ -52,8 +52,8 @@ max(
 
 3. Preview a time range containing real relay activity. The underlying ratio should show the highest operation-quota fraction; below 80%, there is no firing alert. Do not interpret “no data” on a completely unused project as confirmed healthy monitoring. First make an ordinary authenticated status exchange, allow metrics to arrive, and inspect the native usage/limit series. Do not deliberately consume the quota to test an email.
 4. Under **Configure trigger**, use **Retest window: 0 sec**, **Evaluation interval: 60 seconds**, and condition name **Firestore operation quota above 80% (rolling 24h)**.
-5. Under **Notifications and name**, select the saved owner email channel. Use subject **Keespresso: Firestore quota above 80%**. Leave **Notify on alert closure** off. Set **Alert autoclose duration: 1 day** for missing data. Do not configure a re-notification interval.
-6. Name the policy **Keespresso — Firestore quota 80%**. Include the rolling-window explanation below in its notification documentation. Review the recipient, threshold, interval and **Notify on alert open only**, then **Create policy**.
+5. Under **Notifications and name**, select the saved owner email channel. Use subject **Keepresso: Firestore quota above 80%**. Leave **Notify on alert closure** off. Set **Alert autoclose duration: 1 day** for missing data. Do not configure a re-notification interval.
+6. Name the policy **Keepresso — Firestore quota 80%**. Include the rolling-window explanation below in its notification documentation. Review the recipient, threshold, interval and **Notify on alert open only**, then **Create policy**.
 7. Verify the saved policy is **Enabled**, uses the intended channel and has the exact `> 0.8` expression. Save its policy URL for later editing. The [JSON template](examples/firestore-quota-policy.json) records the equivalent settings; replace the project/channel placeholders before using it with the official Monitoring API/tooling. The template is not an installed policy by itself.
 
 Suggested notification documentation:
@@ -79,7 +79,7 @@ Google's [Cloud Shell](https://docs.cloud.google.com/shell/docs/launching-cloud-
      --format='table(name,displayName,enabled)'
    ```
 
-4. If there is no existing Keespresso quota policy, create it with the [official CLI command](https://docs.cloud.google.com/sdk/gcloud/reference/monitoring/policies/create):
+4. If there is no existing Keepresso quota policy, create it with the [official CLI command](https://docs.cloud.google.com/sdk/gcloud/reference/monitoring/policies/create):
 
    ```sh
    gcloud monitoring policies create --project=YOUR_FIREBASE_PROJECT_ID \

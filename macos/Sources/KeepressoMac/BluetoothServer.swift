@@ -17,21 +17,24 @@ import CompanionCore
     init(model:CompanionModel){self.model=model;super.init()}
     func start(){guard manager==nil else{return};manager=CBPeripheralManager(delegate:self,queue:.main,options:[CBPeripheralManagerOptionShowPowerAlertKey:false])}
     var authenticatedDevices:Set<String>{Set(peers.values.compactMap{peer in guard peer.channel != nil,let device=peer.device,model.isAuthorized(device) else{return nil};return device})}
-    func stop(){manager?.stopAdvertising();manager?.removeAllServices();manager=nil;peers.values.forEach{$0.channel?.close()};peers.removeAll();notify=nil;model.connectionCount=0;model.nearbyChanged()}
+    func stop(){manager?.stopAdvertising();manager?.removeAllServices();manager?.delegate=nil;manager=nil;peers.values.forEach{$0.channel?.close()};peers.removeAll();notify=nil;model.connectionCount=0;model.nearbyChanged()}
     func peripheralManagerDidUpdateState(_ peripheral:CBPeripheralManager){
+        guard peripheral === manager,model.nativeRunning else{return}
         model.bluetoothState=String(describing:peripheral.state)
         guard peripheral.state == .poweredOn else { peers.removeAll();return }
         let input=CBMutableCharacteristic(type:Self.input,properties:[.write],value:nil,permissions:[.writeable])
         let output=CBMutableCharacteristic(type:Self.output,properties:[.notify],value:nil,permissions:[])
         notify=output;let service=CBMutableService(type:Self.service,primary:true);service.characteristics=[input,output];peripheral.add(service)
     }
-    func peripheralManager(_ peripheral:CBPeripheralManager,didAdd service:CBService,error:Error?){guard error==nil else{model.bluetoothState="Bluetooth service unavailable";return};peripheral.startAdvertising([CBAdvertisementDataServiceUUIDsKey:[Self.service],CBAdvertisementDataLocalNameKey:"Keespresso Mac"])}
+    func peripheralManager(_ peripheral:CBPeripheralManager,didAdd service:CBService,error:Error?){guard peripheral === manager,model.nativeRunning else{return};guard error==nil else{model.bluetoothState="Bluetooth service unavailable";return};peripheral.startAdvertising([CBAdvertisementDataServiceUUIDsKey:[Self.service],CBAdvertisementDataLocalNameKey:"Keepresso Mobile"])}
     func peripheralManager(_ peripheral:CBPeripheralManager,central:CBCentral,didSubscribeTo characteristic:CBCharacteristic){
+        guard peripheral === manager,model.nativeRunning else{return}
         guard characteristic.uuid==Self.output,peers.count<8,banned[central.identifier].map({$0>Date()}) != true else{return}
         peers[central.identifier]=Peer(central);model.connectionCount=peers.count
     }
-    func peripheralManager(_ peripheral:CBPeripheralManager,central:CBCentral,didUnsubscribeFrom characteristic:CBCharacteristic){drop(central.identifier,ban:false)}
+    func peripheralManager(_ peripheral:CBPeripheralManager,central:CBCentral,didUnsubscribeFrom characteristic:CBCharacteristic){guard peripheral === manager else{return};drop(central.identifier,ban:false)}
     func peripheralManager(_ peripheral:CBPeripheralManager,didReceiveWrite requests:[CBATTRequest]){
+        guard peripheral === manager,model.nativeRunning else{if let first=requests.first{peripheral.respond(to:first,withResult:.insufficientAuthorization)};return}
         guard requests.count==1,let first=requests.first else{if let first=requests.first{peripheral.respond(to:first,withResult:.insufficientResources)};return}
         guard Date()>=globallyBlockedUntil else{peripheral.respond(to:first,withResult:.insufficientAuthorization);return}
         for request in requests {

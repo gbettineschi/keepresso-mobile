@@ -106,13 +106,13 @@ jobs:
       - name: Package helper
         run: bash macos/scripts/build-app.sh
       - name: Safe packaged self-check
-        run: macos/artifacts/KeespressoMac.app/Contents/MacOS/KeespressoMac --self-check
+        run: macos/artifacts/KeepressoMobile.app/Contents/MacOS/KeepressoMac --self-check
       - name: Archive helper
-        run: ditto -c -k --sequesterRsrc --keepParent macos/artifacts/KeespressoMac.app macos/artifacts/KeespressoMac.zip
+        run: ditto -c -k --sequesterRsrc --keepParent macos/artifacts/KeepressoMobile.app macos/artifacts/KeepressoMobile.zip
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: Keespresso-Mac-development
-          path: macos/artifacts/KeespressoMac.zip
+          name: Keepresso-Mac-development
+          path: macos/artifacts/KeepressoMobile.zip
           if-no-files-found: error
           retention-days: 14
 
@@ -141,8 +141,8 @@ jobs:
         run: |
           if [ -n "$SIGNING_STORE_BASE64" ]; then
             umask 077
-            printf '%s' "$SIGNING_STORE_BASE64" | base64 --decode > "$RUNNER_TEMP/keespresso-development.p12"
-            printf 'KEESPRESSO_SIGNING_STORE=%s\n' "$RUNNER_TEMP/keespresso-development.p12" >> "$GITHUB_ENV"
+            printf '%s' "$SIGNING_STORE_BASE64" | base64 --decode > "$RUNNER_TEMP/keepresso-development.p12"
+            printf 'KEEPRESSO_SIGNING_STORE=%s\n' "$RUNNER_TEMP/keepresso-development.p12" >> "$GITHUB_ENV"
           fi
       - name: Test, lint and assemble
         working-directory: android
@@ -151,15 +151,15 @@ jobs:
           FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
           FIREBASE_SENDER_ID: ${{ vars.FIREBASE_SENDER_ID }}
-          KEESPRESSO_SIGNING_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
-          KEESPRESSO_SIGNING_ALIAS: keespresso-development
-          KEESPRESSO_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
+          KEEPRESSO_SIGNING_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
+          KEEPRESSO_SIGNING_ALIAS: keespresso-development
+          KEEPRESSO_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
         run: >-
           ./gradlew --no-daemon
-          "-Pkeespresso.firebase.applicationId=$FIREBASE_APPLICATION_ID"
-          "-Pkeespresso.firebase.apiKey=$FIREBASE_API_KEY"
-          "-Pkeespresso.firebase.projectId=$FIREBASE_PROJECT_ID"
-          "-Pkeespresso.firebase.senderId=$FIREBASE_SENDER_ID"
+          "-Pkeepresso.firebase.applicationId=$FIREBASE_APPLICATION_ID"
+          "-Pkeepresso.firebase.apiKey=$FIREBASE_API_KEY"
+          "-Pkeepresso.firebase.projectId=$FIREBASE_PROJECT_ID"
+          "-Pkeepresso.firebase.senderId=$FIREBASE_SENDER_ID"
           :core:test :app:lintDebug :app:assembleDebug
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
@@ -172,7 +172,7 @@ jobs:
           retention-days: 14
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: Keespresso-Android-development
+          name: Keepresso-Android-development
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

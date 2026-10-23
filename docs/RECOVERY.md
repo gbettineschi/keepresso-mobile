@@ -18,7 +18,7 @@ No recovery step needs a Keepresso session or a power command. Do not clear app 
 
 ## 1. Lost file, working/saved Mac configuration
 
-Open **Keespresso Mac → Internet fallback**. A saved connection loads automatically. If it is disabled, use **Enable saved relay**. The blank bearer field is normal: it is not intended to reveal the stored secret.
+Open **Keepresso Mobile** from Finder or the launcher, then find **Internet fallback** in its settings window. Closing that window hides it; use **Quit Keepresso Mobile** to stop the companion. A saved connection loads automatically. If it is disabled, use **Enable saved relay**. The blank bearer field is normal: it is not intended to reveal the stored secret.
 
 For migration/recovery, open **Keychain Access** on that Mac. Search for service `local.keespresso.companion.v1`, account `relay`, in the user's login Keychain. Authenticate to view the saved password. It is JSON with `url` and `macBearer`; copy only the bearer into the helper's bearer field and the URL into its URL field. Keep the JSON private. The current helper has no export/reveal/server-reset button.
 
@@ -34,11 +34,11 @@ This does **not** need the Firebase server private key. You need owner access to
 
 ```sh
 umask 077
-KEESPRESSO_PRIVATE_DIR=/absolute/private/keespresso-relay
-mkdir -p "$KEESPRESSO_PRIVATE_DIR"
-chmod 700 "$KEESPRESSO_PRIVATE_DIR"
-KEESPRESSO_ROTATION_DIR=$(mktemp -d "$KEESPRESSO_PRIVATE_DIR/rotation.XXXXXX")
-node --input-type=module - "$KEESPRESSO_ROTATION_DIR" <<'NODE'
+KEEPRESSO_PRIVATE_DIR=/absolute/private/keepresso-relay
+mkdir -p "$KEEPRESSO_PRIVATE_DIR"
+chmod 700 "$KEEPRESSO_PRIVATE_DIR"
+KEEPRESSO_ROTATION_DIR=$(mktemp -d "$KEEPRESSO_PRIVATE_DIR/rotation.XXXXXX")
+node --input-type=module - "$KEEPRESSO_ROTATION_DIR" <<'NODE'
 import {randomBytes, createHash} from 'node:crypto';
 import {writeFileSync} from 'node:fs';
 import {join} from 'node:path';
@@ -50,7 +50,7 @@ writeFileSync(join(directory, 'mac-token-sha256.txt'),
 NODE
 vercel env update RELAY_MAC_TOKEN_SHA256 --environment production \
   --sensitive --yes --scope YOUR_ORGANIZATION_ID \
-  < "$KEESPRESSO_ROTATION_DIR/mac-token-sha256.txt"
+  < "$KEEPRESSO_ROTATION_DIR/mac-token-sha256.txt"
 vercel deploy --prod --force --scope YOUR_ORGANIZATION_ID
 ```
 
@@ -68,7 +68,7 @@ Changing the environment variable alone is insufficient: existing functions keep
 ```sh
 vercel env update FIREBASE_SERVICE_ACCOUNT --environment production \
   --sensitive --yes --scope YOUR_ORGANIZATION_ID \
-  < /absolute/private/keespresso-relay/new-firebase-service-account.json
+  < /absolute/private/keepresso-relay/new-firebase-service-account.json
 vercel deploy --prod --force --scope YOUR_ORGANIZATION_ID
 ```
 
@@ -88,7 +88,7 @@ vercel deploy --prod --force --scope YOUR_ORGANIZATION_ID
 ## 5. Rebuild all cloud services from scratch
 
 1. Follow [SELF_HOSTING.md](SELF_HOSTING.md) with a new dedicated Firebase **Spark** project and Vercel **Hobby** project. Set production deny-all Firestore rules; register the same Android package; configure/deploy the relay; configure [quota alerts](QUOTA_ALERTS.md).
-2. Rebuild Android with the new project's four public client properties: `keespresso.firebase.applicationId`, `apiKey`, `projectId`, `senderId`. See [android/README.md](../android/README.md) for their complete names. Keep the same Android application ID and **signing identity** when updating the installed APK to preserve local pairing. Update GitHub repository variables too if using CI. A downloaded server JSON is never an Android build input.
+2. Rebuild Android with the new project's four public client properties: `keepresso.firebase.applicationId`, `apiKey`, `projectId`, `senderId`. See [android/README.md](../android/README.md) for their complete names. Keep the same Android application ID and **signing identity** when updating the installed APK to preserve local pairing. Update GitHub repository variables too if using CI. A downloaded server JSON is never an Android build input.
 3. Save the new relay URL/Mac bearer in the helper. Reconnect nearby so existing authorized phones receive the new relay ticket. Allow Android notifications and wait for push-token registration. Losing old Firestore mailboxes does not recover undelivered commands; uncertain mutations are not replayed.
 4. Verify fresh status away from Bluetooth and an actual locked-phone reminder. Old encrypted mailbox data is not required to keep the existing device pairing.
 5. Retire old service-account keys/deployments after verification. Deleting a Firebase project is optional and destructive; it is not required to reset the connection.

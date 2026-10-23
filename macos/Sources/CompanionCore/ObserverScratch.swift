@@ -1,6 +1,6 @@
 import Foundation
 public enum ObserverScratch {
-    private static let prefix="keespresso-observer-"
+    private static let prefix="keepresso-observer-"
     public static func create()throws->URL{
         let url=FileManager.default.temporaryDirectory.appendingPathComponent(prefix+UUID().uuidString.lowercased(),isDirectory:true)
         try FileManager.default.createDirectory(at:url,withIntermediateDirectories:false,attributes:[.posixPermissions:0o700]);return url

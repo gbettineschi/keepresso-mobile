@@ -1,4 +1,4 @@
-# Keespresso — Android companion requirements
+# Keepresso — Android companion requirements
 
 Updated: 23 October 2026. This records the requested behaviour and research baseline. See [implementation status](IMPLEMENTATION.md) for the first development build and remaining limitations; this document is not evidence of physical-device acceptance.
 
@@ -6,7 +6,7 @@ Current scope: retain official Keepresso updates and avoid maintaining a persona
 
 ## Identity and appearance
 
-1. The Android app label is **Keespresso**, using the spelling requested in chat.
+1. The Android app label is **Keepresso**, using the spelling requested in chat.
 2. Use the same app icon as the installed macOS Keepresso app, including the Android launcher icon. Reuse the original asset.
 3. Use Keepresso's existing theme: burnt copper `#A64B23` in light mode, soft copper `#D98F52` in dark mode; preserve readable neutral surfaces.
 4. Use the original Keepresso menu-bar coffee marks: filled cup with steam while brewing, outline cup without steam while idle, and the dedicated low-battery pause cup with its yellow last sip. Do not substitute generic coffee symbols. The low-battery cup indicates a battery safety pause, not merely a low percentage while still brewing.
@@ -14,7 +14,7 @@ Current scope: retain official Keepresso updates and avoid maintaining a persona
 
 ## Status screen and order
 
-6. App header: original app icon and Keespresso name.
+6. App header: original app icon and Keepresso name.
 7. MacBook status: **Awake** or **Unreachable**.
 8. Group all dashboard readings together in two rows: **Lock / Display / Lid** in the first row, **Battery / Temperature** in the second, with one thin separator between them. Show Locked/Unlocked, Display On/Dimmed/Off, Lid Open/Closed, battery percentage and power source, and temperature with a labelled severity. Temperature has no separate section.
 9. Preserve unknown and last-known readings. An unreachable Mac must not be presented as currently off, asleep, locked or unlocked based only on a lost connection.

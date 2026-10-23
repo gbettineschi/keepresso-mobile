@@ -1,6 +1,6 @@
 # Your own internet relay
 
-Each owner hosts their own instance. There is no shared Keespresso service, subscription or account with this project. Nearby Bluetooth works independently. Internet uses a small Vercel Node24 API plus one Firebase project for Firestore storage and Android push. No virtual machine, inbound Mac port, router change, Tailscale or Wi-Fi pairing is needed.
+Each owner hosts their own instance. There is no shared Keepresso service, subscription or account with this project. Nearby Bluetooth works independently. Internet uses a small Vercel Node24 API plus one Firebase project for Firestore storage and Android push. No virtual machine, inbound Mac port, router change, Tailscale or Wi-Fi pairing is needed.
 
 Use this guide for a new installation. For lost credentials, replacing a deployment, or starting over, use [Recovery and reset](RECOVERY.md). Configure [quota email alerts](QUOTA_ALERTS.md) separately; they do not enable billing.
 
@@ -50,19 +50,19 @@ npm test
 
 Check **Vercel → Project → Settings** before the first production deploy: Framework **Other**, Node.js **24.x**, Fluid Compute enabled, and the `public` output directory. `vercel.json` sets Frankfurt (`fra1`) and the 10-second API timeout. With a Git integration, the project root is `relay`; with CLI deployment, run the commands from that directory. Under **Deployment Protection**, production must allow native clients to reach the relay; previews can retain Vercel Authentication. The relay still enforces its own Mac/phone authentication.
 
-Choose an absolute private directory **outside the source repository**, restrict it to your user, and put the downloaded Firebase server JSON there. For example, `/absolute/private/keespresso-relay` below is a placeholder you must replace. Keep credentials out of `relay/public`, GitHub variables, command arguments, chat, and build artifacts.
+Choose an absolute private directory **outside the source repository**, restrict it to your user, and put the downloaded Firebase server JSON there. For example, `/absolute/private/keepresso-relay` below is a placeholder you must replace. Keep credentials out of `relay/public`, GitHub variables, command arguments, chat, and build artifacts.
 
 ```sh
 umask 077
-mkdir -p /absolute/private/keespresso-relay
-chmod 700 /absolute/private/keespresso-relay
-chmod 600 /absolute/private/keespresso-relay/firebase-service-account.json
+mkdir -p /absolute/private/keepresso-relay
+chmod 700 /absolute/private/keepresso-relay
+chmod 600 /absolute/private/keepresso-relay/firebase-service-account.json
 node scripts/configure.mjs --scope YOUR_ORGANIZATION_ID \
-  --service-account /absolute/private/keespresso-relay/firebase-service-account.json \
-  --private-dir /absolute/private/keespresso-relay --check-only
+  --service-account /absolute/private/keepresso-relay/firebase-service-account.json \
+  --private-dir /absolute/private/keepresso-relay --check-only
 node scripts/configure.mjs --scope YOUR_ORGANIZATION_ID \
-  --service-account /absolute/private/keespresso-relay/firebase-service-account.json \
-  --private-dir /absolute/private/keespresso-relay
+  --service-account /absolute/private/keepresso-relay/firebase-service-account.json \
+  --private-dir /absolute/private/keepresso-relay
 vercel deploy --prod --scope YOUR_ORGANIZATION_ID
 ```
 
@@ -73,24 +73,24 @@ Verify `/api/health` reports configured availability, and an unauthenticated POS
 Use the stable production domain shown by Vercel, not a temporary preview URL. These checks disclose no credentials:
 
 ```sh
-KEESPRESSO_RELAY_URL=https://your-production-domain.vercel.app
-curl --fail --silent --show-error "$KEESPRESSO_RELAY_URL/api/health"
+KEEPRESSO_RELAY_URL=https://your-production-domain.vercel.app
+curl --fail --silent --show-error "$KEEPRESSO_RELAY_URL/api/health"
 curl --silent --show-error --output /dev/null --write-out '%{http_code}\n' \
   --request POST --header 'Content-Type: application/json' \
-  --data '{}' "$KEESPRESSO_RELAY_URL/api/relay"
+  --data '{}' "$KEEPRESSO_RELAY_URL/api/relay"
 curl --silent --show-error --output /dev/null --write-out '%{http_code}\n' \
-  "$KEESPRESSO_RELAY_URL/.env.local"
+  "$KEEPRESSO_RELAY_URL/.env.local"
 ```
 
 Expect `{"version":1,"configured":true}`, then `401`, then `404`. A Vercel login page/redirect means deployment protection still blocks native clients. `configured:false` means a server variable is missing or invalid. After importing the Mac bearer into Keychain and verifying the connection, the transient Firebase JSON can be removed from the download/setup location; generating a replacement later is supported. Keep control of the Google and Vercel owner accounts.
 
 If setup is interrupted, `vercel env ls production --scope YOUR_ORGANIZATION_ID` lists variable names without disclosing their values. Do not rerun initial setup assuming it will overwrite existing values: use the explicit update procedures in [RECOVERY.md](RECOVERY.md). Environment changes require a **new deployment** before running functions use them.
 
-Build Android with the four Firebase properties, or set repository variables `FIREBASE_APPLICATION_ID`, `FIREBASE_API_KEY`, `FIREBASE_PROJECT_ID`, `FIREBASE_SENDER_ID` for this repository's CI. No Google service-account key belongs in Android or GitHub build variables. An optional stable development signing identity uses GitHub secrets `ANDROID_SIGNING_STORE_BASE64` and `ANDROID_SIGNING_PASSWORD`; app builds consume the four `KEESPRESSO_SIGNING_*` variables described in the Android README. Keep the same signing identity for updates. The old0.1.0 disposable CI signing identity was not preserved: an already installed0.1.0 APK may need one reinstall/re-pair. Subsequent builds using the persistent identity can update in place.
+Build Android with the four Firebase properties, or set repository variables `FIREBASE_APPLICATION_ID`, `FIREBASE_API_KEY`, `FIREBASE_PROJECT_ID`, `FIREBASE_SENDER_ID` for this repository's CI. No Google service-account key belongs in Android or GitHub build variables. An optional stable development signing identity uses GitHub secrets `ANDROID_SIGNING_STORE_BASE64` and `ANDROID_SIGNING_PASSWORD`; app builds consume the four `KEEPRESSO_SIGNING_*` variables described in the Android README. Keep the same signing identity for updates. The old0.1.0 disposable CI signing identity was not preserved: an already installed0.1.0 APK may need one reinstall/re-pair. Subsequent builds using the persistent identity can update in place.
 
 ## Connect the existing pairing
 
-1. In **Keespresso Mac → Internet**, enter the production HTTPS base URL and the private Mac bearer, then configure/enable Internet. The helper stores it in Keychain. No Keepresso session is started or settings changed.
+1. In **Keepresso Mobile → Internet**, enter the production HTTPS base URL and the private Mac bearer, then configure/enable Internet. The helper stores it in Keychain. No Keepresso session is started or settings changed.
 2. Connect the already authorized phone nearby once. The helper enrolls that device and sends the URL and an access ticket through its encrypted Bluetooth connection. The phone derives relay credentials from its existing device key. There is no second QR or phone authorization.
 3. Allow Android notifications for background reminders. Cloud Messaging registration is sent even when Bluetooth remains connected. The Android build must contain this Firebase project's public client configuration.
 4. Open the phone dashboard away from Bluetooth. It performs a fresh authenticated status round trip before enabling controls. Expected command delay is a few seconds: Mac polling adds up to5s, with the next timer tick flushing its response. A cached snapshot stays stale; relay HTTP success alone cannot show the Mac as reachable.

@@ -1,0 +1,165 @@
+import AppKit
+import SwiftUI
+import CoreImage.CIFilterBuiltins
+import CompanionCore
+import KeepressoCore
+import Darwin
+
+@main struct Entry {
+    @MainActor static func main(){
+        if CommandLine.arguments.contains("--observe-triggers"){
+            // Isolated worker: no app model, Keychain, Bluetooth or power adapter.
+            guard setpgid(0,0)==0 || getpgrp()==getpid(),let flag=CommandLine.arguments.firstIndex(of:"--observer-scratch"),CommandLine.arguments.indices.contains(flag+1),let scratch=try? ObserverScratch.validate(CommandLine.arguments[flag+1]) else{exit(2)}
+            let workerGroup=getpgrp()
+            DispatchQueue.global(qos:.utility).asyncAfter(deadline:.now()+5){kill(-workerGroup,SIGKILL)}
+            Task{@MainActor in
+                let result=await TriggerWorker().refresh(version:Bundle(url:URL(fileURLWithPath:"/Applications/Keepresso.app"))?.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String,scratch:scratch)
+                guard let data=try? WireJSON.encoder.encode(result),data.count<=65536 else{exit(2)}
+                do{try FileHandle.standardOutput.write(contentsOf:data);exit(0)}catch{exit(2)}
+            }
+            dispatchMain()
+        }
+        if CommandLine.arguments.contains("--self-check"){
+            // Branch before NSApplication, Keychain, BLE, timers, native status,
+            // observer or any control adapter is created.
+            do{let key=Data(repeating:0,count:32);let sender=SealedChannel(sendKey:key,receiveKey:key);let receiver=SealedChannel(sendKey:key,receiveKey:key);let data=Data("self-check".utf8);guard try receiver.open(sender.seal(data))==data else{throw CompanionError.invalid};let _=TriggerRule.agentActivity(AgentRule(grace:0)).label;_ = try FrameDecoder().feed(FrameDecoder.frame(data),now:0);print("Keepresso Mobile self-check passed (crypto/framing only; no Bluetooth, permissions or power operations).");exit(0)}catch{fputs("Self-check failed.\n",stderr);exit(1)}
+        }
+        let background=CommandLine.arguments.contains("--background")
+        if background && !BackgroundLoginSession.mayStartHidden { exit(0) }
+        if !background { UserDefaults.standard.removeObject(forKey:BackgroundLoginSession.quitKey) }
+        let directory=FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("Keespresso")
+        let lease:CompanionInstanceLease
+        do {
+            guard let acquired=try CompanionInstanceLease.acquire(directory:directory) else {
+                if background {
+                    DistributedNotificationCenter.default().postNotificationName(BackgroundLoginSession.takeover,object:String(getuid()),userInfo:nil,deliverImmediately:true)
+                    exit(75) // launchd retries after the old GUI hands over its lock.
+                }
+                NSRunningApplication.runningApplications(withBundleIdentifier:"local.keespresso.companion").first(where:{$0.processIdentifier != getpid()})?.activate()
+                exit(0)
+            }
+            lease=acquired
+        }catch{fputs("Keepresso Mobile runtime is already in use or unavailable.\n",stderr);exit(1)}
+        let app=NSApplication.shared;let delegate=AppDelegate(background:background)
+        app.delegate=delegate;app.setActivationPolicy(.accessory)
+        withExtendedLifetime((delegate,lease)){app.run()}
+    }
+}
+@MainActor final class AppDelegate:NSObject,NSApplicationDelegate,NSWindowDelegate {
+    private let model=CompanionModel()
+    private let background:Bool
+    private let follow:BackgroundControl
+    private var window:NSWindow?
+    private var runningObservation:NSKeyValueObservation?
+    private var handingOff=false
+    private var terminating=false
+    init(background:Bool){self.background=background;follow=BackgroundControl(managed:background);super.init()}
+    func applicationDidFinishLaunching(_ notification:Notification){
+        follow.onManagedHandoff={ [weak self] in
+            guard let self,!self.terminating else{return}
+            self.handingOff=true
+            UserDefaults.standard.set(self.window?.isVisible==true,forKey:BackgroundLoginSession.reopenKey)
+            UserDefaults.standard.synchronize()
+            NSApp.terminate(nil)
+        }
+        // Workspace launch/termination notifications omit LSUIElement apps.
+        // KVO of this list includes native Keepresso without process polling.
+        runningObservation=NSWorkspace.shared.observe(\.runningApplications,options:[.initial,.new]){[weak self] _,_ in
+            Task{@MainActor in self?.reconcileNativeApp()}
+        }
+        installMenus()
+        let reopen=UserDefaults.standard.bool(forKey:BackgroundLoginSession.reopenKey)
+        UserDefaults.standard.removeObject(forKey:BackgroundLoginSession.reopenKey)
+        if !background || reopen{showSettings()}
+        follow.requestManagedStart()
+    }
+    private func reconcileNativeApp(){
+        guard !terminating else{return}
+        let app=NativeStatus().runningApp()
+        let token=app.map{"\($0.processIdentifier)/\($0.launchDate?.timeIntervalSince1970.description ?? "unknown")"}
+        model.updateNativeApplication(token:token)
+    }
+    private func showSettings(){
+        if window==nil {
+            let value=NSWindow(contentRect:NSRect(x:0,y:0,width:430,height:760),styleMask:[.titled,.closable,.miniaturizable,.resizable],backing:.buffered,defer:false)
+            value.title="Keepresso Mobile";value.isReleasedWhenClosed=false;value.delegate=self
+            value.minSize=NSSize(width:430,height:500)
+            value.contentViewController=NSHostingController(rootView:CompanionView(model:model,follow:follow))
+            value.center();window=value
+        }
+        NSApp.setActivationPolicy(.regular)
+        window?.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true)
+    }
+    func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool{showSettings();return true}
+    func applicationDidBecomeActive(_ notification:Notification){follow.refresh();follow.requestManagedStart()}
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender:NSApplication)->Bool{false}
+    func windowShouldClose(_ sender:NSWindow)->Bool{sender.orderOut(nil);NSApp.setActivationPolicy(.accessory);return false}
+    func applicationShouldTerminate(_ sender:NSApplication)->NSApplication.TerminateReply{
+        terminating=true
+        if !handingOff{BackgroundLoginSession.markExplicitQuit();UserDefaults.standard.synchronize()}
+        return .terminateNow
+    }
+    func applicationWillTerminate(_ notification:Notification){runningObservation?.invalidate();runningObservation=nil;follow.stop();model.shutdown()}
+    @objc private func quit(){NSApp.terminate(nil)}
+    private func installMenus(){
+        let bar=NSMenu();let appItem=NSMenuItem();bar.addItem(appItem)
+        let appMenu=NSMenu();appItem.submenu=appMenu
+        let quitItem=NSMenuItem(title:"Quit Keepresso Mobile",action:#selector(quit),keyEquivalent:"q");quitItem.target=self;appMenu.addItem(quitItem)
+        let fileItem=NSMenuItem();fileItem.title="File";bar.addItem(fileItem)
+        let fileMenu=NSMenu(title:"File");fileItem.submenu=fileMenu
+        fileMenu.addItem(NSMenuItem(title:"Close Window",action:#selector(NSWindow.performClose(_:)),keyEquivalent:"w"))
+        let editItem=NSMenuItem();editItem.title="Edit";bar.addItem(editItem)
+        let editMenu=NSMenu(title:"Edit");editItem.submenu=editMenu
+        for (title,selector,key) in [("Cut",#selector(NSText.cut(_:)),"x"),("Copy",#selector(NSText.copy(_:)),"c"),("Paste",#selector(NSText.paste(_:)),"v"),("Select All",#selector(NSText.selectAll(_:)),"a")] {editMenu.addItem(NSMenuItem(title:title,action:selector,keyEquivalent:key))}
+        NSApp.mainMenu=bar
+    }
+}
+struct CompanionView:View{
+    @ObservedObject var model:CompanionModel
+    @ObservedObject var follow:BackgroundControl
+    private var copper:Color{Color(red:0.65,green:0.29,blue:0.14)}
+    var body:some View{
+        ScrollView{VStack(alignment:.leading,spacing:16){
+            HStack{if let image=NSImage(contentsOf:Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/keepresso-mobile-mac-icon.png")){Image(nsImage:image).resizable().frame(width:42,height:42)};VStack(alignment:.leading){Text("Keepresso Mobile").font(.title2.bold());Text("Unofficial Keepresso companion").font(.caption).foregroundStyle(.secondary)}}
+            GroupBox("Follow Keepresso"){
+                VStack(alignment:.leading,spacing:8){
+                    Text(follow.status).font(.callout)
+                    HStack{
+                        if !follow.enabled && !follow.approvalRequired{Button("Enable Follow Keepresso"){follow.enable()}.buttonStyle(.borderedProminent)}
+                        Button(follow.approvalRequired ? "Allow in Login Items…":"Manage automatic startup…"){follow.openLoginItems()}
+                    }
+                    Text("Close this window to keep running quietly. Open this app from Finder or the launcher to show settings again. Enabling automatic startup restarts the companion once; pairing is retained.").font(.caption).foregroundStyle(.secondary)
+                }.frame(maxWidth:.infinity,alignment:.leading)
+            }
+            Text(model.message).font(.callout)
+            HStack{Text("Nearby: \(model.bluetoothState)");Spacer();Text("\(model.connectionCount) connected").foregroundStyle(.secondary)}.font(.caption)
+            if model.nearbyEnabled{Button("Disable Nearby"){model.disableNearby()}}else{Button("Enable Nearby Bluetooth"){model.enableNearby()}.buttonStyle(.borderedProminent)}
+            Divider()
+            Text("Authorize a phone").font(.headline)
+            Button("Show pairing QR code"){model.armPairing()}.disabled(!model.nearbyEnabled || !model.nativeRunning)
+            if let invite=model.invitation{
+                if let image=qr(invite.url.absoluteString){Image(nsImage:image).interpolation(.none).resizable().frame(width:230,height:230).padding(8).background(.white).frame(maxWidth:.infinity)}
+                Text("Expires at \(invite.expires.formatted(date:.omitted,time:.shortened)). Approve only the phone you are pairing.").font(.caption).foregroundStyle(.secondary)
+            }
+            if let name=model.pendingName{Text("Allow \(name) to read status and control Keepresso?").font(.headline);HStack{Button("Approve"){model.approve()}.buttonStyle(.borderedProminent);Button("Deny"){model.deny()}}}
+            Divider();Text("Authorized phones").font(.headline)
+            if model.devices.isEmpty{Text("No authorized phones").foregroundStyle(.secondary)}
+            ForEach(model.devices){device in HStack{Text(device.name);Spacer();Button("Revoke"){model.revoke(device)}}}
+            Divider()
+            Text("Internet fallback").font(.headline)
+            Text(model.relayState).font(.caption).foregroundStyle(.secondary)
+            TextField("HTTPS relay URL",text:$model.relayURLInput).textFieldStyle(.roundedBorder)
+            SecureField("Independent Mac bearer (Base64)",text:$model.relayBearerInput).textFieldStyle(.roundedBorder)
+            HStack{
+                Button("Save and enable"){model.configureRelay()}.disabled(model.relayBearerInput.isEmpty)
+                if model.relayEnabled{Button("Disable Internet"){model.disableRelay()}}else{Button("Enable saved relay"){model.enableStoredRelay()}.disabled(model.relayURLInput.isEmpty)}
+            }
+            Text("Your relay must already be deployed and configured. The Mac bearer is saved in Keychain. Authorized phones receive internet access through their existing nearby pairing.").font(.caption).foregroundStyle(.secondary)
+            Divider()
+            Text("Keepresso must be installed in Applications. Start/Stop require an observed native acknowledgement. Pause/Resume additionally need Accessibility access and a uniquely exposed native control; otherwise they are unavailable. Safe remote sleep is unavailable. Temperature readings are unsupported; thermal pressure remains available.").font(.caption).foregroundStyle(.secondary)
+            Text("Reminders: \(model.reminders.settings.enabled ? "enabled":"routine off"), every \(model.reminders.settings.intervalSeconds/3600) hour(s). Phone Settings can change the interval and still-awake delay.").font(.caption)
+            Button("Quit Keepresso Mobile"){NSApp.terminate(nil)}
+        }.padding(20)}.frame(minWidth:410,minHeight:480).tint(copper)
+    }
+    private func qr(_ text:String)->NSImage?{let filter=CIFilter.qrCodeGenerator();filter.message=Data(text.utf8);filter.correctionLevel="M";guard let output=filter.outputImage,let cg=CIContext().createCGImage(output,from:output.extent)else{return nil};return NSImage(cgImage:cg,size:NSSize(width:230,height:230))}
+}

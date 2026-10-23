@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
             val accent = if (dark) Color(0xFFD98F52) else Color(0xFFA64B23)
             val colors = if (dark) darkColorScheme(primary = accent, background = Color(0xFF211B17), surface = Color(0xFF302720), onPrimary = Color(0xFF2D1B10), secondaryContainer = Color(0xFF493126)) else lightColorScheme(primary = accent, background = Color(0xFFF6F3EF), surface = Color.White, onPrimary = Color.White, secondaryContainer = Color(0xFFF5E7DF))
             MaterialTheme(colorScheme = colors) {
-                KeespressoApp(onEnable = { val p = requiredBluetooth().toMutableList(); if (Build.VERSION.SDK_INT >= 33) p += Manifest.permission.POST_NOTIFICATIONS; permissions.launch(p.toTypedArray()) }, onConnect = { startNearby() }, onScan = { scanner.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt("Scan the pairing QR on your Mac").setBeepEnabled(false)) }, onPair = ::pair, onReset = { startNearby("reset") })
+                KeepressoApp(onEnable = { val p = requiredBluetooth().toMutableList(); if (Build.VERSION.SDK_INT >= 33) p += Manifest.permission.POST_NOTIFICATIONS; permissions.launch(p.toTypedArray()) }, onConnect = { startNearby() }, onScan = { scanner.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt("Scan the pairing QR on your Mac").setBeepEnabled(false)) }, onPair = ::pair, onReset = { startNearby("reset") })
             }
         }
     }
@@ -85,7 +85,7 @@ private fun time(value: Instant?): String {
 private fun parsed(value: String?): Instant? = value?.let { runCatching { Instant.parse(it) }.getOrNull() }
 private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60}h ${minutes % 60}m" else "${minutes}m"
 
-@Composable private fun KeespressoApp(onEnable: () -> Unit, onConnect: () -> Unit, onScan: () -> Unit, onPair: (String) -> Unit, onReset: () -> Unit) {
+@Composable private fun KeepressoApp(onEnable: () -> Unit, onConnect: () -> Unit, onScan: () -> Unit, onPair: (String) -> Unit, onReset: () -> Unit) {
     val state by Companion.state.collectAsState()
     var now by remember { mutableStateOf(Instant.now()) }
     LaunchedEffect(Unit) { while (true) { now = Instant.now(); delay(1000) } }
@@ -98,7 +98,7 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
         Column(Modifier.padding(insets).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Image(painterResource(R.drawable.keepresso_installed_icon), "Original Keepresso icon", Modifier.size(40.dp))
-                Spacer(Modifier.width(10.dp)); Text("Keespresso", style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.width(10.dp)); Text("Keepresso", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.weight(1f)); IconButton(onClick = { Companion.service?.send("status") }, enabled = state.authenticated) { Icon(Icons.Default.Refresh, "Refresh Mac status") }
             }
             if (state.pairedName == null) Pairing(onEnable, onScan, onPair)

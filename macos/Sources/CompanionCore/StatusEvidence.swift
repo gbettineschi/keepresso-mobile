@@ -1,5 +1,9 @@
 import Foundation
 public enum StatusEvidence {
+    public static func sameLaunch(pid:Int32,launchDate:Date?,currentPID:Int32?,currentLaunchDate:Date?)->Bool {
+        guard let launchDate,let currentLaunchDate else{return false}
+        return pid==currentPID && launchDate==currentLaunchDate
+    }
     public static func brewingActivity(appRunning:Bool,nativeActive:Bool?)->Bool? {appRunning ? nativeActive:false}
     /// Status files are written on changes and can be old while still valid.
     /// Compare with launch, never use elapsed age to infer an inactive session.

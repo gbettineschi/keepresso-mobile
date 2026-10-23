@@ -2,6 +2,14 @@ import Foundation
 import Testing
 @testable import CompanionCore
 struct StatusEvidenceTests {
+    @Test func replacementNativeLaunchCannotAcknowledgeAnEarlierCommand() {
+        let launch=Date(timeIntervalSince1970:1000)
+        XCTAssertTrue(StatusEvidence.sameLaunch(pid:42,launchDate:launch,currentPID:42,currentLaunchDate:launch))
+        XCTAssertFalse(StatusEvidence.sameLaunch(pid:42,launchDate:launch,currentPID:42,currentLaunchDate:launch.addingTimeInterval(1)))
+        XCTAssertFalse(StatusEvidence.sameLaunch(pid:42,launchDate:launch,currentPID:43,currentLaunchDate:launch))
+        XCTAssertFalse(StatusEvidence.sameLaunch(pid:42,launchDate:launch,currentPID:nil,currentLaunchDate:nil))
+        XCTAssertFalse(StatusEvidence.sameLaunch(pid:42,launchDate:nil,currentPID:42,currentLaunchDate:nil))
+    }
     @Test func sameSecondNativeWriteUsesPreciseModificationTimeAndRejectsOldFile(){
         let issued=Date(timeIntervalSince1970:1000.81)
         XCTAssertTrue(StatusEvidence.acknowledges(writtenAt:Date(timeIntervalSince1970:1000),modifiedAt:Date(timeIntervalSince1970:1000.85),issuedAt:issued))

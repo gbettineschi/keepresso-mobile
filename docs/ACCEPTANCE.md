@@ -60,3 +60,14 @@ These are additional to the nearby checks below. Keep all real power changes own
 - Deliver the same reminder over BLE and FCM around handoff; it appears once. Expired warnings and incidents resolved by a newer authenticated snapshot must not reappear.
 - Revoke the phone on the Mac and verify both incoming controls and outgoing status stop, including during an in-flight request. Test local persistence/remote cleanup failures using fakes before performing the owner-run real-device check.
 - Confirm monitoring alone allows the Mac's ordinary sleep behavior. Unreachable does not claim a distinction between asleep, offline, powered off or disconnected. No wake feature is present.
+
+## Settings window and optional background startup (0.3.0)
+
+These checks require the owner; development did not enable the background item or launch the normal app.
+
+- Open Keepresso Mobile from Finder/launcher: settings and a Dock icon appear, with no menu bar icon. Close the window: it remains running without a Dock/menu bar icon. Reopen the app: the same settings window appears, with working copy/paste.
+- With native Keepresso absent, verify the companion waits and the phone becomes Unreachable. Open native Keepresso and verify saved Nearby/Internet connections resume. Quit/relaunch native Keepresso repeatedly; verify one transport instance and no duplicate reminders.
+- During an explicit trigger refresh, quit native Keepresso. Verify the worker stops and no result from the old launch becomes current. Overlapping phone refreshes must not start a second worker.
+- From the app's permanent Applications location, click Enable Follow Keepresso and approve in Login Items if required. Verify actual status, the one-time managed restart, unchanged pairing and reconnection. Deny/disable approval and check the UI describes that state honestly.
+- Log out/in: enabled companion starts hidden and waits for native Keepresso. Force-kill only the companion intentionally: it restarts without opening settings. Choose explicit Quit: it stays stopped for that login until manually reopened; a later login starts it again.
+- Reopen after explicit Quit and verify it returns to managed operation. Disable automatic startup in Login Items and confirm it remains disabled after another login. Verify upgrades/moving the registered app do not leave an obsolete background item enabled.

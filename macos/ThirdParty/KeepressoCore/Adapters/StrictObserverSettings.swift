@@ -19,7 +19,7 @@ public enum ObserverError:Error {case invalidSettings,unavailable}
 public final class CompanionHookCopies:@unchecked Sendable {
     private let source:URL;private let root:URL;private let lock=NSLock()
     public private(set) var failed=false
-    public init(source:URL=AgentHooks.directoryURL(),root:URL=FileManager.default.temporaryDirectory.appendingPathComponent("keespresso-hooks-"+UUID().uuidString)){self.source=source;self.root=root}
+    public init(source:URL=AgentHooks.directoryURL(),root:URL=FileManager.default.temporaryDirectory.appendingPathComponent("keepresso-hooks-"+UUID().uuidString)){self.source=source;self.root=root}
     public func read(now:Date)->[AgentHooks.HookRecord]{
         lock.lock();defer{lock.unlock()}
         let fm=FileManager.default;let directory=root.appendingPathComponent(UUID().uuidString)

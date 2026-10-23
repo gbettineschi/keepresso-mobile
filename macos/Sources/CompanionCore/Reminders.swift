@@ -17,7 +17,7 @@ public struct ReminderMachine: Codable {
     public mutating func observedSleep() { endedDue=nil; endedWarned=true; suppressNextTransition=true }
     public mutating func update(settings: ReminderSettings, now: Date) throws { try settings.validate(); self.settings=settings; if wasActive==true { nextHourly=now.addingTimeInterval(Double(settings.intervalSeconds)) } }
     public func warning(kind: String, now: Date) -> CompanionEvent {
-        CompanionEvent(kind:kind,createdAt:now,title:"Keespresso warning",body:kind == "session_ended_awake" ? "The brewing session ended, but this Mac has stayed awake." : "Check the Mac: \(kind.replacingOccurrences(of:"_",with:" ")).",scheduledEnd:nil,snoozedUntil:snoozedUntil)
+        CompanionEvent(kind:kind,createdAt:now,title:"Keepresso warning",body:kind == "session_ended_awake" ? "The brewing session ended, but this Mac has stayed awake." : "Check the Mac: \(kind.replacingOccurrences(of:"_",with:" ")).",scheduledEnd:nil,snoozedUntil:snoozedUntil)
     }
     public mutating func observe(active: Bool?, now: Date, scheduledEnd: Date? = nil) -> [CompanionEvent] {
         guard let active else { return [] } // unknown never becomes inactive

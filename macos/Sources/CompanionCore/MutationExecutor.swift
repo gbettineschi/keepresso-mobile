@@ -24,7 +24,12 @@ import Foundation
         if let rejection{result=CommandResponse(id:request.id,status:"error",message:rejection)}
         else if busy{result=CommandResponse(id:request.id,status:"error",message:"Another command is still awaiting native acknowledgement. This command was not executed.")}
         else if !authorized(){result=CommandResponse(id:request.id,status:"error",message:"Device authorization was revoked.")}
-        else{busy=true;result=await operation();busy=false}
+        else{
+            busy=true;let observed=await operation();busy=false
+            // The effect may already have happened. A new native lifecycle or
+            // revoked device cannot confirm it; persist uncertainty, never retry.
+            result=authorized() ? observed:CommandResponse(id:request.id,status:"uncertain",message:"Keepresso or device authorization changed while the request was in progress. It will not be retried automatically.")
+        }
         do{try journal.finish(id:request.id,result:result);return result}catch{return CommandResponse(id:request.id,status:"uncertain",message:"The outcome could not be durably saved. Do not retry automatically.")}
     }
 }

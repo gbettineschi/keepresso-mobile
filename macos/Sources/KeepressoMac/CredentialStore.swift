@@ -2,6 +2,7 @@ import Foundation
 import Security
 import CompanionCore
 final class CredentialStore {
+    // Stable identity: changing it would orphan existing phone and relay keys.
     private let service="local.keespresso.companion.v1"
     private func query(_ id:String)->[String:Any] { [kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:service,kSecAttrAccount as String:id] }
     func load()->[AuthorizedDevice] {
