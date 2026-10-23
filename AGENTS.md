@@ -1,6 +1,6 @@
 # Keepresso Mobile
 
-- This repository is private. Do not change visibility or publish releases without the owner's request.
+- The owner requested public visibility on 2026-10-23. Keep credentials and private setup files outside the repository; do not change visibility again or publish releases without the owner's request.
 - Android app label: Keespresso. Repository: keepresso-mobile. This is an unofficial companion.
 - Read docs/requirements.md and docs/protocol.md before changing shared behaviour.
 - Keep the official Keepresso app unmodified. Vendored upstream source files must remain byte-identical to the pinned revision; put companion adapters outside its Sources directory.

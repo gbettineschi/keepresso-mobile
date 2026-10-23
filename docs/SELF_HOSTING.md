@@ -38,6 +38,16 @@ Build Android with the four Firebase properties, or set repository variables `FI
 
 Nearby is preferred automatically. A command picks one route and is never automatically resent after submission starts. The same ID/body and Mac journal protect against duplicates; a fresh read-only outcome lookup reconciles uncertainty. Notifications retain one durable ID across nearby and cloud, are encrypted, expire, and are claimed persistently before the phone posts them. Revoking the phone on the Mac blocks both paths locally immediately; remote cleanup is attempted separately.
 
+## Saved configuration and recovery
+
+After **Save and enable**, the helper stores the relay URL and Mac bearer in the macOS login Keychain, service `local.keespresso.companion.v1`, account `relay`. It reloads them on launch. Losing the original setup text file does not lose an already saved connection: **Enable saved relay** reuses it. The current helper has no export, reveal or server-key reset button. Before the first save, the private setup file is still needed.
+
+To recover a saved bearer, use macOS Keychain Access, find that service/account, and authenticate to view the saved password; it is a JSON configuration containing the URL and bearer. Treat the whole value as a secret. A reinstall on the same Mac normally retains this Keychain entry, but erasing the Mac or deleting the entry does not. Phone pairing keys are separate Keychain records.
+
+If every bearer copy and the Keychain entry are lost, generate a new independent random 32-byte Base64 bearer, replace Vercel's `RELAY_MAC_TOKEN_SHA256` with its SHA-256 hash, and redeploy. Enter the new bearer using the helper's existing **Save and enable** controls, then reconnect the authorized phone nearby to refresh its relay access ticket. This preserves the phone's pairing key. Vercel stores only the bearer's hash, so it cannot recover the original bearer. This reset currently requires the owner to update the server configuration; the Mac UI alone cannot reset it.
+
+The separate Firebase service-account private key belongs only in Vercel's sensitive server configuration. It is not in the Mac setup file or Android app. If that server key is lost or compromised, create a replacement in Firebase, update `FIREBASE_SERVICE_ACCOUNT`, redeploy, and revoke the superseded key in Google Cloud IAM. Do not publish a key while recovering it.
+
 ## Free-tier budget and maintenance
 
 For **one Mac awake24h/day and one phone dashboard open2h/day**, the5s polls total about562k requests/30days. One remote status every10s writes8640 documents/day. Empty command polls, enrollment validation and foreground phone polls use approximately28800 reads/day before occasional messages. Response/event mailboxes are capped32 perphone and expire; retained messages can add reads on subsequent polls until expiry. These are estimates, not measured usage guarantees.
@@ -47,6 +57,10 @@ Current published free allowances: Vercel Hobby1M invocations and CDN requests/m
 At562k requests/month, mean active CPU must stay below about25.6ms/request, and a2GB function's mean billed duration below about1.15s/request to fit those allowances before other usage. Short network requests are used rather than a permanently open Vercel connection. Validate this with actual metrics; first-request latency and warm-request latency differ. Firebase Admin authentication, database contention, an outage or quota exhaustion can still delay delivery. There is no automatic paid upgrade. The Mac helper creates no keep-awake lease just to maintain its network connection.
 
 Maintenance is normal app/API dependency updates, occasional usage checks, and replacing a server key if it is compromised. Keep server credentials out of logs/backups you publish. The unmodified official Keepresso app continues updating normally; the bounded trigger observer remains pinned to its supported native version. Replacing Firestore/FCM or Vercel is possible through the transport/store boundary, but requires an adapter and verification; no unsupported alternate host is claimed ready.
+
+Keep the services on **Vercel Hobby** and **Firebase Spark without a linked billing account** for stop-at-quota behavior. Neither automatically upgrades to a paid plan: an exhausted allowance blocks the affected service rather than adding overage charges. Firestore's daily quotas reset around midnight Pacific; Vercel's reset/pause period depends on the exceeded limit. Internet status, commands and push may fail while blocked, but nearby Bluetooth remains independent. Linking Firebase to a billing account upgrades it to Blaze, and Vercel Pro allows metered usage; spending alerts on paid plans are not equivalent to Spark/Hobby's no-overage behavior.
+
+Vercel documents email/dashboard alerts as usage approaches or exceeds limits; check **Notifications → Usage increased** for the owner. Firebase budget emails concern a linked billing account and are not a reason to enable billing here. The inspected Spark project has general email alerts enabled, but its Cloud Firestore alert options cover insecure/expired rules, not quota warnings. Do not rely on a Firestore quota-warning email. Consult the Firebase Usage dashboard for quota consumption.
 
 ## Verification boundaries
 

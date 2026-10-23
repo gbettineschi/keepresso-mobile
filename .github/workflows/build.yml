@@ -2,7 +2,7 @@ name: Native companion builds
 
 on:
   push:
-    branches: [main, 'feat/**']
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -14,8 +14,52 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Select relevant checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      contract: ${{ steps.paths.outputs.contract }}
+      relay: ${{ steps.paths.outputs.relay }}
+      macos: ${{ steps.paths.outputs.macos }}
+      android: ${{ steps.paths.outputs.android }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      # PRs compare their complete diff, so a later unrelated commit cannot skip
+      # a platform check that an earlier commit still needs. Pushes use the
+      # preceding main revision; manual runs explicitly request all checks.
+      - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3
+        id: paths
+        with:
+          filters: |
+            contract:
+              - '.github/workflows/build.yml'
+              - 'scripts/verify-upstream.py'
+              - 'scripts/generate-*.mjs'
+              - 'shared/**'
+              - 'macos/ThirdParty/**'
+            relay:
+              - '.github/workflows/build.yml'
+              - 'relay/**'
+              - 'shared/relay-vectors.json'
+            macos:
+              - '.github/workflows/build.yml'
+              - 'macos/**'
+              - 'shared/**'
+            android:
+              - '.github/workflows/build.yml'
+              - 'android/**'
+              - 'shared/**'
+
   contract:
     name: Pinned upstream and reference vectors
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.contract == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -29,6 +73,8 @@ jobs:
 
   relay:
     name: Relay security and HTTP tests
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.relay == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -43,6 +89,8 @@ jobs:
 
   macos:
     name: Mac helper tests and app
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.macos == 'true'
     runs-on: macos-26
     timeout-minutes: 20
     env:
@@ -70,6 +118,8 @@ jobs:
 
   android:
     name: Android tests, lint and APK
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.android == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:

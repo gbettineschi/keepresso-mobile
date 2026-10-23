@@ -4,12 +4,14 @@ This is an unofficial companion. Keep the official Keepresso installation; the h
 
 ## Build artifacts
 
-The private repository's **Actions → Native companion builds** workflow produces two development artifacts after the corresponding checks pass:
+The public repository's **Actions → Native companion builds** workflow produces development artifacts after the corresponding checks pass:
 
 - **Keespresso-Android-development** contains `app-debug.apk`.
 - **Keespresso-Mac-development** contains `KeespressoMac.zip`.
 
-These are test builds, not Play Store or notarized releases. Downloading an artifact requires access to the private repository. Artifacts expire after 14 days; rebuild the branch to produce fresh ones.
+These are test builds, not Play Store or notarized releases. Downloading an artifact requires signing in to GitHub. Artifacts expire after 14 days; manually run the workflow to produce fresh ones.
+
+Automatic builds run for pull requests and pushes to `main`. Feature-branch pushes are not built a second time. A small Linux job selects the affected platform checks: relay changes do not start a Mac build, and ordinary documentation changes start no app builds. Shared inputs and workflow changes run every affected check. Pull requests use their complete diff to keep earlier changes covered; an unrelated later commit does not erase required checks. **Run workflow** explicitly runs all checks and packages both apps. Standard GitHub-hosted Linux and Mac runner execution is free for this public repository; artifact/cache storage has separate allowances.
 
 ## macOS
 
@@ -37,7 +39,7 @@ cd android
 ./gradlew :core:test :app:lintDebug :app:assembleDebug
 ```
 
-The APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`. Install it on the phone with Android's normal explicit APK-install confirmation. CI debug builds use temporary debug signing keys; later builds may require uninstalling and pairing again until persistent development signing is configured. For development using an already authorized USB debugging connection:
+The APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`. Install it on the phone with Android's normal explicit APK-install confirmation. Owner CI builds use the retained development signing identity when its repository secrets are available. Forks without those secrets use their own debug identity. Updating the old 0.1.0 APK may require one reinstall and pairing again; subsequent builds with the same retained identity can update in place. For development using an already authorized USB debugging connection:
 
 ```sh
 adb install -r app/build/outputs/apk/debug/app-debug.apk
@@ -66,6 +68,6 @@ No OS Bluetooth bonding is requested. Whether both devices complete this flow wi
 
 Start with status, trigger refresh and loss/reconnection. Test manual controls and sleep only when intentionally ready to change the Mac's power state. Follow [ACCEPTANCE.md](ACCEPTANCE.md), including its unknown, failure and background cases.
 
-Nearby Bluetooth has limited range. This version does not deliver reminders over the internet when the phone is away. No remote-wake feature is provided. A disconnected Mac is **Unreachable**, with its last known readings retained.
+Nearby Bluetooth has limited range. Optional encrypted internet fallback and background push require your own configured relay; see [SELF_HOSTING.md](SELF_HOSTING.md). No remote-wake feature is provided. A disconnected Mac is **Unreachable**, with its last known readings retained.
 
 Official Keepresso can update independently. The observer's pinned library does not update automatically; incompatible app/settings versions must show an unavailable assessment until the companion is updated. The pin and original-source digest list are in `shared/upstream.json`.
