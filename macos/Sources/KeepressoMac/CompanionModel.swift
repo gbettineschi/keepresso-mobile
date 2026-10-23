@@ -128,7 +128,7 @@ import KeepressoCore
         guard isAuthorized(device),relay?.isEnrolled(device)==true,let configuration=relayConfiguration,let credential=devices.first(where:{$0.deviceId==device}),let ticket=try? RelayEnvelope.accessTicket(macBearer:configuration.macBearer,deviceKey:credential.key,macId:macId,deviceId:device) else{return}
         bluetooth.sendRelayConfiguration(device:device,url:configuration.url,authTicket:ticket)
     }
-    func snapshot()->[String:Any]{native.snapshot(triggers:observer.preview,reminders:reminders,ax:ax)}
+    func snapshot()->[String:Any]{observer.syncRules(version:native.installedVersion);return native.snapshot(triggers:observer.preview,reminders:reminders,ax:ax)}
     func handle(_ request:CommandRequest,device:String,body:Data,policyRejection:String?=nil)async -> CommandResponse{
         let generation=lifecycle.generation
         guard isAuthorized(device) else{return CommandResponse(id:request.id,status:"error",message:"Device authorization was revoked.")}

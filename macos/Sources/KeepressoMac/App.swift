@@ -11,13 +11,20 @@ import Darwin
             // Isolated worker: no app model, Keychain, Bluetooth or power adapter.
             guard setpgid(0,0)==0 || getpgrp()==getpid(),let flag=CommandLine.arguments.firstIndex(of:"--observer-scratch"),CommandLine.arguments.indices.contains(flag+1),let scratch=try? ObserverScratch.validate(CommandLine.arguments[flag+1]) else{exit(2)}
             let workerGroup=getpgrp()
-            DispatchQueue.global(qos:.utility).asyncAfter(deadline:.now()+5){kill(-workerGroup,SIGKILL)}
+            DispatchQueue.global(qos:.utility).asyncAfter(deadline:.now()+8){kill(-workerGroup,SIGKILL)}
             Task{@MainActor in
                 let result=await TriggerWorker().refresh(version:Bundle(url:URL(fileURLWithPath:"/Applications/Keepresso.app"))?.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String,scratch:scratch)
                 guard let data=try? WireJSON.encoder.encode(result),data.count<=65536 else{exit(2)}
                 do{try FileHandle.standardOutput.write(contentsOf:data);exit(0)}catch{exit(2)}
             }
             dispatchMain()
+        }
+        if CommandLine.arguments.contains("--read-telemetry"){
+            // Read-only diagnostic, before app model, credentials or transports.
+            let reading=CompanionTemperatureMonitor().reading()
+            let data=try? WireJSON.data(["temperatureC":reading?.celsius as Any? ?? NSNull(),"temperatureSensor":reading?.sensor as Any? ?? NSNull()])
+            if let data{try? FileHandle.standardOutput.write(contentsOf:data)}
+            exit(reading==nil ? 1:0)
         }
         if CommandLine.arguments.contains("--self-check"){
             // Branch before NSApplication, Keychain, BLE, timers, native status,

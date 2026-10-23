@@ -59,7 +59,7 @@ All timestamps ISO8601 UTC. Missing/null values mean unknown; no defaults implyi
   capturedAt, macName,
   mac: { lock: "locked|unlocked|unknown", display: "on|dimmed|off|unknown",
     lid: "open|closed|unknown", batteryPercent: number|null,
-    powerSource: "battery|ac|unknown", temperatureC: number|null,
+    powerSource: "battery|ac|unknown", isCharging?: boolean|null, temperatureC: number|null,
     temperatureSensor: string|null, thermal: "normal|warm|hot|unknown" },
   keepresso: { appRunning: boolean, version: string|null, isActive: boolean|null,
     endsAt: string|null, triggersEnabled: boolean|null, triggersPaused: boolean|null,

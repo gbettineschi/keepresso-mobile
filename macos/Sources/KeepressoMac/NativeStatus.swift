@@ -5,6 +5,7 @@ import KeepressoCore
 import CoreGraphics
 
 @MainActor final class NativeStatus {
+    private lazy var temperature=CompanionTemperatureMonitor()
     static let appURL=URL(fileURLWithPath:"/Applications/Keepresso.app")
     func runningApp() -> NSRunningApplication? { NSWorkspace.shared.runningApplications.first { $0.bundleURL?.standardizedFileURL == Self.appURL.standardizedFileURL } }
     var installedVersion: String? { Bundle(url:Self.appURL)?.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String }
@@ -27,7 +28,8 @@ import CoreGraphics
         let running=runningApp() != nil;let status=running ? native():nil;let kind=sessionKind(status)
         let capabilities:[String:Any]=["startManual":FileManager.default.fileExists(atPath:Self.appURL.path),"stopManual":kind=="manual","pauseTriggers":ax.canPerform("Pause Triggers"),"resumeTriggers":ax.canPerform("Resume Triggers"),"sleepNow":false,"refreshTriggers":installedVersion=="1.27.0"]
         let k:[String:Any]=["appRunning":running,"version":installedVersion as Any? ?? NSNull(),"isActive":StatusEvidence.brewingActivity(appRunning:running,nativeActive:status?.isActive) as Any? ?? NSNull(),"endsAt":status?.endsAt.map(WireJSON.iso) as Any? ?? NSNull(),"triggersEnabled":status?.triggersEnabled as Any? ?? NSNull(),"triggersPaused":status?.triggersPaused as Any? ?? NSNull(),"sessionKind":kind,"safetyPause":"unknown"]
-        let mac:[String:Any]=["lock":lock,"display":display,"lid":lid,"batteryPercent":source.percentage as Any? ?? NSNull(),"powerSource":source.provider.rawValue,"temperatureC":NSNull(),"temperatureSensor":NSNull(),"thermal":thermal]
+        let reading=temperature.reading()
+        let mac:[String:Any]=["lock":lock,"display":display,"lid":lid,"batteryPercent":source.percentage as Any? ?? NSNull(),"powerSource":source.provider.rawValue,"isCharging":source.hasBattery ? source.isCharging as Any:NSNull(),"temperatureC":reading?.celsius as Any? ?? NSNull(),"temperatureSensor":reading?.sensor as Any? ?? NSNull(),"thermal":thermal]
         let reminder:[String:Any]=["enabled":reminders.settings.enabled,"intervalSeconds":reminders.settings.intervalSeconds,"endedAwakeDelaySeconds":reminders.settings.endedAwakeDelaySeconds,"snoozedUntil":reminders.snoozedUntil.map(WireJSON.iso) as Any? ?? NSNull()]
         return ["capturedAt":WireJSON.iso(Date()),"macName":Host.current().localizedName ?? "Mac","mac":mac,"keepresso":k,"capabilities":capabilities,"triggers":(try? WireJSON.object(WireJSON.encoder.encode(triggers))) ?? [:],"reminders":reminder]
     }

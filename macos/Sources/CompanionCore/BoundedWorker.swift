@@ -9,7 +9,7 @@ public enum BoundedWorker {
     /// Only the Mac helper's fixed executable/worker arguments are used by the
     /// app. No wire action accepts a path, argument list, URL or shell fragment.
     public static func run(executable:URL,arguments:[String],timeout:TimeInterval=5,outputLimit:Int=65536)async throws->Data {
-        guard timeout>0,timeout<=5,outputLimit>0,outputLimit<=65536 else{throw CompanionError.invalid}
+        guard timeout>0,timeout<=8,outputLimit>0,outputLimit<=65536 else{throw CompanionError.invalid}
         let cancellation = Cancellation()
         return try await withTaskCancellationHandler(operation: {
             try await Task.detached(priority:.utility){try blocking(executable:executable,arguments:arguments,timeout:timeout,outputLimit:outputLimit,cancellation:cancellation)}.value

@@ -8,10 +8,10 @@ This checklist is the work ledger; no item is complete without recorded evidence
 |---|---|---|
 | 01 | Android launcher/header/settings name: Keepresso Mobile | UI verified: five emulator tests in light and dark; backend dependencies tracked separately |
 | 02 | Remove bold power-source detail | UI verified: five emulator tests in light and dark; backend dependencies tracked separately |
-| 03 | Real Celsius reading where readable; no Normal/Sensor unavailable text | Pending |
+| 03 | Real Celsius reading where readable; no Normal/Sensor unavailable text | Verified: 57 Swift tests; live read-only CPU temperature; generic worker error and retained assessment |
 | 04 | Compact battery: percent, charging indicator; amber ≤20%, red ≤10% | UI verified: five emulator tests in light and dark; backend dependencies tracked separately |
-| 05 | Temperature neutral/amber/red using system thermal pressure; no invented universal temperature limits | Pending |
-| 06 | Technical trigger-worker errors logged; concise user error | Pending |
+| 05 | Temperature neutral/amber/red using system thermal pressure; no invented universal temperature limits | Verified: 57 Swift tests; live read-only CPU temperature; generic worker error and retained assessment |
+| 06 | Technical trigger-worker errors logged; concise user error | Verified: 57 Swift tests; live read-only CPU temperature; generic worker error and retained assessment |
 | 07 | Configured trigger names only, native-style tick/circle; no agent/session details | UI verified: five emulator tests in light and dark; backend dependencies tracked separately |
 | 08 | Quick ordinary status; heavier trigger assessment stays explicit and bounded | Pending |
 | 09 | Active triggers, checked time and Check on one line | UI verified: five emulator tests in light and dark; backend dependencies tracked separately |

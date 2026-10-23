@@ -164,7 +164,7 @@ fun validateSnapshot(s: JsonObject) {
     s.stringOrNull("macName")
     s["mac"]?.takeUnless { it == JsonNull }?.jsonObject?.let {
         it.enums("lock", setOf("locked", "unlocked", "unknown")); it.enums("display", setOf("on", "dimmed", "off", "unknown")); it.enums("lid", setOf("open", "closed", "unknown")); it.enums("powerSource", setOf("battery", "ac", "unknown")); it.enums("thermal", setOf("normal", "warm", "hot", "unknown"))
-        it.numeric("batteryPercent", 0.0..100.0); it.numeric("temperatureC"); it.stringOrNull("temperatureSensor")
+        it.numeric("batteryPercent", 0.0..100.0); it.numeric("temperatureC"); it.stringOrNull("temperatureSensor");it.boolOrNull("isCharging")
     }
     s["keepresso"]?.takeUnless { it == JsonNull }?.jsonObject?.let {
         listOf("appRunning", "isActive", "triggersEnabled", "triggersPaused").forEach(it::boolOrNull)

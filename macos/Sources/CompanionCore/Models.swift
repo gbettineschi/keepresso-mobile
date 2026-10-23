@@ -43,6 +43,14 @@ public struct CompanionEvent: Codable {
 public struct TriggerPreview: Codable {
     public var state: String = "not_checked"; public var checkedAt: Date?; public var combined: Bool?; public var rules: [Rule] = []; public var message: String?
     public init() {}
+    public mutating func retainPriorAssessment(_ previous:Self){
+        if rules.isEmpty{rules=previous.rules}
+        if checkedAt==nil{
+            checkedAt=previous.checkedAt
+            if state != "error",previous.checkedAt != nil{state="stale"}
+        }
+        if state=="error"{combined=nil}
+    }
     public struct Detail: Codable { public var label: String; public var active: Bool; public var agent: String?; public init(label: String, active: Bool, agent: String?) { self.label=label; self.active=active; self.agent=agent } }
     public struct Rule: Codable { public var id: String; public var label: String; public var satisfied: Bool?; public var inGrace: Bool; public var graceRemaining: Double?; public var details: [Detail]; public init(id: String,label: String,satisfied: Bool?,inGrace: Bool,graceRemaining: Double?,details: [Detail]) { self.id=id;self.label=label;self.satisfied=satisfied;self.inGrace=inGrace;self.graceRemaining=graceRemaining;self.details=details } }
 }
