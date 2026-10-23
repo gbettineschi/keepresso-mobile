@@ -1,0 +1,21 @@
+{
+  "warning": "PUBLIC TEST KEYS - NEVER USE IN PRODUCTION",
+  "macId": "11111111-1111-4111-8111-111111111111",
+  "deviceId": "22222222-2222-4222-8222-222222222222",
+  "deviceName": "Test Android",
+  "token": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+  "clientNonce": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=",
+  "serverNonce": "QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8=",
+  "pairTranscript": "keepresso-mobile/pair/v1\n11111111-1111-4111-8111-111111111111\n22222222-2222-4222-8222-222222222222\nICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=\nVGVzdCBBbmRyb2lk",
+  "pairProof": "m68Bp11HsYOE/IU+NEE9DEEgDNod05QYmBYGijCGewo=",
+  "deviceKey": "8YgPMk2KQwYwY6D3x4oUQ6ASbxTczJC5+EJ2NCHSOIY=",
+  "pairedProof": "o8lA4Qxf7CN/rE0K6kgXM6ePE5Lzdd5rX4DRl/XqJus=",
+  "transcript": "keepresso-mobile/v1\n11111111-1111-4111-8111-111111111111\n22222222-2222-4222-8222-222222222222\nICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=\nQEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8=",
+  "serverProof": "oU/HehqWhPCHeCHL+QsPxlM+kSUDbFPb3dTYMQzEl10=",
+  "clientProof": "9rkn7qHMI2xKRiarse0eo2FgJUkVXdAuB7/kftMXomc=",
+  "c2s": "41X8PsBTKxf7VUP4IxIt/P5LS4l1efLriSh/Ckm+X1U=",
+  "s2c": "DzNgM/+7bjtIZRKL53J1XbQGywCxr5XCWZ4UzZ4uN+Y=",
+  "sequence": 0,
+  "plaintext": "{\"type\":\"request\",\"id\":\"33333333-3333-4333-8333-333333333333\",\"action\":\"status\",\"issuedAt\":\"2026-10-23T12:00:00Z\",\"expiresAt\":\"2026-10-23T12:00:30Z\"}",
+  "ciphertext": "HavM5fCJcp9KeazDmv6PSL50Ljq3pYxwOEA9UGTgq20z/ygg0JW8fJM9csdwb3UYoGjUZV13G2SVYRrtweZF7jDMDSzCipFgdLdRs3i7pU5BjK6iUgl1klofsS5l5uEhzksOxjvtjEHW8tRXXTAw7fztGdbZK4ZpGTY7FgL3dA+Ga6GkKNkxthPJoO/uL6Deg4iyTamwEmscWR8enM3sTLaUDMqY"
+}

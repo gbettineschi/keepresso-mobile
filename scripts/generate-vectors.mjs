@@ -1,0 +1,22 @@
+// Public deterministic fixtures only. Never use these keys in production.
+import {createHmac,createHash,hkdfSync,createCipheriv} from 'node:crypto';
+import {writeFileSync} from 'node:fs';
+const b64=b=>Buffer.from(b).toString('base64');
+const sha=s=>createHash('sha256').update(s).digest();
+const hmac=(key,s)=>createHmac('sha256',key).update(s).digest();
+const hkdf=(ikm,salt,info)=>Buffer.from(hkdfSync('sha256',ikm,salt,Buffer.from(info),32));
+const token=Buffer.from(Array.from({length:32},(_,i)=>i));
+const macId='11111111-1111-4111-8111-111111111111',deviceId='22222222-2222-4222-8222-222222222222',deviceName='Test Android';
+const clientNonce=b64(Buffer.from(Array.from({length:32},(_,i)=>i+32)));
+const serverNonce=b64(Buffer.from(Array.from({length:32},(_,i)=>i+64)));
+const pairTranscript=`keepresso-mobile/pair/v1\n${macId}\n${deviceId}\n${clientNonce}\n${b64(Buffer.from(deviceName))}`;
+const deviceKey=hkdf(token,sha(`${macId}\n${deviceId}`),'keepresso-mobile/v1/device-key');
+const transcript=`keepresso-mobile/v1\n${macId}\n${deviceId}\n${clientNonce}\n${serverNonce}`;
+const c2s=hkdf(deviceKey,sha(transcript),'keepresso-mobile/v1/c2s');
+const s2c=hkdf(deviceKey,sha(transcript),'keepresso-mobile/v1/s2c');
+const plaintext='{"type":"request","id":"33333333-3333-4333-8333-333333333333","action":"status","issuedAt":"2026-10-23T12:00:00Z","expiresAt":"2026-10-23T12:00:30Z"}';
+const cipher=createCipheriv('aes-256-gcm',c2s,Buffer.alloc(12));
+cipher.setAAD(Buffer.from('keepresso-mobile/v1'));
+const sealed=Buffer.concat([cipher.update(plaintext,'utf8'),cipher.final(),cipher.getAuthTag()]);
+const vector={warning:'PUBLIC TEST KEYS - NEVER USE IN PRODUCTION',macId,deviceId,deviceName,token:b64(token),clientNonce,serverNonce,pairTranscript,pairProof:b64(hmac(token,pairTranscript)),deviceKey:b64(deviceKey),pairedProof:b64(hmac(deviceKey,`paired\n${macId}\n${deviceId}`)),transcript,serverProof:b64(hmac(deviceKey,`server\n${transcript}`)),clientProof:b64(hmac(deviceKey,`client\n${transcript}`)),c2s:b64(c2s),s2c:b64(s2c),sequence:0,plaintext,ciphertext:b64(sealed)};
+writeFileSync(new URL('../shared/vectors.json',import.meta.url),JSON.stringify(vector,null,2)+'\n');

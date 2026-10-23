@@ -1,0 +1,15 @@
+.DS_Store
+.build/
+.gradle/
+.kotlin/
+**/build/
+local.properties
+*.keystore
+*.jks
+.env
+.env.*
+!.env.example
+.superpowers/
+artifacts/
+*.xcuserstate
+xcuserdata/
