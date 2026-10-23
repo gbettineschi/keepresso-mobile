@@ -6,9 +6,11 @@ The companion is being built around secure nearby Bluetooth, live Mac/session st
 
 ## Project status
 
-Initial implementation. See [requirements](docs/requirements.md), [design](docs/superpowers/specs/2026-10-23-companion-design.md) and [wire protocol](docs/protocol.md). Hardware pairing, closed-lid/background operation and real power commands require device acceptance tests; a successful build is not proof of those behaviours.
+First development implementation. Start with [build and pairing instructions](docs/BUILDING.md), [implemented features and limitations](docs/IMPLEMENTATION.md), and the [device acceptance checklist](docs/ACCEPTANCE.md). Hardware pairing, closed-lid/background operation and real power commands require device acceptance tests; a successful build is not proof of those behaviours.
 
 The initial transport is Bluetooth Low Energy. Internet transport is optional future work, with no Tailscale dependency and no server deployed by this project yet.
+
+The approved [requirements](docs/requirements.md), [design](docs/superpowers/specs/2026-10-23-companion-design.md) and [wire protocol](docs/protocol.md) describe the target and the shared contract. In this build safe remote sleep and Celsius readings are unavailable; Pause/Resume depends on a uniquely exposed native Accessibility control. See the status document before relying on reminders or controls.
 
 ## Layout
 

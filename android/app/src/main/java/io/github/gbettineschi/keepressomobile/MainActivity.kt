@@ -1,6 +1,7 @@
 package io.github.gbettineschi.keepressomobile
 
 import android.Manifest
+import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -37,7 +38,10 @@ import kotlinx.serialization.json.*
 
 class MainActivity : ComponentActivity() {
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-        if (requiredBluetooth().all { result[it] == true || ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }) startNearby()
+        if (requiredBluetooth().all { result[it] == true || ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }) {
+            startNearby()
+            if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) Companion.update { it.copy(result = "Notifications are disabled in Android Settings. Nearby status still works while connected.") }
+        }
         else Companion.update { it.copy(connection = "Nearby Devices permission denied. Enable it in Android Settings to connect.") }
     }
     private val scanner = registerForActivityResult(ScanContract()) { result -> result.contents?.let(::pair) }
@@ -51,7 +55,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val restored = runCatching { CredentialStore(this).load() }.getOrNull()
         restored?.let { saved ->
-            Companion.update { it.copy(pairedName = saved.name) }
+            Companion.update { it.copy(pairedName = saved.name, macId = saved.macId, localSnoozedUntil = PhoneReminders.until(this, saved.macId)) }
             if (requiredBluetooth().all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED } && Companion.service == null) startNearby()
         }
         setContent {
@@ -162,7 +166,7 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
     Text("Active triggers", style = MaterialTheme.typography.titleSmall)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         val checked = parsed(triggers.text("checkedAt")); val status = triggers.text("state")
-        Text(when { status == "checking" -> "Checking…"; checked == null -> "Not checked yet"; else -> "Triggers checked at ${time(checked)}${if (status in setOf("stale", "error", "unknown") || !reachable) " · Stale" else ""}" }, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(when { status == "checking" -> "Checking…"; checked == null -> "Not checked yet"; else -> "Triggers checked at ${time(checked)}${if (status in setOf("stale", "error") || !reachable) " · Stale" else if (status == "unknown") " · Some inputs unknown" else ""}" }, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant)
         TextButton(onClick = { Companion.service?.send("refresh_triggers") }, enabled = can("refreshTriggers")) { Text("Refresh") }
     }
     val rules = triggers?.get("rules")?.jsonArray?.map { it.jsonObject }.orEmpty()
@@ -194,7 +198,7 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
     if (reachable && caps.flag(if (manual) "stopManual" else "startManual") != true) Text("Manual control unavailable on this Mac. Check Keepresso and the helper's supported actions.", style = MaterialTheme.typography.labelSmall)
     TextButton(onClick = { confirm("sleep_now") }, enabled = can("sleepNow"), modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Bedtime, null); Spacer(Modifier.width(8.dp)); Text("Sleep now") }
     if (reachable && caps.flag("sleepNow") != true) Text("Sleep unavailable: the Mac helper could not establish a safe sleep path.", style = MaterialTheme.typography.labelSmall)
-    Text(when { reminders.text("snoozedUntil") != null -> "Reminders snoozed until ${time(parsed(reminders.text("snoozedUntil")))}"; reminders.flag("enabled") == false -> "Routine reminders off"; reminders.flag("enabled") == true -> if (reminders.number("intervalSeconds") == 7200.0) "Reminders every 2 hours" else "Hourly reminders on"; else -> "Reminder status unknown" }, style = MaterialTheme.typography.labelSmall)
+    Text(when { state.localSnoozedUntil?.isAfter(now) == true -> "Reminders snoozed on this phone until ${time(state.localSnoozedUntil)}"; reminders.text("snoozedUntil") != null -> "Reminders snoozed until ${time(parsed(reminders.text("snoozedUntil")))}"; reminders.flag("enabled") == false -> "Routine reminders off"; reminders.flag("enabled") == true -> if (reminders.number("intervalSeconds") == 7200.0) "Reminders every 2 hours" else "Hourly reminders on"; else -> "Reminder status unknown" }, style = MaterialTheme.typography.labelSmall)
 }
 @Composable private fun SettingsScreen(state: UiState, reachable: Boolean, onEnable: () -> Unit, onConnect: () -> Unit, onReset: () -> Unit) {
     val r = state.snapshot.section("reminders")
@@ -213,7 +217,26 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
     Text("Still awake after stopping", style = MaterialTheme.typography.titleSmall)
     Row { listOf(120, 300, 600).forEach { value -> FilterChip(selected = currentDelay == value, onClick = { save(delay = value) }, enabled = reachable && !state.busy && completeSettings, label = { Text("${value / 60} min") }) } }
     Text("Routine reminders", style = MaterialTheme.typography.titleSmall)
+    state.localSnoozedUntil?.takeIf { it.isAfter(Instant.now()) }?.let { Text("Snoozed on this phone until ${time(it)}", style = MaterialTheme.typography.bodySmall) }
     Row { TextButton(onClick = { Companion.service?.send("snooze_reminders") }, enabled = reachable && !state.busy) { Text("Snooze 6 hours") }; TextButton(onClick = { Companion.service?.send("resume_reminders") }, enabled = reachable && !state.busy) { Text("Resume") } }
-    Text("Battery, heat and sleep warnings stay on during routine-reminder snoozes.", style = MaterialTheme.typography.bodySmall)
+    Text("Thermal warnings are not snoozed. Battery-pause and sleep-failure detection are not available in this development build.", style = MaterialTheme.typography.bodySmall)
     HorizontalDivider(); TextButton(onClick = onReset, enabled = state.pairedName != null) { Text("Remove phone authorization") }
+}
+
+/** Notification actions use an unexported activity, so external apps cannot forge them.
+ * Opening directly also avoids Android's notification-trampoline restriction. */
+class ReminderActionActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val action = intent.action?.takeIf { it in setOf("ack", "snooze") }
+        val macId = intent.getStringExtra("macId")
+        if (action != null && macId != null) {
+            getSystemService(NotificationManager::class.java).cancel(intent.getIntExtra("notificationId", 0))
+            if (action == "snooze") PhoneReminders.filter(this).snooze(macId, Instant.now())
+            if (Companion.state.value.macId == macId && Companion.state.value.reachable(Instant.now())) Companion.service?.send(if (action == "snooze") "snooze_reminders" else "ack_reminder")
+            else Companion.activity(if (action == "snooze") "Routine reminders snoozed locally for 6 hours; Mac unreachable" else "Reminder dismissed locally; Mac unreachable")
+        }
+        startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+        finish()
+    }
 }

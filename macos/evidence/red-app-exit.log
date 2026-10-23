@@ -1,0 +1,37 @@
+Building for debugging...
+[Pre-planning 1 / 153]
+[Planning deferred tasks]
+[6 / 24] CompanionCore
+[9 / 27] CompanionCore
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCore: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[16 / 27] CompanionCore
+[27 / 39] KeepressoCore
+[27 / 39] CompanionCore-product
+[27 / 39] KeepressoCore
+[30 / 40] KeespressoMac-product
+[37 / 47] KeespressoMac-product
+[38 / 49] KeepressoCore
+[41 / 48] KeespressoMac-product
+[53 / 58] CompanionCoreTests-product
+[57 / 60] CompanionCoreTests-product
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeespressoMac-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/usr/lib' not found
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeespressoMac-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[59 / 63] CompanionCoreTests-product
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCoreTests-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/usr/lib' not found
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCoreTests-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+Build complete! (5,59 secs)
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite StatusEvidenceTests started.
+◇ Test exitedAppIsKnownInactiveButRunningUnreadableSourceStaysUnknown() started.
+✘ Test exitedAppIsKnownInactiveButRunningUnreadableSourceStaysUnknown() recorded an issue at Assertions.swift:2:138: Expectation failed: lhs == rhs
+↳ lhs == rhs → false
+↳   lhs → nil
+↳   rhs → false
+↳     some → false
+✘ Test exitedAppIsKnownInactiveButRunningUnreadableSourceStaysUnknown() failed after 0.001 seconds with 1 issue.
+✘ Suite StatusEvidenceTests failed after 0.001 seconds with 1 issue.
+✘ Test run with 1 test in 1 suite failed after 0.001 seconds with 1 issue.
+Note: Some test targets reported failures:
+  - CompanionCoreTests (Swift Testing)

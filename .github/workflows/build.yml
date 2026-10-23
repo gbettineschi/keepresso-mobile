@@ -26,6 +26,26 @@ jobs:
           node scripts/generate-vectors.mjs
           git diff --exit-code -- shared/vectors.json
 
+  macos:
+    name: Mac helper tests and app
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: swift test --package-path macos
+      - name: Package helper
+        run: bash macos/scripts/build-app.sh
+      - name: Safe packaged self-check
+        run: macos/artifacts/KeespressoMac.app/Contents/MacOS/KeespressoMac --self-check
+      - name: Archive helper
+        run: ditto -c -k --sequesterRsrc --keepParent macos/artifacts/KeespressoMac.app macos/artifacts/KeespressoMac.zip
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Keespresso-Mac-development
+          path: macos/artifacts/KeespressoMac.zip
+          if-no-files-found: error
+          retention-days: 14
+
   android:
     name: Android tests, lint and APK
     runs-on: ubuntu-24.04
@@ -40,6 +60,7 @@ jobs:
         with:
           gradle-version: '8.11.1'
           cache-provider: basic
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
       - name: Verify Android SDK 35
         run: test -f "$ANDROID_HOME/platforms/android-35/android.jar"
       - name: Test, lint and assemble

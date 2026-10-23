@@ -25,6 +25,9 @@ class BleCentral(private val context: Context, private val state: (String) -> Un
     private var chunkSize = 20
     private var scanning = false
     private var subscriptionReady = false
+    private val candidates = CandidateRotation()
+    private var candidate: String? = null
+    private var peerAuthenticated = false
     private val frameExpiry = object : Runnable { override fun run() {
         if (gatt == null) return
         try { framer.feed(byteArrayOf(), android.os.SystemClock.elapsedRealtime()) } catch (_: Exception) { close("Partial Bluetooth record expired"); return }
@@ -35,7 +38,8 @@ class BleCentral(private val context: Context, private val state: (String) -> Un
     private var handshakeTimer: Runnable? = null
     private val scan = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) { handler.post {
-            if (!scanning || gatt != null) return@post
+            if (!scanning || gatt != null || !candidates.allowed(result.device.address, android.os.SystemClock.elapsedRealtime())) return@post
+            candidate = result.device.address
             stopScan(); state("Connecting nearby…")
             gatt = result.device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
             val epoch = generation; handler.postDelayed({ if (epoch == generation && !subscriptionReady) close("Bluetooth connection timed out") }, 15000)
@@ -85,8 +89,9 @@ class BleCentral(private val context: Context, private val state: (String) -> Un
         val accepted = if (Build.VERSION.SDK_INT >= 33) g.writeDescriptor(d, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) == BluetoothStatusCodes.SUCCESS else { d.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE; g.writeDescriptor(d) }
         if (!accepted) close("Notification subscription rejected")
     }
-    fun start() {
+    fun start(resetCandidates: Boolean = false) {
         close(null)
+        if (resetCandidates) candidates.clear()
         try {
             val a = adapter ?: return state("Bluetooth LE is unavailable on this phone")
             if (!a.isEnabled) return state("Turn on Bluetooth to connect nearby")
@@ -105,10 +110,10 @@ class BleCentral(private val context: Context, private val state: (String) -> Un
         val token = ++writeToken; val epoch = generation
         handler.postDelayed({ if (epoch == generation && token == writeToken) close("Write acknowledgement timed out") }, 10000)
     }
-    fun authenticated() { handshakeTimer?.let(handler::removeCallbacks); handshakeTimer = null }
+    fun authenticated() { peerAuthenticated = true; handshakeTimer?.let(handler::removeCallbacks); handshakeTimer = null }
     fun close(reason: String?) {
         generation++; writeToken++; subscriptionReady = false; handler.removeCallbacks(frameExpiry); stopScan(); handshakeTimer?.let(handler::removeCallbacks); handshakeTimer = null
-        val old = gatt; gatt = null; input = null; output = null; queue.clear(); framer = Framer(); chunkSize = 20
+        val old = gatt; if (old != null && !peerAuthenticated) candidate?.let { candidates.failed(it, android.os.SystemClock.elapsedRealtime()) }; candidate = null; peerAuthenticated = false; gatt = null; input = null; output = null; queue.clear(); framer = Framer(); chunkSize = 20
         try { old?.disconnect(); old?.close() } catch (_: SecurityException) { }
         disconnected(); if (reason != null) state(reason)
     }

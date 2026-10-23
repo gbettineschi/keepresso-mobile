@@ -1,0 +1,45 @@
+Building for debugging...
+[Pre-planning 1 / 153]
+[Planning deferred tasks]
+[2 / 14] CompanionCore
+[13 / 25] CompanionCore
+[17 / 26] CompanionCoreTests-product
+[18 / 28] CompanionCore
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCore: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[23 / 29] CompanionCoreTests-product
+[29 / 35] CompanionCoreTests-product
+[35 / 45] KeespressoMac-product
+[40 / 47] CompanionCoreTests-product
+[44 / 49] KeespressoMac-product
+[46 / 49] CompanionCoreTests-product
+[48 / 52] KeespressoMac-product
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeespressoMac-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/usr/lib' not found
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeespressoMac-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[48 / 52] CompanionCoreTests-product
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCoreTests-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/usr/lib' not found
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCoreTests-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+Build complete! (2,96 secs)
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite SafetyTests started.
+◇ Test safetyIncidentBypassesSnoozeButDoesNotDuplicateAcrossRestart() started.
+✘ Test safetyIncidentBypassesSnoozeButDoesNotDuplicateAcrossRestart() recorded an issue at Assertions.swift:5:83: Expectation failed: value == nil
+↳ value == nil → false
+↳   value → CompanionEvent(id: "b3fe0ca4-2fe0-42cf-a638-c49034eefbfb", kind: "thermal", createdAt: 2026-10-23 14:48:05 +0000, title: "Keespresso warning", body: "Check the Mac: thermal.", scheduledEnd: nil, snoozedUntil: Optional(2026-10-23 20:48:05 +0000))
+↳     some → CompanionEvent(id: "b3fe0ca4-2fe0-42cf-a638-c49034eefbfb", kind: "thermal", createdAt: 2026-10-23 14:48:05 +0000, title: "Keespresso warning", body: "Check the Mac: thermal.", scheduledEnd: nil, snoozedUntil: Optional(2026-10-23 20:48:05 +0000))
+↳       id → "b3fe0ca4-2fe0-42cf-a638-c49034eefbfb"
+↳       kind → "thermal"
+↳       createdAt → 2026-10-23 14:48:05 +0000
+↳         timeIntervalSinceReferenceDate → 814459685.25635
+↳       title → "Keespresso warning"
+↳       body → "Check the Mac: thermal."
+↳       scheduledEnd → nil
+↳       snoozedUntil → 2026-10-23 20:48:05 +0000
+↳         some → 2026-10-23 20:48:05 +0000
+↳           timeIntervalSinceReferenceDate → 814481285.25635
+✘ Test safetyIncidentBypassesSnoozeButDoesNotDuplicateAcrossRestart() failed after 0.005 seconds with 1 issue.
+✘ Suite SafetyTests failed after 0.005 seconds with 1 issue.
+✘ Test run with 1 test in 1 suite failed after 0.005 seconds with 1 issue.
+Note: Some test targets reported failures:
+  - CompanionCoreTests (Swift Testing)
