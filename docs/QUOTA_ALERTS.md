@@ -60,6 +60,42 @@ Suggested notification documentation:
 
 > One of this project's daily read, write or delete operation allowances exceeded 80% over the last 24 hours. This uses Google's quota-consumption counters. The rolling window can warn earlier than the midnight-Pacific daily reset. Check Firebase Usage before changing anything. Internet status, commands and reminders may stop at quota exhaustion; nearby Bluetooth remains independent. Keep Firebase on Spark without a billing account and Vercel on Hobby.
 
+### Alternative when the console editor freezes
+
+Google's [Cloud Shell](https://docs.cloud.google.com/shell/docs/launching-cloud-shell) includes the official CLI, so this does not require installing tools on the Mac. Open it from your project's Google Cloud header, or use the [temporary standalone session](https://shell.cloud.google.com/?ephemeral=true). Review Google's session authorization prompt yourself. Cloud Shell is a setup tool, not a relay dependency; close it after verification.
+
+1. Check that the signed-in account owns the intended project. From the repository checkout, copy `docs/examples/firestore-quota-policy.json` into Cloud Shell as `firestore-quota-policy.json`. It contains no credentials. You can also upload the file using Cloud Shell's upload menu.
+2. Replace every `YOUR_FIREBASE_PROJECT_ID` with your project ID and `YOUR_EMAIL_CHANNEL_ID` with the saved email channel's numeric ID. List the existing channels to identify it; avoid creating a duplicate:
+
+   ```sh
+   gcloud beta monitoring channels list --project=YOUR_FIREBASE_PROJECT_ID \
+     --format='table(name,displayName,type,labels.email_address)'
+   ```
+
+3. Before creating anything, check for an already saved policy. An interrupted browser save might have succeeded:
+
+   ```sh
+   gcloud monitoring policies list --project=YOUR_FIREBASE_PROJECT_ID \
+     --format='table(name,displayName,enabled)'
+   ```
+
+4. If there is no existing Keespresso quota policy, create it with the [official CLI command](https://docs.cloud.google.com/sdk/gcloud/reference/monitoring/policies/create):
+
+   ```sh
+   gcloud monitoring policies create --project=YOUR_FIREBASE_PROJECT_ID \
+     --policy-from-file=firestore-quota-policy.json
+   ```
+
+5. Copy the returned policy resource name and read it back:
+
+   ```sh
+   gcloud monitoring policies describe \
+     projects/YOUR_FIREBASE_PROJECT_ID/alertPolicies/YOUR_POLICY_ID \
+     --project=YOUR_FIREBASE_PROJECT_ID --format=json
+   ```
+
+   Verify `enabled: true`, the intended channel, both project filters, `> 0.8`, `60s`, and `notificationPrompts: ["OPENED"]`. Reopen the policy in Monitoring to verify its saved state. Do not repeatedly run `create`: it creates additional policies. To repair an existing policy, use `gcloud monitoring policies update POLICY_RESOURCE --project=YOUR_FIREBASE_PROJECT_ID --policy-from-file=firestore-quota-policy.json`, then read it back again.
+
 ### Timing, repetition and limits
 
 This is an **early warning over a rolling 24 hours**, not an exact “since midnight Pacific” total. A rolling day includes the current quota day plus part of the preceding one, so it can warn earlier; it avoids treating a smaller dashboard count as complete quota consumption. Metrics arrive with a delay, and Google/email delivery can add delay. A sudden burst can exhaust a quota before any email arrives. The hard no-billing limit remains the protection.
