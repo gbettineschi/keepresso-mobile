@@ -24,6 +24,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.LocalContext
+import android.provider.Settings
+import kotlin.math.roundToInt
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -113,9 +122,9 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
     }) { insets ->
         Column(Modifier.padding(insets).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Image(painterResource(R.drawable.keepresso_installed_icon), "Original Keepresso icon", Modifier.size(40.dp))
-                Spacer(Modifier.width(10.dp)); Text("Keepresso", style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.weight(1f)); IconButton(onClick = { Companion.service?.send("status") }, enabled = state.authenticated) { Icon(Icons.Default.Refresh, "Refresh Mac status") }
+                Image(painterResource(R.drawable.keepresso_installed_icon), null, Modifier.size(32.dp))
+                Spacer(Modifier.width(10.dp)); Text("Keepresso Mobile", style = MaterialTheme.typography.titleLarge.copy(fontSize=20.sp),modifier=Modifier.weight(1f),maxLines=1)
+                IconButton(onClick = { Companion.service?.send("status") }, enabled = state.authenticated) { Icon(Icons.Default.Refresh, "Refresh Mac status") }
             }
             if (state.pairedName == null) Pairing(state,onEnable, onScan, onPair)
             when (tab) {
@@ -147,9 +156,17 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
     OutlinedTextField(value = pasted, onValueChange = { pasted = it.take(2048) }, label = { Text("Or paste pairing invitation") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
     TextButton(onClick = { onPair(pasted); pasted = "" }, enabled = pasted.isNotBlank()) { Text("Pair with Mac") }
 }
-@Composable private fun Fact(label: String, value: String, detail: String? = null, modifier: Modifier = Modifier, severity: String? = null) {
+@Composable private fun Fact(label: String, value: String, detail: String? = null, modifier: Modifier = Modifier, severity: String? = null, icon:ImageVector?=null,iconLabel:String?=null) {
     val color = when (severity) { "warm" -> if (isSystemInDarkTheme()) Color(0xFFF5CB5B) else Color(0xFF8A6100); "hot" -> if (isSystemInDarkTheme()) Color(0xFFFF9D90) else Color(0xFFB3332B); else -> MaterialTheme.colorScheme.onSurface }
-    Column(modifier) { Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(5.dp)); Text(value, style = MaterialTheme.typography.bodyMedium, color = color); detail?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = color) } }
+    Column(modifier) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(5.dp))
+        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)){
+            Text(value, style = MaterialTheme.typography.bodyMedium,fontWeight=FontWeight.Normal,color=color)
+            icon?.let{Icon(it,iconLabel,Modifier.size(16.dp),tint=color)}
+        }
+        detail?.let { Text(it, style = MaterialTheme.typography.bodySmall,fontWeight=FontWeight.Normal,color=color) }
+    }
 }
 @Composable private fun StatusScreen(state: UiState, now: Instant, reachable: Boolean, confirm: (String) -> Unit) {
     val snapshot = state.snapshot; val mac = snapshot.section("mac"); val k = snapshot.section("keepresso"); val triggers = snapshot.section("triggers"); val caps = snapshot.section("capabilities"); val reminders = snapshot.section("reminders")
@@ -165,8 +182,10 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
     }
     HorizontalDivider()
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Fact("Battery", mac.number("batteryPercent")?.let { "${it.toInt()}%" } ?: "Unknown", when(mac.text("powerSource")) { "battery" -> "On battery"; "ac" -> "Connected to power"; else -> "Power source unknown" }, Modifier.weight(1f))
-        Fact("Temperature", mac.number("temperatureC")?.let { "${"%.1f".format(it)} °C" } ?: "Unavailable", "${readable(mac.text("thermal"))} · ${mac.text("temperatureSensor") ?: "Sensor unavailable"}", Modifier.weight(1f), mac.text("thermal"))
+        val battery=mac.number("batteryPercent")
+        val charging=mac.flag("isCharging")==true
+        Fact("Battery",battery?.let{"${it.roundToInt()}%"} ?: "—",modifier=Modifier.weight(1f),severity=when{battery==null->null;battery<=10->"hot";battery<=20->"warm";else->null},icon=if(charging)Icons.Default.Bolt else if(mac.text("powerSource")=="ac")Icons.Default.Power else null,iconLabel=if(charging)"Charging" else "External power")
+        Fact("Temperature", mac.number("temperatureC")?.let { "${it.roundToInt()} °C" } ?: "—",modifier=Modifier.weight(1f),severity=mac.text("thermal"))
     }
     HorizontalDivider()
     val active = k.flag("isActive"); val manual = k.text("sessionKind") == "manual" && active == true
@@ -184,22 +203,24 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
             Text(when { batteryPaused -> "Paused for low battery."; manual -> "Manual session. Triggers are paused."; active == true -> when (k.text("sessionKind")) { "automatic" -> "Automatic trigger session."; "lease" -> "Companion session."; "manual" -> "Manual session."; else -> "Session kind unknown." }; active == false -> if (k.flag("triggersPaused") == true) "No manual session. Triggers are paused." else "No active brewing session."; else -> "Session status unavailable." }, style = MaterialTheme.typography.bodySmall)
         }
     }
-    Text("Active triggers", style = MaterialTheme.typography.titleSmall)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         val checked = parsed(triggers.text("checkedAt")); val status = triggers.text("state")
-        Text(when { status == "checking" -> "Checking…"; checked == null -> "Not checked yet"; else -> "Triggers checked at ${time(checked)}${if (status in setOf("stale", "error") || !reachable) " · Stale" else if (status == "unknown") " · Some inputs unknown" else ""}" }, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = { Companion.service?.send("refresh_triggers") }, enabled = can("refreshTriggers")) { Text("Refresh") }
+        Text("Active triggers",style=MaterialTheme.typography.titleSmall,modifier=Modifier.weight(1f))
+        Text(when{status=="checking"->"Checking…";checked==null->"Not checked";else->"Checked ${time(checked)}"},style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.semantics{contentDescription=if(checked==null)"Triggers not checked" else "Triggers checked at ${time(checked)}${if(status in setOf("stale","error") || !reachable) ", stale" else ""}"})
+        TextButton(onClick = { Companion.service?.send("refresh_triggers") }, enabled = can("refreshTriggers")) { Text("Check") }
     }
     val rules = triggers?.get("rules")?.jsonArray?.map { it.jsonObject }.orEmpty()
     rules.forEach { rule ->
-        Column(Modifier.padding(vertical = 3.dp)) {
-            Text(rule.text("label") ?: "Unnamed condition", style = MaterialTheme.typography.bodyMedium)
-            val grace = rule.flag("inGrace") == true
-            Text(when { rule.flag("satisfied") == null -> "Unknown · input unavailable"; grace -> "Grace only · not a promise of continued wakefulness"; rule.flag("satisfied") == true -> if (manual || k.flag("triggersPaused") == true) "Matches while trigger control is paused" else "Current match"; else -> "No current match" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            rule["details"]?.jsonArray?.forEach { detail -> val d = detail.jsonObject; Text("${d.text("label") ?: "Detail"} · ${when(d.flag("active")) { true -> "Active"; false -> "Inactive"; null -> "Unknown" }}${d.text("agent")?.let { " · $it" } ?: ""}", style = MaterialTheme.typography.labelSmall) }
+        val label=rule.text("label") ?: "Trigger"
+        val known=rule.flag("satisfied")
+        Row(Modifier.fillMaxWidth().padding(vertical=3.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){
+            val fresh=reachable && triggers.text("state") !in setOf("stale","error","not_checked","checking")
+            val verdict=if(!fresh)"Not confirmed" else when(known){true->if(rule.flag("inGrace")==true)"Active in grace period" else "Active";false->"Inactive";null->"Not confirmed"}
+            Icon(if(!fresh || known==null)Icons.Default.HelpOutline else if(known)Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,"$label: $verdict",Modifier.size(20.dp),tint=if(fresh && known==true)Color(0xFF169B62) else MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(label,style=MaterialTheme.typography.bodyMedium,modifier=Modifier.weight(1f))
         }
     }
-    if (rules.isEmpty()) Text(triggers.text("message") ?: "Current matches unknown", style = MaterialTheme.typography.bodySmall)
+    if(triggers.text("state")=="error")Text("Couldn't check triggers",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
     val paused = k.flag("triggersPaused")
     val triggerCapability = if (paused == true) "resumeTriggers" else "pauseTriggers"
     FilledTonalButton(modifier = Modifier.fillMaxWidth(), onClick = { if (paused == true) confirm("resume_triggers") else Companion.service?.send("pause_triggers") }, enabled = paused != null && can(triggerCapability)) { Text(if (paused == true) "Resume triggers" else "Pause triggers") }
@@ -209,41 +230,59 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
     else {
         var minutes by remember { mutableIntStateOf(120) }
         Text("Manual session", style = MaterialTheme.typography.titleSmall)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedButton(onClick = { minutes -= 15 }, enabled = minutes > 15) { Text("−") }
-            Text(duration(minutes.toLong()), style = MaterialTheme.typography.bodyMedium)
-            OutlinedButton(onClick = { minutes += 15 }, enabled = minutes < 10080) { Text("+") }
-            Button(onClick = { Companion.service?.send("start_manual", minutes) }, enabled = can("startManual") && !batteryPaused, modifier = Modifier.weight(1f)) { Text("Start") }
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+            Row(verticalAlignment=Alignment.CenterVertically){
+                IconButton(onClick={minutes-=15},enabled=minutes>15,modifier=Modifier.size(40.dp)){Icon(Icons.Default.Remove,"Decrease duration",Modifier.size(18.dp))}
+                Text(duration(minutes.toLong()),style=MaterialTheme.typography.bodyMedium,fontFamily=FontFamily.Monospace,modifier=Modifier.width(70.dp),textAlign=androidx.compose.ui.text.style.TextAlign.Center,maxLines=1)
+                IconButton(onClick={minutes+=15},enabled=minutes<10080,modifier=Modifier.size(40.dp)){Icon(Icons.Default.Add,"Increase duration",Modifier.size(18.dp))}
+            }
+            Spacer(Modifier.weight(1f).widthIn(min=16.dp))
+            Button(onClick = { Companion.service?.send("start_manual", minutes) }, enabled = can("startManual") && !batteryPaused, modifier = Modifier.width(88.dp)) { Text("Start") }
         }
     }
     if (reachable && caps.flag(if (manual) "stopManual" else "startManual") != true) Text("Manual control unavailable on this Mac. Check Keepresso and the helper's supported actions.", style = MaterialTheme.typography.labelSmall)
     TextButton(onClick = { confirm("sleep_now") }, enabled = can("sleepNow"), modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Bedtime, null); Spacer(Modifier.width(8.dp)); Text("Sleep now") }
-    if (reachable && caps.flag("sleepNow") != true) Text("Sleep unavailable: the Mac helper could not establish a safe sleep path.", style = MaterialTheme.typography.labelSmall)
     Text(when { state.localSnoozedUntil?.isAfter(now) == true -> "Reminders snoozed on this phone until ${time(state.localSnoozedUntil)}"; reminders.text("snoozedUntil") != null -> "Reminders snoozed until ${time(parsed(reminders.text("snoozedUntil")))}"; reminders.flag("enabled") == false -> "Routine reminders off"; reminders.flag("enabled") == true -> if (reminders.number("intervalSeconds") == 7200.0) "Reminders every 2 hours" else "Hourly reminders on"; else -> "Reminder status unknown" }, style = MaterialTheme.typography.labelSmall)
 }
 @Composable private fun SettingsScreen(state: UiState, reachable: Boolean, onEnable: () -> Unit, onConnect: () -> Unit, onReset: () -> Unit) {
+    val context=LocalContext.current
     val r = state.snapshot.section("reminders")
-    Text("Settings", style = MaterialTheme.typography.headlineMedium)
-    Text(state.pairedName ?: "No Mac authorized", style = MaterialTheme.typography.titleMedium)
-    Text("Nearby connection · Bluetooth. Reconnects automatically while nearby access is enabled.", style = MaterialTheme.typography.bodySmall)
-    Row { TextButton(onClick = onEnable) { Text("Permissions") }; TextButton(onClick = onConnect) { Text("Reconnect") } }
-    Text("Internet access", style = MaterialTheme.typography.titleSmall)
-    Text(if (state.internetConfigured) "Encrypted fallback is configured. Status refreshes while this app is open; controls require a fresh Mac response." else "Connect nearby after enabling internet access on your Mac. Your existing authorization is retained.", style = MaterialTheme.typography.bodySmall)
-    if (!PushRegistration.configured()) Text("Background internet reminders are unavailable in this build: Firebase setup is missing. Foreground internet status can still work.", style = MaterialTheme.typography.bodySmall)
-    HorizontalDivider()
     val currentEnabled = r.flag("enabled"); val currentInterval = r.number("intervalSeconds")?.toInt(); val currentDelay = r.number("endedAwakeDelaySeconds")?.toInt()
     val completeSettings = currentEnabled != null && currentInterval != null && currentDelay != null
     fun save(enabled: Boolean? = currentEnabled, interval: Int? = currentInterval, delay: Int? = currentDelay) { if (enabled != null && interval != null && delay != null) Companion.service?.send("set_reminder_settings", settings = ReminderSettings(enabled, interval, delay)) }
-    Text("Still-running reminder", style = MaterialTheme.typography.titleSmall)
-    Row { listOf("Every hour" to 3600, "Every 2 hours" to 7200).forEach { (label, value) -> FilterChip(selected = currentEnabled == true && currentInterval == value, onClick = { save(enabled = true, interval = value) }, enabled = reachable && !state.busy && completeSettings, label = { Text(label) }) } }
-    FilterChip(selected = currentEnabled == false, onClick = { save(enabled = false) }, enabled = reachable && !state.busy && completeSettings, label = { Text("Off") })
-    Text("Still awake after stopping", style = MaterialTheme.typography.titleSmall)
-    Row { listOf(120, 300, 600).forEach { value -> FilterChip(selected = currentDelay == value, onClick = { save(delay = value) }, enabled = reachable && !state.busy && completeSettings, label = { Text("${value / 60} min") }) } }
-    Text("Routine reminders", style = MaterialTheme.typography.titleSmall)
-    state.localSnoozedUntil?.takeIf { it.isAfter(Instant.now()) }?.let { Text("Snoozed on this phone until ${time(it)}", style = MaterialTheme.typography.bodySmall) }
-    Row { TextButton(onClick = { Companion.service?.send("snooze_reminders") }, enabled = reachable && !state.busy) { Text("Snooze 6 hours") }; TextButton(onClick = { Companion.service?.send("resume_reminders") }, enabled = reachable && !state.busy) { Text("Resume") } }
-    Text("Thermal warnings are not snoozed. Battery-pause and sleep-failure detection are not available in this development build.", style = MaterialTheme.typography.bodySmall)
-    HorizontalDivider(); TextButton(onClick = onReset, enabled = state.pairedName != null) { Text("Remove phone authorization") }
+    Text("Settings",style=MaterialTheme.typography.headlineMedium)
+    SettingsGroup("Connection"){
+        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){
+            Icon(Icons.Default.LaptopMac,null,tint=MaterialTheme.colorScheme.primary)
+            Column{Text(state.pairedName ?: "No Mac authorized",style=MaterialTheme.typography.titleMedium);Text(if(reachable)state.transport else "Unreachable",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+        }
+        Text(if(state.internetConfigured)"Internet fallback enabled" else "Internet is set up on your Mac.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){TextButton(onClick=onEnable){Text("Permissions")};TextButton(onClick=onConnect){Text("Reconnect")}}
+    }
+    SettingsGroup("Reminders"){
+        Text("While brewing",style=MaterialTheme.typography.bodyMedium)
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
+            listOf("Off" to 0,"1 hour" to 3600,"2 hours" to 7200).forEach{(label,value)->
+                FilterChip(selected=if(value==0)currentEnabled==false else currentEnabled==true && currentInterval==value,onClick={if(value==0)save(enabled=false) else save(enabled=true,interval=value)},enabled=reachable && !state.busy && completeSettings,label={Text(label)},modifier=Modifier.weight(1f).semantics{contentDescription=when(value){0->"Reminders off";3600->"Every hour";else->"Every 2 hours"}})
+            }
+        }
+        Text("Still awake after session ends",style=MaterialTheme.typography.bodyMedium)
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){listOf(120,300,600).forEach{value->FilterChip(selected=currentDelay==value,onClick={save(delay=value)},enabled=reachable && !state.busy && completeSettings,label={Text("${value/60} min")},modifier=Modifier.weight(1f))}}
+        val snoozed=state.localSnoozedUntil?.takeIf{it.isAfter(Instant.now())} ?: parsed(r.text("snoozedUntil"))?.takeIf{it.isAfter(Instant.now())}
+        snoozed?.let{Text("Snoozed until ${time(it)}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){TextButton(onClick={Companion.service?.send("snooze_reminders")},enabled=reachable && !state.busy){Text("Snooze 6 hours")};if(snoozed!=null)TextButton(onClick={Companion.service?.send("resume_reminders")},enabled=reachable && !state.busy){Text("Resume")}}
+    }
+    SettingsGroup("Warning alerts"){
+        Text("Lid closed, heat and sleep problems. These stay on when routine reminders are snoozed.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        TextButton(onClick={context.startActivity(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,context.packageName).putExtra(Settings.EXTRA_CHANNEL_ID,"warnings"))}){Icon(Icons.Default.NotificationsActive,null,Modifier.size(18.dp));Spacer(Modifier.width(8.dp));Text("Android alert settings")}
+        TextButton(onClick={context.startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))}){Text("Allow during Do Not Disturb")}
+    }
+    TextButton(onClick=onReset,enabled=state.pairedName!=null,colors=ButtonDefaults.textButtonColors(contentColor=MaterialTheme.colorScheme.error)){Text("Remove phone authorization")}
+}
+@Composable private fun SettingsGroup(title:String,content:@Composable ColumnScope.()->Unit){
+    Card(Modifier.fillMaxWidth(),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)){
+        Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){Text(title,style=MaterialTheme.typography.titleSmall,color=MaterialTheme.colorScheme.primary);content()}
+    }
 }
 
 /** Notification actions use an unexported activity, so external apps cannot forge them.

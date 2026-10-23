@@ -58,12 +58,12 @@ class PairingFlowTest {
         ui.onNodeWithText("Stop manual session").performScrollTo().performClick()
         ui.waitUntil(10000){Companion.state.value.snapshot.toString().contains("\"isActive\":false")}
         ui.onNodeWithText("Settings").performClick()
-        ui.onNodeWithText("Every 2 hours").performScrollTo().performClick()
+        ui.onNodeWithContentDescription("Every 2 hours").performScrollTo().performClick()
         ui.waitUntil(10000){Companion.state.value.snapshot.toString().contains("\"intervalSeconds\":7200")}
         ui.onNodeWithText("Snooze 6 hours").performScrollTo().performClick()
         ui.waitUntil(10000){Companion.state.value.snapshot?.get("reminders")?.jsonObject?.get("snoozedUntil")?.let{it!=JsonNull}==true}
         ui.onNodeWithText("Status").performClick()
-        ui.onNodeWithText("Refresh").performScrollTo().performClick()
+        ui.onNodeWithText("Check").performScrollTo().performClick()
         ui.waitUntil(10000){Companion.state.value.snapshot.toString().contains("\"state\":\"ready\"")}
         ui.waitUntil(10000){!Companion.state.value.authenticated}
         ui.onNodeWithText("Unreachable").performScrollTo().assertIsDisplayed()
@@ -71,7 +71,7 @@ class PairingFlowTest {
         ui.waitUntil(35000){Companion.state.value.reachable(Instant.now())}
         ui.onNodeWithText("Awake").performScrollTo().assertIsDisplayed()
         Assert.assertEquals("Emulated Mac",Companion.state.value.pairedName)
-        ui.onNodeWithText("Keepresso").performScrollTo()
+        ui.onNodeWithText("Keepresso Mobile").performScrollTo()
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         java.io.File(context.cacheDir,"pairing-flow.png").outputStream().use{ui.onRoot().captureToImage().asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)}
     }
