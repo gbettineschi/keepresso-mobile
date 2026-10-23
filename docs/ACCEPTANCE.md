@@ -49,3 +49,15 @@ Only perform these when prepared for the Mac to become unreachable. Save work fi
 ## Outside this build
 
 Internet delivery/relay, remote wake, official app trigger-state restoration, Play Store release, notarized Mac distribution and an independent security audit are not completed by these tests.
+# Internet transport acceptance
+
+These are additional to the nearby checks below. Keep all real power changes owner-initiated; no development test may start Keepresso or put the Mac to sleep.
+
+- Deploy to the owner's own free Vercel/Firebase project; verify401 for unauthorized callers, deny-all direct Firestore access, no public source/secret files, and a synthetic encrypted status/command/response round trip. Record first-request and warm HTTP latency separately from Mac polling delay and provider CPU/memory usage.
+- Configure the Mac once and reconnect an already paired phone nearby. Verify encrypted relay configuration and FCM registration complete while BLE stays connected. No re-pair or second owner approval should occur in an in-place app update with the same Android signing identity.
+- Move out of Bluetooth range with the phone locked. Generate a deliberate harmless reminder and verify it actually appears once. FCM submission/acceptance alone is insufficient. Repeat after Mac wake, phone reboot, Doze and token rotation.
+- Open the dashboard remotely: cached/stale status cannot enable controls. A fresh status round trip must succeed first. Disconnect/reconnect before submission, during submission and after a deliberately delayed acknowledgement; uncertain controls must never resend through another route or after app restart. Reconciliation must reference the saved ID/body digest.
+- Deliver the same reminder over BLE and FCM around handoff; it appears once. Expired warnings and incidents resolved by a newer authenticated snapshot must not reappear.
+- Revoke the phone on the Mac and verify both incoming controls and outgoing status stop, including during an in-flight request. Test local persistence/remote cleanup failures using fakes before performing the owner-run real-device check.
+- Confirm monitoring alone allows the Mac's ordinary sleep behavior. Unreachable does not claim a distinction between asleep, offline, powered off or disconnected. No wake feature is present.
+

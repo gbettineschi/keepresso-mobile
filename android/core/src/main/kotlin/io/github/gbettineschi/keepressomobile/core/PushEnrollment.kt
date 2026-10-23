@@ -2,6 +2,7 @@ package io.github.gbettineschi.keepressomobile.core
 
 data class PushRelayConfig(val url: String, val macId: String, val deviceId: String, val bearer: String, val authTicket: String) {
     init { RelayEndpoint(url); canonicalId(macId); canonicalId(deviceId); decode64(bearer, 32); decode64(authTicket, 32) }
+    val identity: String = bodyDigest("${RelayEndpoint(url).url}\n$macId\n$deviceId\n$bearer\n$authTicket")
     fun http(): RelayHttp = RelayHttp(RelayEndpoint(url), macId, deviceId, bearer, authTicket)
     fun registrationMarker(token: String): String = bodyDigest("${RelayEndpoint(url).url}\n$macId\n$deviceId\n$bearer\n$authTicket\n$token")
 }
@@ -31,8 +32,9 @@ class PushEnrollment(
         registerStoredToken()
     }
     fun tokenChanged(token: String) { tokenTransaction { validateToken(token); saveToken(token) }; registerStoredToken() }
-    fun registerStoredToken() {
+    fun registerStoredToken(expectedIdentity: String? = null) {
         val target = configuration() ?: return
+        if (expectedIdentity != null && target.identity != expectedIdentity) return
         val token = loadToken() ?: return
         validateToken(token)
         val marker = target.registrationMarker(token)
@@ -41,4 +43,13 @@ class PushEnrollment(
         saveMarker(marker)
     }
     private fun validateToken(token: String) { require(token.toByteArray(Charsets.UTF_8).size in 1..4096 && token.none { it.isISOControl() || it.isWhitespace() }) }
+}
+
+/** Registration is idempotent notification routing; this policy is never used for commands. */
+object PushRetry {
+    fun retry(error: Throwable, attempt: Int): Boolean = attempt in 0..3 && when (error) {
+        is RelayHttpException -> error.statusCode in 500..599
+        is java.io.IOException -> true
+        else -> false
+    }
 }

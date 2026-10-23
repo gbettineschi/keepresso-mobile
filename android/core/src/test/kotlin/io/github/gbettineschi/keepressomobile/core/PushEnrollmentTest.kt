@@ -47,6 +47,11 @@ class PushEnrollmentTest {
         assertEquals("new-token", stored)
         assertEquals(listOf("new-token"), uploads)
     }
+    @Test fun queuedRegistrationStopsIfOwnerReplacedItsConfiguration() {
+        val replacement = config.copy(authTicket = encode64(ByteArray(32) { 2 }))
+        val registration = PushEnrollment({ replacement }, { "token" }, {}, { null }, {}, { _, _ -> fail("queued authorization was replaced") })
+        registration.registerStoredToken(config.identity)
+    }
     @Test fun changedAuthenticationTicketRegistersExistingTokenAgain() {
         var current = config; var marker: String? = null; var calls = 0
         val registration = PushEnrollment({ current }, { "token" }, {}, { marker }, { marker = it }, { _, _ -> calls++ })

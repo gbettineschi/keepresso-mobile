@@ -68,6 +68,8 @@ class RelayCodec(private val macId: String, private val deviceId: String, privat
     }
 }
 
+class RelayHttpException(val statusCode: Int) : java.io.IOException("Relay request unavailable ($statusCode)")
+
 /** No redirect or automatic upload retry, including after a timeout. */
 class RelayHttp internal constructor(private val endpoint: RelayEndpoint, private val macId: String, private val deviceId: String, private val bearer: String, private val authTicket: String, client: OkHttpClient) {
     constructor(endpoint: RelayEndpoint, macId: String, deviceId: String, bearer: String, authTicket: String) : this(endpoint, macId, deviceId, bearer, authTicket, defaultClient)
@@ -87,7 +89,7 @@ class RelayHttp internal constructor(private val endpoint: RelayEndpoint, privat
         }
         val request = Request.Builder().url(endpoint.url.toString()).header("Authorization", "Bearer $bearer.$authTicket").header("Cache-Control", "no-store").post(body).build()
         client.newCall(request).execute().use { response ->
-            require(response.code in 200..299) { "Relay request unavailable (${response.code})" }
+            if (response.code !in 200..299) throw RelayHttpException(response.code)
             val received = requireNotNull(response.body).byteStream().use { input ->
                 val out = java.io.ByteArrayOutputStream(); val buffer = ByteArray(8192)
                 while (true) { val n = input.read(buffer); if (n == -1) break; require(out.size() + n <= 262144); out.write(buffer, 0, n) }; out.toByteArray()

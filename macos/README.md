@@ -35,6 +35,14 @@ The worker strictly decodes every saved rule before using KeepressoCore, prevent
 
 HAL, file-stat and asynchronous upstream monitors can collapse failures into false. For the supported agent/microphone/download rules, matching positive evidence is retained and unaudited negative results are unknown; other rule types remain unknown. A completed valid partial assessment gets a new checkedAt with state unknown; timeout/settings/parse failure preserves the previous timestamp. Preview grace is independent of the running native engine and never promises safe handover. Physical microphone/download/agent transitions and signed-helper permissions remain acceptance work.
 
+## Optional internet
+
+The menu's Internet section accepts an HTTPS base URL and independent32-byte Base64 Mac bearer; both are validated and stored in Keychain. Owner-hosted server setup is in [SELF_HOSTING.md](../docs/SELF_HOSTING.md). Existing paired phones are enrolled and receive encrypted URL/access-ticket configuration on their next nearby session. No second authorization is needed.
+
+While naturally awake the helper polls every5s and publishes ordinary native status every10s to phones without an authenticated nearby connection. An explicit command response flushes on the next app timer tick. Monitoring does not acquire a wake assertion. Wake, restart and15s contact gaps replace the relay epoch; commands returned after a slow awaited request are rechecked before execution. Both routes share the same durable mutation executor; `operation_status` looks up an original device/body-bound outcome without replay. Local revocation tombstones gate every route before fallible cleanup. Reminder outbox entries retain one encrypted identity across retries and expire; push retry failures do not block command polling.
+
+Shared Node fixtures verify envelope keys, AAD and access tickets; fake HTTP tests exercise delay/reconnect, route preference, duplicate rejection and durable outbox recovery. A real deployment/phone test is still required. The custom protocol has standard cryptographic primitives but no independent audit or forward secrecy; compromised device keys and compromised endpoints remain outside its protection.
+
 ## Evidence and pending acceptance
 
 `evidence/red-*.log` records actual expected test failures before implementations/fixes. `evidence/green-platform.log` contains the final full suite; `evidence/build-app.log` records the packaged build/self-check. Tests use fake native mutation adapters and temporary fixtures, never real Keepresso controls. Bluetooth hardware, QR pairing on Android, revocation, background notification delivery, closed-lid behavior, native controls, and permission behavior require owner-run acceptance. The local package is ad-hoc signed, not notarized.

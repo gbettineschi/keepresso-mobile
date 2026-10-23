@@ -1,6 +1,6 @@
 .env*
-!.env.example
 test/
+scripts/
 node_modules/
 *-adminsdk-*.json
 remote-config*.json

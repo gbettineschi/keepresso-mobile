@@ -34,13 +34,12 @@ object PushRegistration {
         require(token.toByteArray(Charsets.UTF_8).size in 1..4096 && token.none { it.isISOControl() || it.isWhitespace() })
         require(preferences(c).edit().putString("token", token).commit())
     }
+    private fun configuration(c: Context): PushRelayConfig? = CredentialStore(c).load()?.let { credential ->
+        val url = credential.relayUrl; val ticket = credential.relayAuthTicket
+        if (url == null || ticket == null) null else PushRelayConfig(url, credential.macId, credential.deviceId, RelayCodec(credential.macId, credential.deviceId, credential.key).bearer(), ticket)
+    }
     private fun enrollment(c: Context): PushEnrollment = PushEnrollment(
-        configuration = {
-            CredentialStore(c).load()?.let { credential ->
-                val url = credential.relayUrl; val ticket = credential.relayAuthTicket
-                if (url == null || ticket == null) null else PushRelayConfig(url, credential.macId, credential.deviceId, RelayCodec(credential.macId, credential.deviceId, credential.key).bearer(), ticket)
-            }
-        },
+        configuration = { configuration(c) },
         loadToken = { preferences(c).getString("token", null) },
         saveToken = { save(c, it) },
         loadMarker = { preferences(c).getString("registered", null) },
@@ -48,13 +47,30 @@ object PushRegistration {
         upload = { target, token -> require(target.http().call("push", token = token).boolOrNull("registered") == true) },
         tokenTransaction = { block -> synchronized(tokenLock) { block() } },
     )
+    private fun enqueue(c: Context) {
+        val target = configuration(c)
+        if (target == null) { WorkManager.getInstance(c).cancelUniqueWork("relay-push-registration"); return }
+        val work = OneTimeWorkRequestBuilder<PushRegistrationWorker>()
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setInputData(workDataOf("configurationId" to target.identity))
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+        WorkManager.getInstance(c).enqueueUniqueWork("relay-push-registration", ExistingWorkPolicy.REPLACE, work)
+    }
     fun configurationChanged(c: Context) {
         val context = c.applicationContext
+        // Commit durable work as well as trying immediately while the nearby session is alive.
+        runCatching { enqueue(context) }
         network.execute {
             runCatching {
                 synchronized(registrationLock) {
                     enrollment(context).configurationReceived { received ->
-                        if (configured()) FirebaseMessaging.getInstance().token.addOnSuccessListener { token -> network.execute { runCatching { synchronized(registrationLock) { received(token) } } } }
+                        if (configured()) FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
+                            network.execute {
+                                runCatching { synchronized(registrationLock) { received(token) } }
+                                runCatching { enqueue(context) }
+                            }
+                        }
                     }
                 }
             }
@@ -63,18 +79,16 @@ object PushRegistration {
     fun tokenChanged(c: Context, token: String) {
         val context = c.applicationContext
         // Persist before returning from FCM; WorkManager survives process exit and has no BLE dependency.
-        runCatching {
-            save(context, token)
-            val work = OneTimeWorkRequestBuilder<PushRegistrationWorker>()
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-                .build()
-            WorkManager.getInstance(context).enqueueUniqueWork("relay-push-registration", ExistingWorkPolicy.REPLACE, work)
-        }
+        runCatching { save(context, token); enqueue(context) }
     }
-    internal fun registerStored(c: Context) = synchronized(registrationLock) { enrollment(c).registerStoredToken() }
+    internal fun registerStored(c: Context, expectedIdentity: String) = synchronized(registrationLock) { enrollment(c).registerStoredToken(expectedIdentity) }
 }
 class PushRegistrationWorker(context: Context, parameters: WorkerParameters) : Worker(context, parameters) {
-    override fun doWork(): Result = runCatching { PushRegistration.registerStored(applicationContext); Result.success() }.getOrElse { Result.failure() }
+    override fun doWork(): Result {
+        val identity = inputData.getString("configurationId") ?: return Result.success()
+        return runCatching { PushRegistration.registerStored(applicationContext, identity); Result.success() }
+            .getOrElse { if (PushRetry.retry(it, runAttemptCount)) Result.retry() else Result.failure() }
+    }
 }
 
 class RelayMessagingService : FirebaseMessagingService() {
