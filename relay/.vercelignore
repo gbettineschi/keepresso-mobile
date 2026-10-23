@@ -1,0 +1,6 @@
+.env*
+!.env.example
+test/
+node_modules/
+*-adminsdk-*.json
+remote-config*.json

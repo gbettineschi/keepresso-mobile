@@ -14,8 +14,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.*
 
 data class ActivityEntry(val time: Instant, val text: String)
-data class UiState(val connection: String = "Not connected", val authenticated: Boolean = false, val snapshot: JsonObject? = null, val receivedAt: Instant? = null, val lastContact: Instant? = null, val pairedName: String? = null, val macId: String? = null, val localSnoozedUntil: Instant? = null, val result: String? = null, val busy: Boolean = false, val serverOffsetSeconds: Long = 0, val activity: List<ActivityEntry> = emptyList()) {
-    fun reachable(now: Instant): Boolean = authenticated && receivedAt?.let { java.time.Duration.between(it, now).seconds in 0..15 } == true
+data class UiState(val connection: String = "Not connected", val transport: String = "Nearby Bluetooth", val internetConfigured: Boolean = false, val authenticated: Boolean = false, val snapshot: JsonObject? = null, val receivedAt: Instant? = null, val lastContact: Instant? = null, val pairedName: String? = null, val macId: String? = null, val localSnoozedUntil: Instant? = null, val result: String? = null, val busy: Boolean = false, val serverOffsetSeconds: Long = 0, val activity: List<ActivityEntry> = emptyList()) {
+    fun reachable(now: Instant): Boolean = authenticated && receivedAt?.let { java.time.Duration.between(it, now).toMillis() in 0..15000 } == true
 }
 object Companion {
     internal val mutable = MutableStateFlow(UiState())
@@ -27,50 +27,89 @@ object Companion {
 class NearbyService : Service() {
     private lateinit var store: CredentialStore
     private lateinit var ble: BleCentral
+    private lateinit var journal: MutationJournal
     private val main = Handler(Looper.getMainLooper())
+    private val network = java.util.concurrent.Executors.newSingleThreadExecutor()
     private var credential: Credential? = null
     private var invitation: Invitation? = null
     private var session: ClientSession? = null
-    private var delivery = Delivery()
-    private var pendingMutation: String? = null
-    private var pendingRequestId: String? = null
-    private var pendingAction: String? = null
+    private val relayFresh = RelayFreshness()
     private var enabled = true
+    private var nearbyEnabled = true
+    private var foregroundActivity = false
+    private var nearbyForeground = false
+    private var commandStorageAvailable = true
     private var reconnectGeneration = 0
-    private val seenEvents = linkedSetOf<String>()
     private var serverOffset = java.time.Duration.ZERO
     private var protocolFailures = 0
+    private var remoteBusy = false
+    private var nextRemotePoll = 0L
+    private var nextNearbyPoll = 0L
+    private var pushRegistered: String? = null
+    private val reconciledThisConnection = mutableSetOf<String>()
+    private data class Pending(val id: String, val action: String, val mutation: Boolean, val route: String, val epoch: String?, val sent: Instant, val operationId: String? = null, val fastPoll: Boolean = false)
+    private var pending: Pending? = null
+    private fun bluetoothAllowed(): Boolean = (if (Build.VERSION.SDK_INT >= 31) listOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT) else listOf(Manifest.permission.ACCESS_FINE_LOCATION)).all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
     private val poll = object : Runnable { override fun run() {
         if (!enabled) return
-        if (session?.ready == true) send("status", quiet = true)
-        main.postDelayed(this, 10000)
+        val now = Instant.now()
+        pending?.takeIf { now > it.sent.plusSeconds(30) }?.let { deliveryLost() }
+        if (session?.ready == true && now.epochSecond >= nextNearbyPoll) { nextNearbyPoll = now.epochSecond + 10; send("status", quiet = true) }
+        if (foregroundActivity && (credential?.relayUrl != null && credential?.relayAuthTicket != null) && (session?.ready != true || pending?.route == "relay")) {
+            if (now.epochSecond >= nextRemotePoll) {
+                nextRemotePoll = now.epochSecond + if (pending?.route == "relay" && pending?.fastPoll == true) 1 else 5
+                pollRelay()
+            }
+            if (session?.ready != true && !relayFresh.reachable(now.plus(serverOffset))) Companion.update { it.copy(authenticated = false, connection = "Internet status is stale or unavailable") }
+        }
+        main.postDelayed(this, 1000)
     } }
     override fun onBind(intent: Intent?) = null
     override fun onCreate() {
         super.onCreate(); Companion.service = this; store = CredentialStore(this)
         credential = runCatching { store.load() }.getOrElse { Companion.update { s -> s.copy(result = "Stored authorization could not be unlocked. Pair again.") }; null }
-        Companion.update { it.copy(pairedName = credential?.name, macId = credential?.macId, localSnoozedUntil = credential?.macId?.let { id -> PhoneReminders.until(this, id) }) }
+        journal = runCatching { MutationJournal({ store.readPrivate("mutationJournal") }, { store.writePrivate("mutationJournal", it) }) }.getOrElse {
+            commandStorageAvailable = false
+            MutationJournal({ null }, { error("Saved command outcomes unavailable") })
+        }
+        Companion.update { it.copy(pairedName = credential?.name, macId = credential?.macId, internetConfigured = (credential?.relayUrl != null && credential?.relayAuthTicket != null), localSnoozedUntil = credential?.macId?.let { id -> PhoneReminders.until(this, id) }, result = if (!commandStorageAvailable) "Saved command outcomes could not be read. Controls are disabled; check your Mac before removing authorization." else if (journal.unresolved().isNotEmpty()) "An earlier command has an uncertain outcome. Its status will be checked without resending it." else it.result) }
         Notifications.channels(this)
-        startForeground(1, Notifications.connection(this, "Nearby connection enabled"))
-        ble = BleCentral(this, { text -> Companion.update { it.copy(connection = text) }; Notifications.updateConnection(this, text) }, ::subscribed, ::receive, ::disconnected)
-        main.postDelayed(poll, 10000)
+        ensureNearbyForeground()
+        ble = BleCentral(this, { text -> if (session?.ready != true && !relayFresh.reachable(Instant.now().plus(serverOffset))) Companion.update { it.copy(connection = text) }; Notifications.updateConnection(this, text) }, ::subscribed, ::receive, ::disconnected)
+        main.post(poll)
+    }
+    private fun ensureNearbyForeground() {
+        if (bluetoothAllowed() && !nearbyForeground) { startForeground(1, Notifications.connection(this, "Nearby connection enabled")); nearbyForeground = true }
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        ensureNearbyForeground()
+        foregroundActivity = intent?.getBooleanExtra("foreground", foregroundActivity) ?: foregroundActivity
         when (intent?.action) {
             "pair" -> {
+                if (!bluetoothAllowed()) { Companion.update { it.copy(result = "Nearby access is needed to authorize a phone") }; return START_NOT_STICKY }
                 runCatching { Invitation.parse(intent.getStringExtra("invitation") ?: "", Instant.now().epochSecond) }.onSuccess {
-                    invitation = null; credential = null; enabled = true; protocolFailures = 0; ble.start(resetCandidates = true); invitation = it
+                    invitation = null; enabled = true; nearbyEnabled = true; protocolFailures = 0; ble.start(resetCandidates = true); invitation = it
                 }.onFailure { Companion.update { s -> s.copy(result = "Invalid or expired pairing invitation") } }
             }
             "reset" -> {
-                enabled = false; credential?.macId?.let { PhoneReminders.filter(this).reset(it) }; invitation = null; credential = null; store.clear(); ble.close("Authorization removed from this phone")
+                enabled = false; credential?.macId?.let { PhoneReminders.filter(this).reset(it) }; invitation = null; credential = null; ReminderDelivery.reset(this); ble.close("Authorization removed from this phone")
                 Companion.update { UiState(connection = "Pair with your Mac", result = "Phone reset. Revoke this phone in the Mac helper to remove its authorization there.") }; stopSelf()
             }
-            "snooze" -> { credential?.macId?.let { PhoneReminders.filter(this).snooze(it, Instant.now()) }; if (session?.ready == true) send("snooze_reminders") else Companion.activity("Routine notifications snoozed locally for 6 hours; Mac unreachable") }
-            "ack" -> if (session?.ready == true) send("ack_reminder")
-            else -> if (credential != null) { enabled = true; protocolFailures = 0; ble.start(resetCandidates = true) } else Companion.update { it.copy(connection = "Pair with your Mac") }
+            "snooze" -> { credential?.macId?.let { PhoneReminders.filter(this).snooze(it, Instant.now()) }; send("snooze_reminders") }
+            "ack" -> send("ack_reminder")
+            "foreground" -> { nextRemotePoll = 0; if (credential != null && nearbyEnabled && bluetoothAllowed() && session == null) ble.start(resetCandidates = true) }
+            else -> if (credential != null) { enabled = true; nearbyEnabled = true; protocolFailures = 0; if (bluetoothAllowed()) ble.start(resetCandidates = true) else Companion.update { it.copy(connection = "Nearby access denied; checking internet") } } else Companion.update { it.copy(connection = "Pair with your Mac") }
         }
         return START_NOT_STICKY
+    }
+    fun foreground(value: Boolean) {
+        foregroundActivity = value
+        if (value) nextRemotePoll = 0
+        else {
+            relayFresh.disconnect()
+            if (session?.ready != true) Companion.update { it.copy(authenticated = false) }
+            if (!bluetoothAllowed()) stopSelf()
+        }
     }
     private fun subscribed() {
         try {
@@ -98,78 +137,156 @@ class NearbyService : Service() {
                         require(r.string("macId") == invite.macId && r.string("deviceId") == id)
                         val key = Crypto.deviceKey(invite.token, invite.macId, id)
                         require(Crypto.verify(key, "paired\n${invite.macId}\n$id", r.string("proof")))
-                        store.load()?.macId?.let { PhoneReminders.filter(this).reset(it) }; PhoneReminders.filter(this).reset(invite.macId)
-                        credential = Credential(invite.macId, id, invite.name, key).also(store::save); invitation = null
-                        Companion.update { it.copy(pairedName = credential?.name, macId = credential?.macId, localSnoozedUntil = credential?.macId?.let { id -> PhoneReminders.until(this, id) }) }; Companion.activity("Phone authorized by Mac owner"); authenticate()
+                        // Old records belong to the old authorization, never the replacement pairing.
+                        credential?.macId?.let { PhoneReminders.filter(this).reset(it) }; PhoneReminders.filter(this).reset(invite.macId)
+                        credential = Credential(invite.macId, id, invite.name, key).also { ReminderDelivery.replace(this, it) }; invitation = null
+                        journal = MutationJournal({ store.readPrivate("mutationJournal") }, { store.writePrivate("mutationJournal", it) }); commandStorageAvailable = true
+                        Companion.update { it.copy(pairedName = credential?.name, macId = credential?.macId, internetConfigured = (credential?.relayUrl != null && credential?.relayAuthTicket != null), localSnoozedUntil = credential?.macId?.let { id -> PhoneReminders.until(this, id) }) }; Companion.activity("Phone authorized by Mac owner"); authenticate()
                     }
                     else -> error("Unexpected pair response")
                 }; return
             }
             val s = session ?: error("No session")
             if (r.string("type") == "challenge") { ble.send(s.challenge(text)); return }
-            val message = obj(s.receive(text, Instant.now()))
-            val now = Instant.now()
+            val now = Instant.now(); val message = obj(s.receive(text, now))
             when (message.string("type")) {
                 "ready" -> {
-                    serverOffset = java.time.Duration.between(now, Instant.parse(message.string("serverTime"))); ble.authenticated()
-                    Companion.update { it.copy(authenticated = true, connection = "Connected nearby", lastContact = now, serverOffsetSeconds = serverOffset.seconds) }; Companion.activity("Nearby encrypted connection authenticated")
+                    serverOffset = java.time.Duration.between(now, Instant.parse(message.string("serverTime"))); ble.authenticated(); reconciledThisConnection.clear()
+                    Companion.update { it.copy(authenticated = true, connection = "Connected nearby", transport = "Nearby Bluetooth", lastContact = now, serverOffsetSeconds = serverOffset.seconds) }; Companion.activity("Nearby encrypted connection authenticated")
                     send("status", quiet = true)
                 }
-                "response" -> {
-                    val response = Response.parse(message.toString(), now.plus(serverOffset))
-                    val id = response.id; val status = response.status; delivery.acknowledge(id, status)
-                    pendingRequestId = null; Companion.update { it.copy(busy = false) }
-                    credential?.macId?.let { PhoneReminders.filter(this).acknowledge(it, pendingAction ?: "", status) }
-                    if (pendingAction == "refresh_triggers" && status != "ok") Companion.update { it.copy(result = response.message ?: "Trigger assessment unavailable; last successful check preserved") }
-                    pendingAction = null
-                    if (pendingMutation == id) { pendingMutation = null; Companion.update { it.copy(busy = false, result = response.message ?: when (status) { "ok" -> "Mac acknowledged the command"; "uncertain" -> "Outcome uncertain. Check your Mac before trying again."; else -> "Mac could not complete the command" }) }; Companion.activity("Command outcome: $status") }
-                    val snapshot = response.snapshot
-                    if (snapshot != null) {
-                        val captured = Instant.parse(snapshot.string("capturedAt")); val serverNow = now.plus(serverOffset)
-                        val age = java.time.Duration.between(captured, serverNow).seconds
-                        require(age >= -10)
-                        val localCaptured = captured.minus(serverOffset)
-                        Companion.update { it.copy(snapshot = snapshot, receivedAt = localCaptured, lastContact = now) }
-                    } else Companion.update { it.copy(lastContact = now) }
+                "relay_config" -> {
+                    val enabled = message.boolOrNull("enabled") ?: error("Missing relay configuration")
+                    val url = if (enabled) message.string("url").also { RelayEndpoint(it) } else null
+                    val ticket = if (enabled) message.string("authTicket").also { decode64(it, 32) } else null
+                    credential = requireNotNull(credential).copy(relayUrl = url, relayAuthTicket = ticket).also(store::save)
+                    Companion.update { it.copy(internetConfigured = url != null) }
+                    relayFresh.disconnect()
+                    pushRegistered = null; nextRemotePoll = 0
+                    Companion.activity(if (enabled) "Internet fallback configured by the authorized Mac" else "Internet fallback disabled by the Mac")
                 }
-                "event" -> event(message.getValue("event").jsonObject)
+                "response" -> response(message, "nearby", null)
+                "event" -> credential?.let { ReminderDelivery.post(this, it, message.getValue("event").jsonObject, now.plus(serverOffset)) }
             }
-        } catch (_: Exception) { protocolFailures++; if (protocolFailures >= 4) enabled = false; ble.close(if (enabled) "Secure protocol validation failed; connection closed" else "Repeated authorization failures. Check your Mac, then reconnect.") }
+        } catch (_: Exception) { protocolFailures++; if (protocolFailures >= 4) nearbyEnabled = false; ble.close(if (nearbyEnabled) "Secure protocol validation failed; connection closed" else "Repeated authorization failures. Check your Mac, then reconnect.") }
+    }
+    private fun http(c: Credential): RelayHttp = RelayHttp(RelayEndpoint(requireNotNull(c.relayUrl)), c.macId, c.deviceId, RelayCodec(c.macId, c.deviceId, c.key).bearer(), requireNotNull(c.relayAuthTicket))
+    private fun pollRelay() {
+        if (remoteBusy || !foregroundActivity) return
+        val c = credential?.takeIf { it.relayUrl != null && it.relayAuthTicket != null } ?: return
+        remoteBusy = true
+        network.execute {
+            val result = runCatching { http(c).call("poll") }
+            main.post {
+                remoteBusy = false
+                if (!enabled || credential !== c || !foregroundActivity) return@post
+                result.onSuccess { poll ->
+                    runCatching {
+                        val now = Instant.now().plus(serverOffset); val codec = RelayCodec(c.macId, c.deviceId, c.key)
+                        poll["state"]?.takeUnless { it == JsonNull }?.let { value ->
+                            val opened = codec.open(value.toString(), now, "s2c", setOf("state"))
+                            val state = obj(opened.plaintext); require(state.string("type") == "relay_state" && state.string("epoch") == opened.epoch)
+                            val rev = state.getValue("revision").jsonPrimitive; require(!rev.isString)
+                            val snapshot = state.getValue("snapshot").jsonObject
+                            if (relayFresh.state(opened.epoch, requireNotNull(rev.longOrNull), opened.createdAt, snapshot, now) && session?.ready != true) updateSnapshot(snapshot)
+                        }
+                        val messages = poll.getValue("messages").jsonArray; require(messages.size <= 32)
+                        messages.forEach { value ->
+                            // Events from a new authenticated epoch can notify without enabling controls.
+                            val opened = codec.open(value.toString(), now, "s2c", setOf("response", "event"))
+                            val r = obj(opened.plaintext)
+                            if (opened.kind == "event") { require(r.string("type") == "event" && r.getValue("event").jsonObject.string("id") == opened.id); ReminderDelivery.post(this, c, r.getValue("event").jsonObject, now) }
+                            else if (opened.epoch == relayFresh.epoch) { require(r.string("id") == opened.id); response(r, "relay", opened.epoch) }
+                        }
+                        if (session?.ready != true) {
+                            val fresh = relayFresh.reachable(now)
+                            Companion.update { it.copy(authenticated = fresh, connection = if (fresh) "Connected over internet" else "Verifying internet connection", transport = "Internet", serverOffsetSeconds = serverOffset.seconds) }
+                            if (pending == null && relayFresh.epoch != null && !fresh) send("status", quiet = true)
+                        }
+                        val token = PushRegistration.token(this)
+                        if (token != null && token != pushRegistered) registerPush(c, token)
+                    }.onFailure { relayFresh.disconnect(); if (session?.ready != true) Companion.update { it.copy(authenticated = false, connection = "Internet response could not be authenticated") } }
+                }.onFailure { relayFresh.disconnect(); if (session?.ready != true) Companion.update { it.copy(authenticated = false, connection = "Internet unavailable; last-known readings") } }
+            }
+        }
+    }
+    private fun registerPush(c: Credential, token: String) {
+        network.execute { val success = runCatching { http(c).call("push", token = token).boolOrNull("registered") == true }.getOrDefault(false); main.post { if (success && credential === c) pushRegistered = token } }
     }
     fun send(action: String, duration: Int? = null, settings: ReminderSettings? = null, quiet: Boolean = false) {
-        val s = session
-        if (s?.ready != true || (action != "status" && !Companion.state.value.reachable(Instant.now()))) { if (!quiet) Companion.update { it.copy(result = "Mac unreachable. No command was queued.") }; return }
-        val mutation = action !in setOf("status", "refresh_triggers")
-        if (delivery.hasPending) { if (!quiet) Companion.update { it.copy(result = "Wait for the current Mac response") }; return }
+        val now = Instant.now(); val serverNow = now.plus(serverOffset)
+        val nearby = session?.ready == true
+        val relay = foregroundActivity && (credential?.relayUrl != null && credential?.relayAuthTicket != null) && relayFresh.reachable(serverNow)
+        val canReadRelay = action == "status" && foregroundActivity && (credential?.relayUrl != null && credential?.relayAuthTicket != null) && relayFresh.epoch != null
+        if ((!nearby && !relay && !canReadRelay) || (action != "status" && !Companion.state.value.reachable(now))) { if (!quiet) Companion.update { it.copy(result = "Mac unreachable. No command was queued.") }; return }
+        if (pending != null) { if (!quiet) Companion.update { it.copy(result = "Wait for the current Mac response") }; return }
+        if (!commandStorageAvailable && action !in setOf("status", "refresh_triggers", "operation_status")) { Companion.update { it.copy(result = "Controls disabled because saved command outcomes are unavailable") }; return }
+        val raw = Requests.create(action, serverNow, duration, settings)
+        transmit(CommandSubmission(raw, nearby, relay || canReadRelay), quiet)
+    }
+    private fun transmit(submission: CommandSubmission, quiet: Boolean, operationId: String? = null) {
+        val raw = submission.body; val route = submission.route
+        val r = obj(raw); val id = r.string("id"); val action = r.string("action"); val mutation = action !in setOf("status", "refresh_triggers", "operation_status")
+        val c = credential ?: return
         try {
-            val record = s.request(action, Instant.now(), duration, settings); val id = requireNotNull(s.lastRequestId)
-            delivery.sent(id, mutation); pendingRequestId = id; pendingAction = action
-            Companion.update { it.copy(busy = true) }
-            if (mutation) { pendingMutation = id; Companion.update { it.copy(busy = true, result = "Waiting for Mac acknowledgement…") } }
-            ble.send(record)
-            val epoch = reconnectGeneration
-            main.postDelayed({ if (epoch == reconnectGeneration) { if (pendingRequestId == id) ble.close(if (pendingMutation == id) "Command outcome uncertain; connection closed" else "Mac response timed out; connection closed") } }, 31000)
-        } catch (_: Exception) { ble.close("Command delivery uncertain; connection closed") }
+            val epoch = if (route == "relay") requireNotNull(relayFresh.epoch) else null
+            val record = if (route == "nearby") requireNotNull(session).sealRequest(raw, Instant.now()) else RelayCodec(c.macId, c.deviceId, c.key).seal(raw, id, requireNotNull(epoch), "c2s", "command", Instant.parse(r.string("issuedAt")), Instant.parse(r.string("expiresAt")))
+            submission.transmit(journal) {
+                pending = Pending(id, action, mutation, route, epoch, Instant.now(), operationId, !quiet || mutation)
+                if (route == "relay" && action == "status") relayFresh.expectStatus(id, Instant.now().plus(serverOffset))
+                Companion.update { it.copy(busy = true, result = if (mutation) "Waiting for Mac acknowledgement…" else if (!quiet) "Checking Mac…" else it.result) }
+                if (route == "nearby") ble.send(record)
+                else network.execute {
+                    val result = runCatching { require(http(c).call("send", envelope = record).boolOrNull("accepted") == true) }
+                    main.post { if (pending?.id == id) { if (pending?.fastPoll == true) nextRemotePoll = 0; if (result.isFailure) deliveryLost() } }
+                }
+            }
+        } catch (_: Exception) { if (pending?.id == id) deliveryLost() else { Companion.update { it.copy(result = "Command was not submitted; secure preparation failed") }; if (route == "nearby") ble.close("Secure command preparation failed") } }
+    }
+    private fun response(message: JsonObject, route: String, epoch: String?) {
+        val p = pending ?: return
+        if (message.string("id") != p.id || p.route != route || (route == "relay" && p.epoch != epoch)) return
+        val now = Instant.now(); val parsed = Response.parse(message.toString(), now.plus(serverOffset))
+        if (p.mutation) journal.reconcile(p.id, parsed.status)
+        p.operationId?.let { original ->
+            if (parsed.status == "ok") { require(message.string("operationId") == original); journal.reconcile(original, message.string("operationStatus")) }
+            reconciledThisConnection.add(original)
+        }
+        if (route == "relay" && p.action == "status" && parsed.status == "ok") parsed.snapshot?.let { relayFresh.status(p.id, requireNotNull(epoch), it, now.plus(serverOffset)) }
+        parsed.snapshot?.let { updateSnapshot(it) }
+        PhoneReminders.filter(this).acknowledge(credential?.macId ?: return, p.action, parsed.status)
+        pending = null
+        Companion.update { it.copy(busy = false, lastContact = now, result = if (p.operationId != null) message.stringOrNull("operationMessage") ?: when (message.stringOrNull("operationStatus")) { "ok" -> "Earlier command acknowledged by Mac"; "error" -> "Earlier command failed on the Mac"; else -> "Command outcome remains uncertain. It will never be retried automatically." } else if (p.mutation) parsed.message ?: when (parsed.status) { "ok" -> "Mac acknowledged the command"; "error" -> "Mac could not complete the command"; else -> "Command outcome uncertain. It will never be retried automatically." } else it.result) }
+        if (p.mutation || p.operationId != null) Companion.activity("Command outcome: ${if (p.operationId != null) message.stringOrNull("operationStatus") ?: parsed.status else parsed.status}")
+        if ((p.action == "status" || p.operationId != null) && (route == "nearby" || relayFresh.reachable(now.plus(serverOffset)))) reconcileNext(route)
+    }
+    private fun reconcileNext(route: String) {
+        val operation = journal.unresolved().firstOrNull { it.id !in reconciledThisConnection } ?: return
+        reconciledThisConnection.add(operation.id)
+        transmit(CommandSubmission(Requests.operationStatus(operation.id, operation.digest, Instant.now().plus(serverOffset)), route == "nearby", route == "relay"), true, operation.id)
+    }
+    private fun updateSnapshot(snapshot: JsonObject) {
+        val now = Instant.now(); val captured = Instant.parse(snapshot.string("capturedAt")); require(captured <= now.plus(serverOffset).plusSeconds(10)); validateSnapshot(snapshot)
+        val existing = Companion.state.value.snapshot?.stringOrNull("capturedAt")?.let(Instant::parse)
+        if (existing != null && captured < existing) return
+        ReminderDelivery.snapshot(this, snapshot)
+        Companion.update { it.copy(snapshot = snapshot, receivedAt = captured.minus(serverOffset), lastContact = now) }
+    }
+    private fun deliveryLost() {
+        val p = pending ?: return; pending = null
+        Companion.update { it.copy(busy = false, result = if (p.mutation || p.operationId != null) "Command outcome uncertain. It will never be retried automatically." else "Mac response unavailable") }
+        if (p.mutation) Companion.activity("Connection lost before command acknowledgement — outcome uncertain")
     }
     private fun disconnected() {
-        reconnectGeneration++; session = null; invitation = null
-        val outcomes = delivery.disconnect()
-        val uncertain = outcomes.values.any { it == "uncertain" }; pendingMutation = null; pendingRequestId = null; pendingAction = null
-        Companion.update { it.copy(authenticated = false, busy = false, result = if (uncertain) "Command outcome uncertain. It will never be retried automatically." else it.result) }
-        if (uncertain) Companion.activity("Connection lost before command acknowledgement — outcome uncertain")
-        val epoch = reconnectGeneration
-        if (enabled && credential != null) main.postDelayed({ if (enabled && epoch == reconnectGeneration && session == null) ble.start() }, 15000)
+        reconnectGeneration++; session = null; invitation = null; reconciledThisConnection.clear()
+        if (pending?.route == "nearby") deliveryLost()
+        Companion.update { it.copy(authenticated = false) }; nextRemotePoll = 0
+        val generation = reconnectGeneration
+        if (enabled && nearbyEnabled && credential != null && bluetoothAllowed()) main.postDelayed({ if (enabled && nearbyEnabled && generation == reconnectGeneration && session == null && bluetoothAllowed()) ble.start() }, 15000)
     }
-    private fun event(e: JsonObject) {
-        val id = canonicalId(e.string("id")); val kind = e.string("kind"); require(kind in setOf("hourly", "session_ended_awake", "battery", "thermal", "sleep_failed")); Instant.parse(e.string("createdAt"))
-        if (!seenEvents.add(id)) return; while (seenEvents.size > 128) seenEvents.remove(seenEvents.first())
-        val title = e.string("title").take(120); val body = e.string("body").take(1000)
-        Companion.activity(title)
-        val macId = credential?.macId ?: return
-        if (PhoneReminders.filter(this).suppressed(macId, kind, Instant.now())) return
-        Notifications.reminder(this, id.hashCode(), title, body, kind == "hourly", macId)
+    override fun onDestroy() {
+        enabled = false; deliveryLost(); main.removeCallbacksAndMessages(null); if (::ble.isInitialized) ble.close(null); network.shutdownNow(); Companion.service = null; super.onDestroy()
     }
-    override fun onDestroy() { enabled = false; main.removeCallbacksAndMessages(null); if (::ble.isInitialized) ble.close(null); Companion.service = null; super.onDestroy() }
 }
 object Notifications {
     private val posted = linkedSetOf<Int>()

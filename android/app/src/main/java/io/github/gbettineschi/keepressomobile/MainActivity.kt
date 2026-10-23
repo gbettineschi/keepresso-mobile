@@ -38,25 +38,28 @@ import kotlinx.serialization.json.*
 
 class MainActivity : ComponentActivity() {
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        startNearby()
         if (requiredBluetooth().all { result[it] == true || ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }) {
-            startNearby()
-            if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) Companion.update { it.copy(result = "Notifications are disabled in Android Settings. Nearby status still works while connected.") }
+            if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) Companion.update { it.copy(result = "Notifications are disabled in Android Settings. Foreground status still works; reminders need notification permission.") }
         }
-        else Companion.update { it.copy(connection = "Nearby Devices permission denied. Enable it in Android Settings to connect.") }
+        else Companion.update { it.copy(result = "Nearby access denied. Configured internet access still works while this app is open.") }
     }
     private val scanner = registerForActivityResult(ScanContract()) { result -> result.contents?.let(::pair) }
     private fun requiredBluetooth(): Array<String> = if (Build.VERSION.SDK_INT >= 31) arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT) else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
     private fun startNearby(action: String? = null, invitation: String? = null) {
-        if (requiredBluetooth().any { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }) { Companion.update { it.copy(result = "Enable nearby access before pairing") }; return }
-        ContextCompat.startForegroundService(this, Intent(this, NearbyService::class.java).setAction(action).putExtra("invitation", invitation))
+        val nearbyAllowed = requiredBluetooth().all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
+        if (action == "pair" && !nearbyAllowed) { Companion.update { it.copy(result = "Enable nearby access before pairing") }; return }
+        val intent = Intent(this, NearbyService::class.java).setAction(action).putExtra("invitation", invitation).putExtra("foreground", true)
+        if (nearbyAllowed) ContextCompat.startForegroundService(this, intent) else startService(intent)
     }
     private fun pair(text: String) { startNearby("pair", text) }
+    override fun onStart() { super.onStart(); if (Companion.service != null) Companion.service?.foreground(true) else if (runCatching { CredentialStore(this).load() }.getOrNull() != null) startNearby("foreground") }
+    override fun onStop() { Companion.service?.foreground(false); super.onStop() }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val restored = runCatching { CredentialStore(this).load() }.getOrNull()
         restored?.let { saved ->
             Companion.update { it.copy(pairedName = saved.name, macId = saved.macId, localSnoozedUntil = PhoneReminders.until(this, saved.macId)) }
-            if (requiredBluetooth().all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED } && Companion.service == null) startNearby()
         }
         setContent {
             val dark = isSystemInDarkTheme()
@@ -135,7 +138,7 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
     val can: (String) -> Boolean = { name -> reachable && !state.busy && caps.flag(name) == true }
     Text(state.pairedName ?: "Your Mac", style = MaterialTheme.typography.labelMedium)
     Text(if (reachable) "Awake" else "Unreachable", style = MaterialTheme.typography.headlineLarge)
-    Text(if (reachable) "Updated at ${time(state.lastContact)} · Nearby Bluetooth" else "${state.connection}\nLast contact ${time(state.lastContact)} · Readings below are last known", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(if (reachable) "Updated at ${time(state.lastContact)} · ${state.transport}" else "${state.connection}\nLast contact ${time(state.lastContact)} · Readings below are last known", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     HorizontalDivider()
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Fact("Lock", readable(mac.text("lock")), modifier = Modifier.weight(1f))
@@ -206,7 +209,9 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
     Text(state.pairedName ?: "No Mac authorized", style = MaterialTheme.typography.titleMedium)
     Text("Nearby connection · Bluetooth. Reconnects automatically while nearby access is enabled.", style = MaterialTheme.typography.bodySmall)
     Row { TextButton(onClick = onEnable) { Text("Permissions") }; TextButton(onClick = onConnect) { Text("Reconnect") } }
-    Text("Internet access", style = MaterialTheme.typography.titleSmall); Text("Not implemented. Delivery requires a nearby Bluetooth connection.", style = MaterialTheme.typography.bodySmall)
+    Text("Internet access", style = MaterialTheme.typography.titleSmall)
+    Text(if (state.internetConfigured) "Encrypted fallback is configured. Status refreshes while this app is open; controls require a fresh Mac response." else "Connect nearby after enabling internet access on your Mac. Your existing authorization is retained.", style = MaterialTheme.typography.bodySmall)
+    if (!PushRegistration.configured()) Text("Background internet reminders are unavailable in this build: Firebase setup is missing. Foreground internet status can still work.", style = MaterialTheme.typography.bodySmall)
     HorizontalDivider()
     val currentEnabled = r.flag("enabled"); val currentInterval = r.number("intervalSeconds")?.toInt(); val currentDelay = r.number("endedAwakeDelaySeconds")?.toInt()
     val completeSettings = currentEnabled != null && currentInterval != null && currentDelay != null

@@ -115,15 +115,21 @@ data class ReminderSettings(val enabled: Boolean, val intervalSeconds: Int, val 
     fun json(): JsonObject { require(intervalSeconds in setOf(3600, 7200)); require(endedAwakeDelaySeconds in setOf(120, 300, 600)); return buildJsonObject { put("enabled", enabled); put("intervalSeconds", intervalSeconds); put("endedAwakeDelaySeconds", endedAwakeDelaySeconds) } }
 }
 object Requests {
-    val actions = setOf("status", "refresh_triggers", "start_manual", "stop_manual", "pause_triggers", "resume_triggers", "sleep_now", "snooze_reminders", "resume_reminders", "ack_reminder", "set_reminder_settings")
-    fun create(action: String, now: Instant, durationMinutes: Int? = null, settings: ReminderSettings? = null): String {
-        val r = buildJsonObject { put("type", "request"); put("id", UUID.randomUUID().toString()); put("action", action); put("issuedAt", now.toString()); put("expiresAt", now.plusSeconds(30).toString()); durationMinutes?.let { put("durationMinutes", it) }; if (action == "snooze_reminders") put("durationSeconds", 21600); settings?.let { put("reminderSettings", it.json()) } }.toString()
+    val actions = setOf("status", "refresh_triggers", "start_manual", "stop_manual", "pause_triggers", "resume_triggers", "sleep_now", "snooze_reminders", "resume_reminders", "ack_reminder", "set_reminder_settings", "operation_status")
+    fun create(action: String, now: Instant, durationMinutes: Int? = null, settings: ReminderSettings? = null, operationId: String? = null, digest: String? = null): String {
+        val r = buildJsonObject { put("type", "request"); put("id", UUID.randomUUID().toString()); put("action", action); put("issuedAt", now.toString()); put("expiresAt", now.plusSeconds(30).toString()); durationMinutes?.let { put("durationMinutes", it) }; if (action == "snooze_reminders") put("durationSeconds", 21600); settings?.let { put("reminderSettings", it.json()) }; operationId?.let { put("operationId", it) }; digest?.let { put("bodyDigest", it) } }.toString()
         validate(r, now); return r
+    }
+    fun operationStatus(operationId: String, digest: String, now: Instant): String {
+        canonicalId(operationId); decode64(digest, 32)
+        val base = obj(create("operation_status", now, operationId = operationId, digest = digest))
+        return base.toString()
     }
     fun validate(json: String, now: Instant) {
         val r = obj(json); require(r.string("type") == "request"); canonicalId(r.string("id")); val a = r.string("action"); require(a in actions)
         val issued = Instant.parse(r.string("issuedAt")); val expires = Instant.parse(r.string("expiresAt"))
         require(expires > now && expires > issued && expires <= issued.plusSeconds(30) && issued <= now.plusSeconds(10))
+        if (a == "operation_status") { require(r.keys == setOf("type", "id", "action", "issuedAt", "expiresAt", "operationId", "bodyDigest")); canonicalId(r.string("operationId")); decode64(r.string("bodyDigest"), 32) }
         if (a == "start_manual") { val v = r.getValue("durationMinutes").jsonPrimitive; require(!v.isString && v.intOrNull?.let { it in 15..10080 && it % 15 == 0 } == true) }
         if (a == "snooze_reminders") require(r.getValue("durationSeconds").jsonPrimitive.intOrNull == 21600)
         if (a == "set_reminder_settings") { val s = r.getValue("reminderSettings").jsonObject; ReminderSettings(s.boolOrNull("enabled") ?: error("Missing enabled"), s.getValue("intervalSeconds").jsonPrimitive.int, s.getValue("endedAwakeDelaySeconds").jsonPrimitive.int).json() }

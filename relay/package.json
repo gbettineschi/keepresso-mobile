@@ -1,0 +1,1 @@
+{"name":"keepresso-mobile-relay","version":"0.2.0","private":true,"type":"module","engines":{"node":">=22"},"scripts":{"test":"node --test test/*.test.mjs","test:emulator":"node --test test/emulator.mjs"},"dependencies":{"firebase-admin":"14.5.0"}}

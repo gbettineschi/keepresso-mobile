@@ -7,12 +7,21 @@ android {
     namespace = "io.github.gbettineschi.keepressomobile"
     compileSdk = 35
     defaultConfig { applicationId = namespace; minSdk = 28; targetSdk = 35; versionCode = 1; versionName = "0.1.0" }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
+    defaultConfig {
+        fun field(name: String, property: String) { buildConfigField("String", name, "\"" + providers.gradleProperty(property).orElse("").get().replace("\\", "\\\\").replace("\"", "\\\"") + "\"") }
+        field("FIREBASE_APPLICATION_ID", "keespresso.firebase.applicationId")
+        field("FIREBASE_API_KEY", "keespresso.firebase.apiKey")
+        field("FIREBASE_PROJECT_ID", "keespresso.firebase.projectId")
+        field("FIREBASE_SENDER_ID", "keespresso.firebase.senderId")
+    }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
 }
 dependencies {
     implementation(project(":core"))
+    implementation(platform("com.google.firebase:firebase-bom:33.12.0"))
+    implementation("com.google.firebase:firebase-messaging")
     implementation(platform("androidx.compose:compose-bom:2025.03.01"))
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.compose.material3:material3")

@@ -1,0 +1,29 @@
+{
+  "warning": "PUBLIC FIXTURES ONLY",
+  "macId": "11111111-1111-4111-8111-111111111111",
+  "deviceId": "22222222-2222-4222-8222-222222222222",
+  "deviceKey": "8YgPMk2KQwYwY6D3x4oUQ6ASbxTczJC5+EJ2NCHSOIY=",
+  "c2s": "a5vtVrY3uYIl8mG8Td/gn9ucbZzYchLOHs5YFdNFUIg=",
+  "s2c": "IkViaQHbLa4+BxfxvHLpOllRgvcSVUd1wbDip2WukI0=",
+  "phoneBearer": "/Gi0png1YunhF9fj2D3htpVFN1nC3vz6hRQ7S35VMoo=",
+  "phoneTokenHash": "1fe07a33fe2267fb4508567f5898735722c00b87f05dae6e9116f6b1a4f64186",
+  "macBearer": "ZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXp7fH1+f4CBgoM=",
+  "macTokenHash": "6b6d4d0946b3d7ea2de9a6abd6136a4f3c2b17ae3e91fe586082ff65681ba373",
+  "ticketTranscript": "keepresso-mobile/relay/v1/access-ticket\n11111111-1111-4111-8111-111111111111\n22222222-2222-4222-8222-222222222222\n1fe07a33fe2267fb4508567f5898735722c00b87f05dae6e9116f6b1a4f64186",
+  "authTicket": "JyJRv8CG5ADOddaDhtrvay53m7N7FjAFMbQs8OLaDUU=",
+  "aad": "keepresso-mobile/relay/v1\n11111111-1111-4111-8111-111111111111\n22222222-2222-4222-8222-222222222222\n33333333-3333-4333-8333-333333333333\n44444444-4444-4444-8444-444444444444\nc2s\ncommand\n1792756800\n1792756830",
+  "plaintext": "{\"type\":\"request\",\"id\":\"33333333-3333-4333-8333-333333333333\",\"action\":\"status\",\"issuedAt\":\"2026-10-23T12:00:00Z\",\"expiresAt\":\"2026-10-23T12:00:30Z\"}",
+  "envelope": {
+    "version": 1,
+    "macId": "11111111-1111-4111-8111-111111111111",
+    "deviceId": "22222222-2222-4222-8222-222222222222",
+    "id": "33333333-3333-4333-8333-333333333333",
+    "epoch": "44444444-4444-4444-8444-444444444444",
+    "direction": "c2s",
+    "kind": "command",
+    "createdAt": 1792756800,
+    "expiresAt": 1792756830,
+    "nonce": "UFFSU1RVVldYWVpb",
+    "ciphertext": "QwKKWdHDJDY+DUY+AqSLe2lF9Q2DQ9KgkdzMwIIkkfqMhjsVW/c8NoMmiWDpMpfAUMgRewAiEbTa3Sw2495527tBamYbZ+R4wKK4Yv8Wpbx5t1TdHYoLRgr9gXnkoF+kWAjCsNGpfOJKHIjsnCZ4wpuJy3bzyKMuvLjgHfp0U7cLC1zfWqmMWEQL2hOYRQVfnWKcC+SMap8UyeI3HqZOEXAleAMc"
+  }
+}
