@@ -68,6 +68,9 @@ No OS Bluetooth bonding is requested. Whether both devices complete this flow wi
 
 ## First tests
 
+For the reproducible Android pairing regression suite using two disposable
+Bluetooth emulators, see [ANDROID_PAIRING_TESTS.md](ANDROID_PAIRING_TESTS.md).
+
 Start with status, trigger refresh and loss/reconnection. Test manual controls and sleep only when intentionally ready to change the Mac's power state. Follow [ACCEPTANCE.md](ACCEPTANCE.md), including its unknown, failure and background cases.
 
 Nearby Bluetooth has limited range. Optional encrypted internet fallback and background push require your own configured relay; see [SELF_HOSTING.md](SELF_HOSTING.md). No remote-wake feature is provided. A disconnected Mac is **Unreachable**, with its last known readings retained.

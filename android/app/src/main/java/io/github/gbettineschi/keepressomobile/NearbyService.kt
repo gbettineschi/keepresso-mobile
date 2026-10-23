@@ -87,6 +87,7 @@ class NearbyService : Service() {
             "pair" -> {
                 if (!bluetoothAllowed()) { Companion.update { it.copy(result = "Nearby access is needed to authorize a phone") }; return START_NOT_STICKY }
                 runCatching { Invitation.parse(intent.getStringExtra("invitation") ?: "", Instant.now().epochSecond) }.onSuccess {
+                    Companion.update{state->state.copy(result=null)}
                     invitation = null; enabled = true; nearbyEnabled = true; protocolFailures = 0; ble.start(resetCandidates = true); invitation = it
                 }.onFailure { Companion.update { s -> s.copy(result = "Invalid or expired pairing invitation") } }
             }
@@ -264,7 +265,7 @@ class NearbyService : Service() {
         val existing = Companion.state.value.snapshot?.stringOrNull("capturedAt")?.let(Instant::parse)
         if (existing != null && captured < existing) return
         ReminderDelivery.snapshot(this, snapshot)
-        Companion.update { it.copy(snapshot = snapshot, receivedAt = captured.minus(serverOffset), lastContact = now) }
+        Companion.update { it.copy(snapshot = snapshot, receivedAt = minOf(captured.minus(serverOffset),now), lastContact = now) }
     }
     private fun deliveryLost() {
         val p = pending ?: return; pending = null

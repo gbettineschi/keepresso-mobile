@@ -25,6 +25,9 @@ class BleCentral(private val context: Context, private val state: (String) -> Un
     private var chunkSize = 20
     private var scanning = false
     private var subscriptionReady = false
+    private var discoveryRecovery=ServiceDiscoveryRecovery()
+    private enum class Initialization { IDLE, DISCOVERING, REFRESHING, MTU, SUBSCRIBING, READY }
+    private var initialization=Initialization.IDLE
     private val candidates = CandidateRotation()
     private var candidate: String? = null
     private var peerAuthenticated = false
@@ -50,23 +53,41 @@ class BleCentral(private val context: Context, private val state: (String) -> Un
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) { handler.post {
             if (g !== gatt) return@post
             if (status != BluetoothGatt.GATT_SUCCESS || newState == BluetoothProfile.STATE_DISCONNECTED) { close("Unreachable"); return@post }
-            if (newState == BluetoothProfile.STATE_CONNECTED) { handler.post(frameExpiry); if (!g.discoverServices()) close("Service discovery failed") }
+            if (newState == BluetoothProfile.STATE_CONNECTED && initialization==Initialization.IDLE) {
+                handler.post(frameExpiry);initialization=Initialization.DISCOVERING
+                if (!g.discoverServices()) close("Service discovery failed")
+            }
         } }
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) { handler.post {
-            if (g !== gatt) return@post
+            if (g !== gatt || initialization!=Initialization.DISCOVERING) return@post
             val service = g.getService(SERVICE); input = service?.getCharacteristic(INPUT); output = service?.getCharacteristic(OUTPUT)
-            if (status != BluetoothGatt.GATT_SUCCESS || input == null || output == null) { close("Companion service unavailable"); return@post }
+            if(status!=BluetoothGatt.GATT_SUCCESS){close("Bluetooth service discovery failed. Scan a fresh pairing QR to retry.");return@post}
+            if(input==null || output==null){
+                if(discoveryRecovery.tryRefresh{refreshServiceCache(g)}){
+                    initialization=Initialization.REFRESHING;state("Refreshing Mac Bluetooth services…")
+                    val epoch=generation
+                    handler.postDelayed({if(epoch==generation && g===gatt && initialization==Initialization.REFRESHING){initialization=Initialization.DISCOVERING;if(!g.discoverServices())close("Bluetooth service discovery failed. Scan a fresh pairing QR to retry.")}},1200)
+                }else close("Mac Bluetooth service unavailable. Reopen Keepresso Mobile and scan a fresh QR. If this persists, toggle Bluetooth on your phone.")
+                return@post
+            }
+            initialization=Initialization.MTU
             if (!g.requestMtu(517)) subscribe(g)
         } }
+        override fun onServiceChanged(g:BluetoothGatt){handler.post{
+            if(g!==gatt || initialization==Initialization.REFRESHING)return@post
+            // Invalidate all outstanding MTU/descriptor callbacks together. A
+            // paired service reconnects normally; an unpaired phone needs a QR.
+            close("Mac Bluetooth services changed. Reconnect or scan a fresh pairing QR.")
+        }}
         override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) { handler.post {
-            if (g !== gatt) return@post
+            if (g !== gatt || initialization!=Initialization.MTU) return@post
             chunkSize = if (status == BluetoothGatt.GATT_SUCCESS) (mtu - 3).coerceIn(20, 512) else 20
             subscribe(g)
         } }
         override fun onDescriptorWrite(g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) { handler.post {
-            if (g !== gatt) return@post
+            if (g !== gatt || initialization!=Initialization.SUBSCRIBING || descriptor.uuid!=CCCD || descriptor.characteristic.uuid!=OUTPUT) return@post
             if (status != BluetoothGatt.GATT_SUCCESS) close("Notification subscription failed") else {
-                subscriptionReady = true; state("Authenticating…"); subscribed()
+                initialization=Initialization.READY;subscriptionReady = true; state("Authenticating…"); subscribed()
                 val epoch = generation; handshakeTimer = Runnable { if (generation == epoch) close("Authorization timed out") }.also { handler.postDelayed(it, 300000) }
             }
         } }
@@ -83,11 +104,20 @@ class BleCentral(private val context: Context, private val state: (String) -> Un
         try { framer.feed(value, android.os.SystemClock.elapsedRealtime()).forEach(record) } catch (_: Exception) { close("Invalid secure record; connection closed") }
     } }
     private fun subscribe(g: BluetoothGatt) {
+        if(g!==gatt || initialization!=Initialization.MTU)return
+        initialization=Initialization.SUBSCRIBING
         val c = output ?: return close("Missing output characteristic")
         val d = c.getDescriptor(CCCD) ?: return close("Missing notification descriptor")
         if (!g.setCharacteristicNotification(c, true)) return close("Notifications unavailable")
         val accepted = if (Build.VERSION.SDK_INT >= 33) g.writeDescriptor(d, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) == BluetoothStatusCodes.SUCCESS else { d.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE; g.writeDescriptor(d) }
         if (!accepted) close("Notification subscription rejected")
+    }
+    @SuppressLint("PrivateApi", "DiscouragedPrivateApi")
+    private fun refreshServiceCache(g:BluetoothGatt):Boolean {
+        // Android has no public invalidation API for an unbonded peer's stale
+        // GATT cache. Use this fixed unsupported method only after the advertised
+        // service is missing, once per connection; restricted runtimes fail closed.
+        return runCatching{g.javaClass.getMethod("refresh").invoke(g)==true}.getOrDefault(false)
     }
     fun start(resetCandidates: Boolean = false) {
         close(null)
@@ -112,7 +142,7 @@ class BleCentral(private val context: Context, private val state: (String) -> Un
     }
     fun authenticated() { peerAuthenticated = true; handshakeTimer?.let(handler::removeCallbacks); handshakeTimer = null }
     fun close(reason: String?) {
-        generation++; writeToken++; subscriptionReady = false; handler.removeCallbacks(frameExpiry); stopScan(); handshakeTimer?.let(handler::removeCallbacks); handshakeTimer = null
+        generation++; writeToken++; subscriptionReady = false; initialization=Initialization.IDLE;discoveryRecovery=ServiceDiscoveryRecovery();handler.removeCallbacks(frameExpiry); stopScan(); handshakeTimer?.let(handler::removeCallbacks); handshakeTimer = null
         val old = gatt; if (old != null && !peerAuthenticated) candidate?.let { candidates.failed(it, android.os.SystemClock.elapsedRealtime()) }; candidate = null; peerAuthenticated = false; gatt = null; input = null; output = null; queue.clear(); framer = Framer(); chunkSize = 20
         try { old?.disconnect(); old?.close() } catch (_: SecurityException) { }
         disconnected(); if (reason != null) state(reason)

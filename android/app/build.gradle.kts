@@ -6,7 +6,8 @@ plugins {
 android {
     namespace = "io.github.gbettineschi.keepressomobile"
     compileSdk = 35
-    defaultConfig { applicationId = namespace; minSdk = 28; targetSdk = 35; versionCode = 3; versionName = "0.3.0" }
+    defaultConfig { applicationId = namespace; minSdk = 28; targetSdk = 35; versionCode = 4; versionName = "0.3.1" }
+    defaultConfig { testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
     buildFeatures { compose = true; buildConfig = true }
     defaultConfig {
         // Preserve existing owners' build configuration across the spelling fix.
@@ -31,6 +32,14 @@ android {
     kotlinOptions { jvmTarget = "17" }
 }
 dependencies {
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:rules:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test.espresso:espresso-intents:3.6.1")
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2025.03.01"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     implementation(project(":core"))
     implementation(platform("com.google.firebase:firebase-bom:33.12.0"))
     implementation("com.google.firebase:firebase-messaging")

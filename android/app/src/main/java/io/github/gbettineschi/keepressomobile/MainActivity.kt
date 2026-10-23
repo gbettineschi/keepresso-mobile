@@ -27,6 +27,8 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import io.github.gbettineschi.keepressomobile.core.*
@@ -36,13 +38,20 @@ import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.*
 
+// Configuration changes retain the short-lived QR secret in memory only.
+// Deliberately do not use saved state: process death requires a fresh scan.
+class PairingPermissionState : ViewModel() { var invitation: String? = null }
+
 class MainActivity : ComponentActivity() {
+    private val pendingPairing by lazy { ViewModelProvider(this)[PairingPermissionState::class.java] }
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-        startNearby()
         if (requiredBluetooth().all { result[it] == true || ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }) {
-            if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) Companion.update { it.copy(result = "Notifications are disabled in Android Settings. Foreground status still works; reminders need notification permission.") }
+            val invitation=pendingPairing.invitation;pendingPairing.invitation=null
+            startNearby(if(invitation!=null) "pair" else null,invitation)
+            if(invitation==null && Companion.state.value.pairedName==null) Companion.update { it.copy(result="Nearby access enabled. Scan the Mac's pairing QR to continue.") }
+            else if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) Companion.update { it.copy(result = "Notifications are disabled in Android Settings. Foreground status still works; reminders need notification permission.") }
         }
-        else Companion.update { it.copy(result = "Nearby access denied. Configured internet access still works while this app is open.") }
+        else { startNearby();Companion.update { it.copy(result = "Nearby access denied. Tap Enable nearby access to continue pairing. Configured internet access still works while this app is open.") } }
     }
     private val scanner = registerForActivityResult(ScanContract()) { result -> result.contents?.let(::pair) }
     private fun requiredBluetooth(): Array<String> = if (Build.VERSION.SDK_INT >= 31) arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT) else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -52,7 +61,13 @@ class MainActivity : ComponentActivity() {
         val intent = Intent(this, NearbyService::class.java).setAction(action).putExtra("invitation", invitation).putExtra("foreground", true)
         if (nearbyAllowed) ContextCompat.startForegroundService(this, intent) else startService(intent)
     }
-    private fun pair(text: String) { startNearby("pair", text) }
+    private fun pair(text: String) {
+        if(runCatching{Invitation.parse(text,Instant.now().epochSecond)}.isFailure){pendingPairing.invitation=null;Companion.update{it.copy(result="Invalid or expired pairing invitation")};return}
+        Companion.update{it.copy(result=null,connection="Starting secure pairing…")}
+        if(requiredBluetooth().any{ContextCompat.checkSelfPermission(this,it)!=PackageManager.PERMISSION_GRANTED}){
+            pendingPairing.invitation=text;permissions.launch(requiredBluetooth())
+        }else{pendingPairing.invitation=null;startNearby("pair",text)}
+    }
     override fun onStart() { super.onStart(); if (Companion.service != null) Companion.service?.foreground(true) else if (runCatching { CredentialStore(this).load() }.getOrNull() != null) startNearby("foreground") }
     override fun onStop() { Companion.service?.foreground(false); super.onStop() }
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -91,7 +106,8 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
     LaunchedEffect(Unit) { while (true) { now = Instant.now(); delay(1000) } }
     var tab by remember { mutableIntStateOf(0) }
     var confirmation by remember { mutableStateOf<String?>(null) }
-    val reachable = state.reachable(now)
+    // The one-second display clock may predate a response received this frame.
+    val reachable = state.reachable(Instant.now())
     Scaffold(containerColor = MaterialTheme.colorScheme.background, bottomBar = {
         NavigationBar { listOf("Status" to Icons.Default.LaptopMac, "Activity" to Icons.AutoMirrored.Filled.List, "Settings" to Icons.Default.Settings).forEachIndexed { i, (name, icon) -> NavigationBarItem(selected = tab == i, onClick = { tab = i }, icon = { Icon(icon, contentDescription = name) }, label = { Text(name) }) } }
     }) { insets ->
@@ -101,9 +117,9 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
                 Spacer(Modifier.width(10.dp)); Text("Keepresso", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.weight(1f)); IconButton(onClick = { Companion.service?.send("status") }, enabled = state.authenticated) { Icon(Icons.Default.Refresh, "Refresh Mac status") }
             }
-            if (state.pairedName == null) Pairing(onEnable, onScan, onPair)
+            if (state.pairedName == null) Pairing(state,onEnable, onScan, onPair)
             when (tab) {
-                0 -> StatusScreen(state, now, reachable) { confirmation = it }
+                0 -> if(state.pairedName!=null) StatusScreen(state, now, reachable) { confirmation = it }
                 1 -> {
                     Text("Activity", style = MaterialTheme.typography.headlineMedium)
                     if (state.activity.isEmpty()) Text("No activity yet", style = MaterialTheme.typography.bodyMedium)
@@ -111,7 +127,7 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
                 }
                 else -> SettingsScreen(state, reachable, onEnable, onConnect) { confirmation = "reset" }
             }
-            if (state.result != null) Text(state.result!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (state.pairedName!=null && state.result != null) Text(state.result!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(12.dp))
         }
     }
@@ -121,10 +137,12 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
         AlertDialog(onDismissRequest = { confirmation = null }, title = { Text(title) }, text = { Text(body) }, confirmButton = { TextButton(onClick = { if (action == "reset") onReset() else Companion.service?.send(action); confirmation = null }) { Text(if (action == "sleep_now") "Sleep now" else if (action == "reset") "Remove" else "Resume triggers") } }, dismissButton = { TextButton(onClick = { confirmation = null }) { Text("Cancel") } })
     }
 }
-@Composable private fun Pairing(onEnable: () -> Unit, onScan: () -> Unit, onPair: (String) -> Unit) {
+@Composable private fun Pairing(state:UiState,onEnable: () -> Unit, onScan: () -> Unit, onPair: (String) -> Unit) {
     var pasted by remember { mutableStateOf("") }
     Text("Authorize this phone", style = MaterialTheme.typography.titleMedium)
     Text("Open pairing in the Mac helper, scan its one-time QR, then approve this phone locally on your Mac.", style = MaterialTheme.typography.bodySmall)
+    Text(state.connection,style=MaterialTheme.typography.bodyMedium)
+    state.result?.let{Text(it,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)}
     Row { Button(onClick = onEnable) { Text("Enable nearby access") }; TextButton(onClick = onScan) { Text("Scan QR") } }
     OutlinedTextField(value = pasted, onValueChange = { pasted = it.take(2048) }, label = { Text("Or paste pairing invitation") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
     TextButton(onClick = { onPair(pasted); pasted = "" }, enabled = pasted.isNotBlank()) { Text("Pair with Mac") }
