@@ -2,6 +2,33 @@
 
 Each owner hosts their own instance. There is no shared Keespresso service, subscription or account with this project. Nearby Bluetooth works independently. Internet uses a small Vercel Node24 API plus one Firebase project for Firestore storage and Android push. No virtual machine, inbound Mac port, router change, Tailscale or Wi-Fi pairing is needed.
 
+Use this guide for a new installation. For lost credentials, replacing a deployment, or starting over, use [Recovery and reset](RECOVERY.md). Configure [quota email alerts](QUOTA_ALERTS.md) separately; they do not enable billing.
+
+## Prerequisites and ownership
+
+You need your own GitHub account/source checkout, a Google account that owns a dedicated Firebase project, and a Vercel Hobby account/team. Use Node.js 24, Git, and the official Vercel CLI. The deployment commands below were checked against Vercel CLI 64.7.0. Building the apps also needs the tools in [BUILDING.md](BUILDING.md).
+
+```sh
+git clone --branch feat/native-companion https://github.com/gbettineschi/keepresso-mobile.git
+cd keepresso-mobile
+npm install --global vercel@64.7.0
+vercel login
+vercel teams ls
+```
+
+The implementation currently lives on `feat/native-companion`; use a later documented release/ref when available. Fork the repository if you want your own Git integration or GitHub build settings. A fork is not required for a manual Vercel deployment.
+
+In the commands below, replace `YOUR_ORGANIZATION_ID` with the Vercel team's ID, found under that team's **Settings → General**. Use the same scope for every command. Choose your own project name if `keepresso-mobile` is unavailable. Never copy another owner's Firebase identifiers or Mac bearer.
+
+| Item | Where it belongs | Needed for recovery |
+| --- | --- | --- |
+| Source code / supported ref | GitHub or a local checkout | Can be downloaded again |
+| Firebase server private key | Sensitive Vercel production environment variable | Can be replaced in Firebase; not recoverable from an APK |
+| Independent Mac bearer | Private setup file, then Mac Keychain | Can be rotated without the Firebase private key |
+| Phone pairing key | Mac Keychain and Android Keystore | Pair again if either device loses it |
+| Firebase Android client settings | Gradle properties or GitHub repository variables | Can be downloaded again from Firebase |
+| Android signing identity | Your private signing store and optional GitHub secrets | Required to update an installed APK without clearing its data |
+
 ## Create the free services
 
 1. Create a dedicated Firebase project on Spark (no billing account). Analytics and Gemini are unnecessary. Create a **Standard** Firestore `(default)` database, ideally `europe-west3` near the relay's Frankfurt region. Select **Production mode**: the deny-all rules match `relay/firestore.rules`. Do not enable test-mode public access, TTL, backups or paid extensions.
@@ -11,21 +38,53 @@ Each owner hosts their own instance. There is no shared Keespresso service, subs
 
 ## Configure and deploy
 
-From `relay/`, after signing in to the official Vercel CLI:
+Create the project once, then link the `relay/` directory. For an existing project, skip `project create` and link that project instead:
 
 ```sh
+cd relay
+vercel project create keepresso-mobile --scope YOUR_ORGANIZATION_ID
 vercel link --project keepresso-mobile --scope YOUR_ORGANIZATION_ID
 npm ci
 npm test
+```
+
+Check **Vercel → Project → Settings** before the first production deploy: Framework **Other**, Node.js **24.x**, Fluid Compute enabled, and the `public` output directory. `vercel.json` sets Frankfurt (`fra1`) and the 10-second API timeout. With a Git integration, the project root is `relay`; with CLI deployment, run the commands from that directory. Under **Deployment Protection**, production must allow native clients to reach the relay; previews can retain Vercel Authentication. The relay still enforces its own Mac/phone authentication.
+
+Choose an absolute private directory **outside the source repository**, restrict it to your user, and put the downloaded Firebase server JSON there. For example, `/absolute/private/keespresso-relay` below is a placeholder you must replace. Keep credentials out of `relay/public`, GitHub variables, command arguments, chat, and build artifacts.
+
+```sh
+umask 077
+mkdir -p /absolute/private/keespresso-relay
+chmod 700 /absolute/private/keespresso-relay
+chmod 600 /absolute/private/keespresso-relay/firebase-service-account.json
 node scripts/configure.mjs --scope YOUR_ORGANIZATION_ID \
-  --service-account /private/path/firebase-service-account.json \
-  --private-dir /private/path/keespresso-relay
+  --service-account /absolute/private/keespresso-relay/firebase-service-account.json \
+  --private-dir /absolute/private/keespresso-relay --check-only
+node scripts/configure.mjs --scope YOUR_ORGANIZATION_ID \
+  --service-account /absolute/private/keespresso-relay/firebase-service-account.json \
+  --private-dir /absolute/private/keespresso-relay
 vercel deploy --prod --scope YOUR_ORGANIZATION_ID
 ```
 
 The setup script verifies the linked organization, reads the service key locally, generates an independent random Mac bearer and sends only its hash to the server configuration. Secret values use stdin and are not printed. `--check-only` verifies the target/file without upload or generation. Existing environment values are never silently replaced. Keep the private Mac bearer file; it is not the phone pairing key. Vercel secrets are `FIREBASE_SERVICE_ACCOUNT` and `RELAY_MAC_TOKEN_SHA256`. Optional `RELAY_MAC_ID` limits the deployment to one Mac. Otherwise one owner may use isolated Mac IDs under the same deployment; this is not a public multi-tenant service.
 
 Verify `/api/health` reports configured availability, and an unauthenticated POST to `/api/relay` returns401. Source files and private setup files must not be publicly served: only `relay/public` is a static output directory. Do not place credentials there. A healthy HTTP response is not an end-to-end phone test.
+
+Use the stable production domain shown by Vercel, not a temporary preview URL. These checks disclose no credentials:
+
+```sh
+KEESPRESSO_RELAY_URL=https://your-production-domain.vercel.app
+curl --fail --silent --show-error "$KEESPRESSO_RELAY_URL/api/health"
+curl --silent --show-error --output /dev/null --write-out '%{http_code}\n' \
+  --request POST --header 'Content-Type: application/json' \
+  --data '{}' "$KEESPRESSO_RELAY_URL/api/relay"
+curl --silent --show-error --output /dev/null --write-out '%{http_code}\n' \
+  "$KEESPRESSO_RELAY_URL/.env.local"
+```
+
+Expect `{"version":1,"configured":true}`, then `401`, then `404`. A Vercel login page/redirect means deployment protection still blocks native clients. `configured:false` means a server variable is missing or invalid. After importing the Mac bearer into Keychain and verifying the connection, the transient Firebase JSON can be removed from the download/setup location; generating a replacement later is supported. Keep control of the Google and Vercel owner accounts.
+
+If setup is interrupted, `vercel env ls production --scope YOUR_ORGANIZATION_ID` lists variable names without disclosing their values. Do not rerun initial setup assuming it will overwrite existing values: use the explicit update procedures in [RECOVERY.md](RECOVERY.md). Environment changes require a **new deployment** before running functions use them.
 
 Build Android with the four Firebase properties, or set repository variables `FIREBASE_APPLICATION_ID`, `FIREBASE_API_KEY`, `FIREBASE_PROJECT_ID`, `FIREBASE_SENDER_ID` for this repository's CI. No Google service-account key belongs in Android or GitHub build variables. An optional stable development signing identity uses GitHub secrets `ANDROID_SIGNING_STORE_BASE64` and `ANDROID_SIGNING_PASSWORD`; app builds consume the four `KEESPRESSO_SIGNING_*` variables described in the Android README. Keep the same signing identity for updates. The old0.1.0 disposable CI signing identity was not preserved: an already installed0.1.0 APK may need one reinstall/re-pair. Subsequent builds using the persistent identity can update in place.
 
@@ -42,7 +101,7 @@ Nearby is preferred automatically. A command picks one route and is never automa
 
 After **Save and enable**, the helper stores the relay URL and Mac bearer in the macOS login Keychain, service `local.keespresso.companion.v1`, account `relay`. It reloads them on launch. Losing the original setup text file does not lose an already saved connection: **Enable saved relay** reuses it. The current helper has no export, reveal or server-key reset button. Before the first save, the private setup file is still needed.
 
-To recover a saved bearer, use macOS Keychain Access, find that service/account, and authenticate to view the saved password; it is a JSON configuration containing the URL and bearer. Treat the whole value as a secret. A reinstall on the same Mac normally retains this Keychain entry, but erasing the Mac or deleting the entry does not. Phone pairing keys are separate Keychain records.
+For an existing connection, lost credentials, or a new computer, follow [Recovery and reset](RECOVERY.md). This is a rebuildable setup: retaining multiple copies of the original text file is not required. Phone pairing and Android update signing have different recovery limits from replaceable server credentials.
 
 If every bearer copy and the Keychain entry are lost, generate a new independent random 32-byte Base64 bearer, replace Vercel's `RELAY_MAC_TOKEN_SHA256` with its SHA-256 hash, and redeploy. Enter the new bearer using the helper's existing **Save and enable** controls, then reconnect the authorized phone nearby to refresh its relay access ticket. This preserves the phone's pairing key. Vercel stores only the bearer's hash, so it cannot recover the original bearer. This reset currently requires the owner to update the server configuration; the Mac UI alone cannot reset it.
 
@@ -60,7 +119,7 @@ Maintenance is normal app/API dependency updates, occasional usage checks, and r
 
 Keep the services on **Vercel Hobby** and **Firebase Spark without a linked billing account** for stop-at-quota behavior. Neither automatically upgrades to a paid plan: an exhausted allowance blocks the affected service rather than adding overage charges. Firestore's daily quotas reset around midnight Pacific; Vercel's reset/pause period depends on the exceeded limit. Internet status, commands and push may fail while blocked, but nearby Bluetooth remains independent. Linking Firebase to a billing account upgrades it to Blaze, and Vercel Pro allows metered usage; spending alerts on paid plans are not equivalent to Spark/Hobby's no-overage behavior.
 
-Vercel documents email/dashboard alerts as usage approaches or exceeds limits; check **Notifications → Usage increased** for the owner. Firebase budget emails concern a linked billing account and are not a reason to enable billing here. The inspected Spark project has general email alerts enabled, but its Cloud Firestore alert options cover insecure/expired rules, not quota warnings. Do not rely on a Firestore quota-warning email. Consult the Firebase Usage dashboard for quota consumption.
+Set up and verify [quota email alerts](QUOTA_ALERTS.md). Vercel provides its own usage emails. Firestore operation-quota warnings use Google Cloud Monitoring with the project's native quota-consumption metrics; they do not require a paid Firebase plan or an email service in the relay.
 
 ## Verification boundaries
 

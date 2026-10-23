@@ -10,6 +10,8 @@ First development implementation. Start with [build and pairing instructions](do
 
 Bluetooth Low Energy is preferred nearby. Optional internet fallback uses an owner-hosted Vercel relay, Firestore and encrypted Firebase push, with the same device pairing. See [self-hosting and free-tier budget](docs/SELF_HOSTING.md) and the [relay contract](docs/relay-protocol.md). There is no shared Keespresso server or Tailscale dependency. Deployed service checks and actual-phone acceptance are separate from source/build tests.
 
+The operator guides cover [fresh Vercel/Firebase deployment](docs/SELF_HOSTING.md), [quota email alerts](docs/QUOTA_ALERTS.md), and [credential reset or rebuilding the setup](docs/RECOVERY.md). Recovery does not depend on retaining the original setup text file.
+
 The approved [requirements](docs/requirements.md), [design](docs/superpowers/specs/2026-10-23-companion-design.md) and [wire protocol](docs/protocol.md) describe the target and the shared contract. In this build safe remote sleep and Celsius readings are unavailable; Pause/Resume depends on a uniquely exposed native Accessibility control. See the status document before relying on reminders or controls.
 
 ## Layout
