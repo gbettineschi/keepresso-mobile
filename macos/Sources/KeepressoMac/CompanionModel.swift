@@ -134,12 +134,12 @@ import KeepressoCore
         guard isAuthorized(device) else{return CommandResponse(id:request.id,status:"error",message:"Device authorization was revoked.")}
         do{try request.validate(now:Date())}catch{return CommandResponse(id:request.id,status:"error",message:"The request is invalid or expired.")}
         if let executor {
-            return await executor.execute(request,device:device,body:body,now:Date(),authorized:{self.lifecycle.accepts(generation:generation) && self.isAuthorized(device)},rejection:policyRejection){await self.perform(request)}
+            return await executor.execute(request,device:device,body:body,now:Date(),authorized:{self.lifecycle.accepts(generation:generation) && self.isAuthorized(device)},rejection:policyRejection){await self.perform(request,authorized:{self.lifecycle.accepts(generation:generation) && self.isAuthorized(device)})}
         }
         guard !request.isMutation,request.action != "operation_status" else{return CommandResponse(id:request.id,status:"error",message:"The durable command journal is unavailable; controls and operation lookup are disabled.")}
         return await perform(request)
     }
-    private func perform(_ request:CommandRequest)async ->CommandResponse{
+    private func perform(_ request:CommandRequest,authorized:@escaping()->Bool={true})async ->CommandResponse{
         guard nativeRunning else{return CommandResponse(id:request.id,status:"error",message:"Native Keepresso is not running.")}
         let result:CommandResponse
         switch request.action{
@@ -162,7 +162,7 @@ import KeepressoCore
                 try persistReminders();result=CommandResponse(id:request.id,status:"ok")
             }catch{reminders=previous;result=CommandResponse(id:request.id,status:"error",message:"Reminder settings could not be saved.")}
         default:
-            result=await commands.execute(request);observer.markStale()
+            result=await commands.execute(request,authorized:authorized);observer.markStale()
         }
         return result
     }

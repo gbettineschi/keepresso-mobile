@@ -101,4 +101,16 @@ class PairingFlowTest {
         Assert.assertEquals(1,Companion.state.value.snapshot!!.getValue("fixtureStartCount").jsonPrimitive.int)
         ui.onAllNodesWithText("Checking Mac",substring=true).assertCountEquals(0)
     }
+    @Test fun sleepNeedsConfirmationAndAcceptedRequestDoesNotClaimCompletedSleep(){
+        Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("virtualPeer")=="true")
+        scan();ui.waitUntil(25000){Companion.state.value.reachable(Instant.now())}
+        ui.onNodeWithText("Sleep now").performScrollTo().assertIsEnabled().performClick()
+        ui.onNodeWithText("Cancel").performClick()
+        Assert.assertEquals(0,Companion.state.value.snapshot!!.getValue("fixtureSleepRequests").jsonPrimitive.int)
+        ui.onNodeWithText("Sleep now").performScrollTo().performClick()
+        ui.onNode(hasText("Sleep now") and hasAnyAncestor(isDialog())).performClick()
+        ui.waitUntil(10000){Companion.state.value.snapshot?.get("fixtureSleepRequests")?.jsonPrimitive?.int==1}
+        ui.onNodeWithText("Awake").performScrollTo().assertIsDisplayed()
+        Assert.assertEquals(1,Companion.state.value.snapshot!!.getValue("fixtureSleepRequests").jsonPrimitive.int)
+    }
 }

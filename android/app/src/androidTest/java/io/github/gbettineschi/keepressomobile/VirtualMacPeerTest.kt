@@ -26,14 +26,15 @@ class VirtualMacPeerTest {
         var deviceId="";var transcript="";var channel:SecureChannel?=null
     }
     private val peers=mutableMapOf<String,Peer>();private val keys=mutableMapOf<String,ByteArray>()
-    private var active=false;private var paused=true;private var end:Instant?=null;private var checked:Instant?=null;private var startCount=0
+    private var active=false;private var paused=true;private var end:Instant?=null;private var checked:Instant?=null;private var startCount=0;private var sleepCount=0
     private var interval=3600;private var delay=300;private var routine=true;private var snoozed:Instant?=null
     private fun snapshot()=buildJsonObject{
         put("capturedAt",Instant.now().toString());put("macName","Emulated Mac")
         put("fixtureStartCount",startCount)
+        put("fixtureSleepRequests",sleepCount)
         put("mac",buildJsonObject{put("lock","locked");put("display","off");put("lid","closed");put("batteryPercent",83);put("powerSource","ac");put("temperatureC",JsonNull);put("temperatureSensor",JsonNull);put("thermal","normal")})
         put("keepresso",buildJsonObject{put("appRunning",true);put("version","1.27.0");put("isActive",active);put("endsAt",end?.let{JsonPrimitive(it.toString())}?:JsonNull);put("triggersEnabled",true);put("triggersPaused",paused);put("sessionKind",if(end!=null)"manual" else if(active)"automatic" else "unknown");put("safetyPause","none")})
-        put("capabilities",buildJsonObject{for(name in listOf("startManual","stopManual","pauseTriggers","resumeTriggers","refreshTriggers"))put(name,true);put("sleepNow",false)})
+        put("capabilities",buildJsonObject{for(name in listOf("startManual","stopManual","pauseTriggers","resumeTriggers","refreshTriggers"))put(name,true);put("sleepNow",InstrumentationRegistry.getArguments().getString("mode")=="sleep")})
         put("triggers",buildJsonObject{put("state",if(checked==null)"not_checked" else "ready");put("checkedAt",checked?.let{JsonPrimitive(it.toString())}?:JsonNull);put("combined",false);put("rules",JsonArray(emptyList()));put("message",JsonNull)})
         put("reminders",buildJsonObject{put("enabled",routine);put("intervalSeconds",interval);put("endedAwakeDelaySeconds",delay);put("snoozedUntil",snoozed?.let{JsonPrimitive(it.toString())}?:JsonNull)})
     }
@@ -56,6 +57,7 @@ class VirtualMacPeerTest {
                 "stop_manual"->{active=false;end=null}
                 "resume_triggers"->{paused=false;active=false;end=null}
                 "pause_triggers"->{paused=true;active=false;end=null}
+                "sleep_now"->{sleepCount++;paused=true;active=false;end=null}
                 "refresh_triggers"->checked=Instant.now()
                 "snooze_reminders"->snoozed=Instant.now().plusSeconds(21600)
                 "resume_reminders"->snoozed=null

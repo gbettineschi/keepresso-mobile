@@ -3,6 +3,7 @@ import ApplicationServices
 import CompanionCore
 import KeepressoCore
 import CoreGraphics
+import IOKit.pwr_mgt
 
 @MainActor final class NativeStatus {
     private lazy var temperature=CompanionTemperatureMonitor()
@@ -26,7 +27,9 @@ import CoreGraphics
         let thermal:String
         switch ProcessInfo.processInfo.thermalState { case .nominal: thermal="normal";case .fair:thermal="warm";case .serious,.critical:thermal="hot";@unknown default:thermal="unknown" }
         let running=runningApp() != nil;let status=running ? native():nil;let kind=sessionKind(status)
-        let capabilities:[String:Any]=["startManual":FileManager.default.fileExists(atPath:Self.appURL.path),"stopManual":kind=="manual","pauseTriggers":ax.canPerform("Pause Triggers"),"resumeTriggers":ax.canPerform("Resume Triggers"),"sleepNow":false,"refreshTriggers":installedVersion=="1.27.0"]
+        let sleepPort=running && status != nil ? IOPMFindPowerManagement(mach_task_self_):0
+        if sleepPort != 0{IOServiceClose(sleepPort)}
+        let capabilities:[String:Any]=["startManual":FileManager.default.fileExists(atPath:Self.appURL.path),"stopManual":kind=="manual","pauseTriggers":ax.canPerform("Pause Triggers"),"resumeTriggers":ax.canPerform("Resume Triggers"),"sleepNow":sleepPort != 0,"refreshTriggers":installedVersion=="1.27.0"]
         let k:[String:Any]=["appRunning":running,"version":installedVersion as Any? ?? NSNull(),"isActive":StatusEvidence.brewingActivity(appRunning:running,nativeActive:status?.isActive) as Any? ?? NSNull(),"endsAt":status?.endsAt.map(WireJSON.iso) as Any? ?? NSNull(),"triggersEnabled":status?.triggersEnabled as Any? ?? NSNull(),"triggersPaused":status?.triggersPaused as Any? ?? NSNull(),"sessionKind":kind,"safetyPause":"unknown"]
         let reading=temperature.reading()
         let mac:[String:Any]=["lock":lock,"display":display,"lid":lid,"batteryPercent":source.percentage as Any? ?? NSNull(),"powerSource":source.provider.rawValue,"isCharging":source.hasBattery ? source.isCharging as Any:NSNull(),"temperatureC":reading?.celsius as Any? ?? NSNull(),"temperatureSensor":reading?.sensor as Any? ?? NSNull(),"thermal":thermal]
@@ -67,10 +70,29 @@ import CoreGraphics
 @MainActor final class NativeCommands {
     let status:NativeStatus;let ax:AccessibilityControl
     init(status:NativeStatus,ax:AccessibilityControl) { self.status=status;self.ax=ax }
-    func execute(_ r:CommandRequest) async -> CommandResponse {
+    func execute(_ r:CommandRequest,authorized:@escaping()->Bool={true}) async -> CommandResponse {
         let issued=Date();let before=status.native()
-        if r.action=="sleep_now" { return CommandResponse(id:r.id,status:"error",message:"Safe native sleep control is unavailable. Use Sleep on this Mac; no force-sleep fallback is used.") }
         guard let original=status.runningApp(),let originalLaunch=original.launchDate else{return CommandResponse(id:r.id,status:"error",message:"The current Keepresso process could not be verified.")}
+        func stillAuthorized()->Bool{
+            let current=status.runningApp()
+            return authorized() && Date()<r.expiresAt && StatusEvidence.sameLaunch(pid:original.processIdentifier,launchDate:originalLaunch,currentPID:current?.processIdentifier,currentLaunchDate:current?.launchDate)
+        }
+        if r.action=="sleep_now"{
+            let initiallyStopped=before.map{!$0.isActive && (!$0.triggersEnabled || $0.triggersPaused)}==true
+            return await SafeSleep.perform(id:r.id,authorized:stillAuthorized,state:{
+                let sleepDisabled=await SystemSleepSettings.readDisabled()
+                guard let current=self.status.native() else{return nil}
+                // An already verified idle/paused state need not rewrite its
+                // snapshot in response to an idempotent Stop URL.
+                let acknowledged=initiallyStopped || StatusEvidence.acknowledges(writtenAt:current.writtenAt,modifiedAt:(try? FileManager.default.attributesOfItem(atPath:StatusFile.defaultURL().path)[.modificationDate]) as? Date,issuedAt:issued)
+                return SleepPreparationState(stopped:acknowledged ? (!current.isActive && (!current.triggersEnabled || current.triggersPaused)):nil,sleepDisabled:sleepDisabled)
+            },stop:{try await self.open(URL(string:"keepresso://stop")!)},requestSleep:{
+                let port=IOPMFindPowerManagement(mach_task_self_)
+                guard port != 0 else{return false};defer{IOServiceClose(port)}
+                return IOPMSleepSystem(port)==kIOReturnSuccess
+            })
+        }
+        guard stillAuthorized() else{return CommandResponse(id:r.id,status:"error",message:"Phone authorization changed or the command expired.")}
         do {
             switch r.action {
             case "start_manual":
@@ -87,7 +109,7 @@ import CoreGraphics
         for _ in 0..<12 {
             try? await Task.sleep(nanoseconds:250_000_000)
             let current=status.runningApp()
-            guard !Task.isCancelled,StatusEvidence.sameLaunch(pid:original.processIdentifier,launchDate:originalLaunch,currentPID:current?.processIdentifier,currentLaunchDate:current?.launchDate) else{return CommandResponse(id:r.id,status:"uncertain",message:"Keepresso stopped or restarted while the request was in progress. It will not be retried automatically.")}
+            guard !Task.isCancelled,authorized(),StatusEvidence.sameLaunch(pid:original.processIdentifier,launchDate:originalLaunch,currentPID:current?.processIdentifier,currentLaunchDate:current?.launchDate) else{return CommandResponse(id:r.id,status:"uncertain",message:"Keepresso or phone authorization changed while the request was in progress. It will not be retried automatically.")}
             guard let after=status.native(),StatusEvidence.acknowledges(writtenAt:after.writtenAt,modifiedAt:(try? FileManager.default.attributesOfItem(atPath:StatusFile.defaultURL().path)[.modificationDate]) as? Date,issuedAt:issued) else {continue}
             let confirmed:Bool
             switch r.action {
@@ -107,5 +129,13 @@ import CoreGraphics
         try await withCheckedThrowingContinuation { (continuation:CheckedContinuation<Void,Error>) in
             NSWorkspace.shared.open([url],withApplicationAt:NativeStatus.appURL,configuration:config) { _,error in if let error { continuation.resume(throwing:error) } else { continuation.resume() } }
         }
+    }
+}
+
+enum SystemSleepSettings {
+    /// Fixed read-only process off the main actor, bounded if powerd stalls.
+    static func readDisabled()async->Bool?{
+        guard let data=try? await BoundedWorker.run(executable:URL(fileURLWithPath:"/usr/bin/pmset"),arguments:["-g"],timeout:1.5,outputLimit:16384),let text=String(data:data,encoding:.utf8),!text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else{return nil}
+        return PMSetSleepControl.parseSleepDisabled(from:text)
     }
 }

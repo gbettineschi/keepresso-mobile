@@ -163,7 +163,7 @@ struct CompanionView:View{
             }
             Text("Your relay must already be deployed and configured. The Mac bearer is saved in Keychain. Authorized phones receive internet access through their existing nearby pairing.").font(.caption).foregroundStyle(.secondary)
             Divider()
-            Text("Keepresso must be installed in Applications. Start/Stop require an observed native acknowledgement. Pause/Resume additionally need Accessibility access and a uniquely exposed native control; otherwise they are unavailable. Safe remote sleep is unavailable. Temperature readings are unsupported; thermal pressure remains available.").font(.caption).foregroundStyle(.secondary)
+            Text("Native Keepresso manages sessions and safeguards. Sleep ends the session and pauses triggers first. Manually latched closed-lid mode must be turned off on the Mac; Only while brewing releases it automatically. Temperature uses the hottest readable CPU sensor.").font(.caption).foregroundStyle(.secondary)
             Text("Reminders: \(model.reminders.settings.enabled ? "enabled":"routine off"), every \(model.reminders.settings.intervalSeconds/3600) hour(s). Phone Settings can change the interval and still-awake delay.").font(.caption)
             Button("Quit Keepresso Mobile"){NSApp.terminate(nil)}
         }.padding(20)}.frame(minWidth:410,minHeight:480).tint(copper)
