@@ -41,8 +41,8 @@ First encrypted server message: `{type:"ready",macId,deviceId,serverTime:<ISO860
 Encrypted request:
 `{type:"request",id:<UUID>,action:<name>,issuedAt:<ISO8601 UTC>,expiresAt:<ISO8601 UTC>,durationMinutes?:<int>,durationSeconds?:<int>}`.
 
-Actions: `status`, `refresh_triggers`, `start_manual`, `stop_manual`, `pause_triggers`, `resume_triggers`, `sleep_now`, `snooze_reminders`, `resume_reminders`, `ack_reminder`.
-Maximum validity 30 s; issuedAt cannot be >10 s ahead of Mac clock. Phone uses ready.serverTime to compensate clock offset. start_manual accepts 15...10080 minutes in 15-minute steps. Snooze is exactly 21600 s. No shell commands, arbitrary URLs or arbitrary executables are accepted from the phone.
+Actions: `status`, `refresh_triggers`, `start_manual`, `stop_manual`, `pause_triggers`, `resume_triggers`, `sleep_now`, `snooze_reminders`, `resume_reminders`, `ack_reminder`, `set_reminder_settings`.
+Maximum validity 30 s; issuedAt cannot be >10 s ahead of Mac clock. Phone uses ready.serverTime to compensate clock offset. start_manual accepts 15...10080 minutes in 15-minute steps. Snooze is exactly 21600 s. set_reminder_settings carries reminderSettings:{enabled:boolean,intervalSeconds:3600|7200,endedAwakeDelaySeconds:120|300|600}; all three fields are required and persisted atomically. enabled controls routine reminders only; safety/still-awake warnings remain enabled. No shell commands, arbitrary URLs or arbitrary executables are accepted from the phone.
 
 Response: `{type:"response",id,status:"ok"|"error"|"uncertain",message?:<safe-user-text>,snapshot?:<Snapshot>}`. A delivered command is not an executed/acknowledged command. Connection loss after send becomes uncertain for mutations. Never automatically resend mutations. A repeated mutation ID returns its stored outcome (or uncertain), not another execution. Bind ID reservation to authorized device and request-body fingerprint; reserve durably before side effects. Reject mismatched duplicate bodies.
 
@@ -67,8 +67,8 @@ All timestamps ISO8601 UTC. Missing/null values mean unknown; no defaults implyi
     combined: boolean|null, rules: [{ id, label, satisfied: boolean|null,
       inGrace: boolean, graceRemaining: number|null,
       details: [{label,active,agent:string|null}] }], message: string|null },
-  reminders: { enabled: boolean, intervalSeconds: 3600, snoozedUntil: string|null,
-    endedAwakeDelaySeconds: 300 }
+  reminders: { enabled: boolean, intervalSeconds: 3600|7200, snoozedUntil: string|null,
+    endedAwakeDelaySeconds: 120|300|600 }
 }
 ```
 
