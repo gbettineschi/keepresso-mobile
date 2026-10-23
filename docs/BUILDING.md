@@ -13,7 +13,7 @@ These are test builds, not Play Store or notarized releases. Downloading an arti
 
 ## macOS
 
-Requirements: macOS 14 or later and a recent Swift toolchain. The package uses system frameworks and the pinned, unmodified KeepressoCore source. Full Xcode is optional when a compatible Command Line Tools installation is available.
+Requirements: macOS 14 or later to run the helper; Swift 6.4 to build/test it (Xcode/Command Line Tools 27). The package uses system frameworks and the pinned, unmodified KeepressoCore source. Full Xcode is optional when a compatible Command Line Tools installation is available. Older compilers can reject optional-Bool switches in unchanged upstream code; CI explicitly selects the tested toolchain rather than patching that source.
 
 From the repository root:
 
@@ -37,7 +37,7 @@ cd android
 ./gradlew :core:test :app:lintDebug :app:assembleDebug
 ```
 
-The APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`. Install it on the phone with Android's normal explicit APK-install confirmation. For development using an already authorized USB debugging connection:
+The APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`. Install it on the phone with Android's normal explicit APK-install confirmation. CI debug builds use temporary debug signing keys; later builds may require uninstalling and pairing again until persistent development signing is configured. For development using an already authorized USB debugging connection:
 
 ```sh
 adb install -r app/build/outputs/apk/debug/app-debug.apk

@@ -28,10 +28,17 @@ jobs:
 
   macos:
     name: Mac helper tests and app
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Library/Developer/CommandLineTools
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify Swift toolchain
+        run: |
+          swift --version
+          xcrun --show-sdk-path
+          swift --version | grep 'Swift version 6.4'
       - run: swift test --package-path macos
       - name: Package helper
         run: bash macos/scripts/build-app.sh

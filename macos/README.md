@@ -1,6 +1,6 @@
 # Keespresso Mac helper
 
-Unofficial menu-bar companion for the unmodified Keepresso app. macOS 14+, Swift 6 toolchain for tests. Bluetooth is enabled by the owner in the helper and that opt-in is remembered; no login item is installed.
+Unofficial menu-bar companion for the unmodified Keepresso app. macOS 14+ to run, Swift 6.4 (Xcode/Command Line Tools 27) to build/test the unchanged upstream source. Bluetooth is enabled by the owner in the helper and that opt-in is remembered; no login item is installed.
 
 ## Build and verify
 
