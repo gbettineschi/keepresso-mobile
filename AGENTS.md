@@ -11,3 +11,10 @@
 - Preserve unknown, stale and unavailable states. Missing permissions or decode failures are not evidence of inactivity.
 - Keep credentials, device records, real activity logs and local environment files out of git. Test vectors contain public deterministic fixture keys only.
 - Use tests for security, framing, command freshness/deduplication, reminder behaviour and state interpretation. Do not make tests change real power state.
+
+## Owner trial installations and updates
+
+- Canonical installed companion: `/Applications/Keepresso Mobile.app`. Keep official `/Applications/Keepresso.app` separate and unchanged. Do not install or run duplicate loose companion bundles in Downloads, outputs or work folders.
+- For a requested trial update, verify the package first, quit the installed companion gracefully, replace the same canonical bundle, register/reopen that path, and verify its version and saved settings. Preserve bundle ID, Keychain service, defaults, Application Support and pairing protocol. Do not clear credentials or data. Do not automatically enable Follow Keepresso or grant permissions.
+- Keep temporary unpacked bundles in hidden staging and remove them after installation. Distribute ZIP archives; remove/unregister leftover companion copies individually rather than resetting all Launch Services. Old copies go to Trash, not permanent deletion.
+- Android trials keep the same package and retained signing identity, increase versionCode, and use `adb install -r` on the explicitly selected authorized phone. Verify installed version afterward. Never uninstall/clear app data to work around a signing mismatch without the owner's explicit choice.

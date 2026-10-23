@@ -73,3 +73,9 @@ Start with status, trigger refresh and loss/reconnection. Test manual controls a
 Nearby Bluetooth has limited range. Optional encrypted internet fallback and background push require your own configured relay; see [SELF_HOSTING.md](SELF_HOSTING.md). No remote-wake feature is provided. A disconnected Mac is **Unreachable**, with its last known readings retained.
 
 Official Keepresso can update independently. The observer's pinned library does not update automatically; incompatible app/settings versions must show an unavailable assessment until the companion is updated. The pin and original-source digest list are in `shared/upstream.json`.
+
+## Updating an installed trial
+
+Keep one installed Mac companion at **`/Applications/Keepresso Mobile.app`**. Quit that companion gracefully, replace the verified bundle at that same path, then reopen it. Preserve its bundle identifier and credential/storage identities. Do not run an extra loose copy from Downloads or build folders. Keep unpacked staging bundles hidden and clean them up afterward; distribute compressed ZIPs. Existing Keychain entries and phone pairing are retained. Ad-hoc build changes can still require macOS permission/background approval; do not grant or enable those automatically.
+
+On Android, retain this owner's development signing key, keep the same package, increase `versionCode`, and use `adb -s PHONE_SERIAL install -r /absolute/path/app.apk`. Verify the installed version afterward. Do not uninstall or clear data as an update procedure. Stop on a signing mismatch instead of losing pairing. An automatic online updater is not implemented.
