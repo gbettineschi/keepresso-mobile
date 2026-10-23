@@ -26,5 +26,11 @@ public final class MutationJournal {
         do { try persist() } catch { entries.removeValue(forKey:id); throw error }
         return nil
     }
+    public func lookup(id:String,device:String,bodyDigest:String)throws->CommandResponse? {
+        guard WireCrypto.validID(id) else{throw CompanionError.invalid};_ = try WireCrypto.bytes32(bodyDigest)
+        guard let entry=entries[id] else{return nil}
+        guard entry.device==device,entry.fingerprint==bodyDigest else{throw CompanionError.mismatch}
+        return entry.result
+    }
     public func finish(id: String, result: CommandResponse) throws { guard var e=entries[id] else { throw CompanionError.invalid }; let previous=e; e.result=result; entries[id]=e; do { try persist() } catch { entries[id]=previous; throw error } }
 }

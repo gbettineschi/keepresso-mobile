@@ -74,6 +74,7 @@ test('bounded pending queue refuses additional commands instead of discarding an
   const s=setup();await s.enroll();await s.state();
   for(let i=0;i<32;i++)assert.equal((await s.phone({op:'send',envelope:s.env('command')})).status,200);
   assert.equal((await s.phone({op:'send',envelope:s.env('command')})).status,429);
+  assert.equal((await s.mac({op:'sync',epoch})).body.commands.length,16);
 });
 test('stale state upload cannot overwrite a newer state in the same epoch',async()=>{
   const s=setup();await s.enroll();const state=s.env();await s.mac({op:'sync',epoch,states:[{...state,createdAt:state.createdAt+1,expiresAt:state.expiresAt+1}]});

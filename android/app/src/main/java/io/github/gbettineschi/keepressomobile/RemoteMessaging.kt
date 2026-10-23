@@ -2,6 +2,7 @@ package io.github.gbettineschi.keepressomobile
 
 import android.app.Application
 import android.content.Context
+import androidx.work.*
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.messaging.FirebaseMessaging
@@ -18,40 +19,108 @@ class KeespressoApplication : Application() {
         if (listOf(BuildConfig.FIREBASE_APPLICATION_ID, BuildConfig.FIREBASE_API_KEY, BuildConfig.FIREBASE_PROJECT_ID, BuildConfig.FIREBASE_SENDER_ID).all { it.isNotBlank() }) {
             runCatching {
                 FirebaseApp.initializeApp(this, FirebaseOptions.Builder().setApplicationId(BuildConfig.FIREBASE_APPLICATION_ID).setApiKey(BuildConfig.FIREBASE_API_KEY).setProjectId(BuildConfig.FIREBASE_PROJECT_ID).setGcmSenderId(BuildConfig.FIREBASE_SENDER_ID).build())
-                FirebaseMessaging.getInstance().token.addOnSuccessListener { PushRegistration.save(this, it) }
+                PushRegistration.configurationChanged(this)
             }
         }
     }
 }
 object PushRegistration {
+    private val tokenLock = Any()
+    private val registrationLock = Any()
+    private val network = java.util.concurrent.Executors.newSingleThreadExecutor()
     fun configured(): Boolean = listOf(BuildConfig.FIREBASE_APPLICATION_ID, BuildConfig.FIREBASE_API_KEY, BuildConfig.FIREBASE_PROJECT_ID, BuildConfig.FIREBASE_SENDER_ID).all { it.isNotBlank() }
-    fun save(c: Context, token: String) { if (token.length in 1..4096) c.getSharedPreferences("push", Context.MODE_PRIVATE).edit().putString("token", token).apply() }
-    fun token(c: Context): String? = c.getSharedPreferences("push", Context.MODE_PRIVATE).getString("token", null)
+    private fun preferences(c: Context) = c.getSharedPreferences("push", Context.MODE_PRIVATE)
+    private fun save(c: Context, token: String) = synchronized(tokenLock) {
+        require(token.toByteArray(Charsets.UTF_8).size in 1..4096 && token.none { it.isISOControl() || it.isWhitespace() })
+        require(preferences(c).edit().putString("token", token).commit())
+    }
+    private fun enrollment(c: Context): PushEnrollment = PushEnrollment(
+        configuration = {
+            CredentialStore(c).load()?.let { credential ->
+                val url = credential.relayUrl; val ticket = credential.relayAuthTicket
+                if (url == null || ticket == null) null else PushRelayConfig(url, credential.macId, credential.deviceId, RelayCodec(credential.macId, credential.deviceId, credential.key).bearer(), ticket)
+            }
+        },
+        loadToken = { preferences(c).getString("token", null) },
+        saveToken = { save(c, it) },
+        loadMarker = { preferences(c).getString("registered", null) },
+        saveMarker = { require(preferences(c).edit().putString("registered", it).commit()) },
+        upload = { target, token -> require(target.http().call("push", token = token).boolOrNull("registered") == true) },
+        tokenTransaction = { block -> synchronized(tokenLock) { block() } },
+    )
+    fun configurationChanged(c: Context) {
+        val context = c.applicationContext
+        network.execute {
+            runCatching {
+                synchronized(registrationLock) {
+                    enrollment(context).configurationReceived { received ->
+                        if (configured()) FirebaseMessaging.getInstance().token.addOnSuccessListener { token -> network.execute { runCatching { synchronized(registrationLock) { received(token) } } } }
+                    }
+                }
+            }
+        }
+    }
+    fun tokenChanged(c: Context, token: String) {
+        val context = c.applicationContext
+        // Persist before returning from FCM; WorkManager survives process exit and has no BLE dependency.
+        runCatching {
+            save(context, token)
+            val work = OneTimeWorkRequestBuilder<PushRegistrationWorker>()
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .build()
+            WorkManager.getInstance(context).enqueueUniqueWork("relay-push-registration", ExistingWorkPolicy.REPLACE, work)
+        }
+    }
+    internal fun registerStored(c: Context) = synchronized(registrationLock) { enrollment(c).registerStoredToken() }
+}
+class PushRegistrationWorker(context: Context, parameters: WorkerParameters) : Worker(context, parameters) {
+    override fun doWork(): Result = runCatching { PushRegistration.registerStored(applicationContext); Result.success() }.getOrElse { Result.failure() }
 }
 
 class RelayMessagingService : FirebaseMessagingService() {
-    override fun onNewToken(token: String) { PushRegistration.save(this, token) }
+    override fun onNewToken(token: String) { PushRegistration.tokenChanged(this, token) }
     override fun onMessageReceived(message: RemoteMessage) {
         runCatching {
             val credential = CredentialStore(this).load() ?: return
-            val url = credential.relayUrl ?: return
-            val ticket = credential.relayAuthTicket ?: return
-            val codec = RelayCodec(credential.macId, credential.deviceId, credential.key)
+            if (credential.relayUrl == null || credential.relayAuthTicket == null) return
             val direct = message.data["relayEnvelope"]
-            val envelopes = if (direct != null) listOf(direct) else {
-                // A content-free hint can cause one bounded authenticated fetch, never a notification by itself.
-                if (message.data["relayWake"] != "1" || message.data["macId"] != credential.macId || message.data["deviceId"] != credential.deviceId) return
-                val poll = RelayHttp(RelayEndpoint(url), credential.macId, credential.deviceId, codec.bearer(), ticket).call("poll")
-                val values = poll.getValue("messages").jsonArray; require(values.size <= 32)
-                values.filter { it.jsonObject.string("kind") == "event" }.map { it.toString() }
-            }
-            envelopes.forEach { encoded ->
-                val opened = codec.open(encoded, Instant.now(), "s2c", setOf("event"))
-                val r = obj(opened.plaintext); require(r.string("type") == "event")
-                val event = r.getValue("event").jsonObject; require(event.string("id") == opened.id)
-                ReminderDelivery.post(this, credential, event, Instant.now())
+            if (direct != null) RelayEventDelivery.deliver(this, credential, direct)
+            else if (message.data["relayWake"] == "1" && message.data["macId"] == credential.macId && message.data["deviceId"] == credential.deviceId) {
+                // Only a durable, bounded worker may fetch for a hint; the hint itself cannot notify.
+                val work = OneTimeWorkRequestBuilder<RelayHintWorker>()
+                    .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                    .setInputData(workDataOf("macId" to credential.macId, "deviceId" to credential.deviceId, "queuedAt" to Instant.now().epochSecond))
+                    .build()
+                WorkManager.getInstance(this).enqueueUniqueWork("relay-hint.${credential.macId}.${credential.deviceId}", ExistingWorkPolicy.REPLACE, work)
             }
         }
+    }
+}
+
+/** One attempt with the HTTP client's 15-second deadline, never a background polling loop. */
+class RelayHintWorker(context: Context, parameters: WorkerParameters) : Worker(context, parameters) {
+    override fun doWork(): Result {
+        return runCatching {
+            val now = Instant.now(); val queuedAt = inputData.getLong("queuedAt", 0)
+            if (queuedAt <= 0 || now.epochSecond - queuedAt !in 0..299 || isStopped) return Result.success()
+            val credential = CredentialStore(applicationContext).load() ?: return Result.success()
+            if (inputData.getString("macId") != credential.macId || inputData.getString("deviceId") != credential.deviceId) return Result.success()
+            val url = credential.relayUrl ?: return Result.success(); val ticket = credential.relayAuthTicket ?: return Result.success()
+            val codec = RelayCodec(credential.macId, credential.deviceId, credential.key)
+            val poll = RelayHttp(RelayEndpoint(url), credential.macId, credential.deviceId, codec.bearer(), ticket).call("poll")
+            val messages = poll.getValue("messages").jsonArray; require(messages.size <= 32)
+            messages.forEach { if (it.jsonObject.string("kind") == "event" && !isStopped) RelayEventDelivery.deliver(applicationContext, credential, it.toString()) }
+            Result.success()
+        }.getOrElse { Result.failure() }
+    }
+}
+private object RelayEventDelivery {
+    fun deliver(context: Context, credential: Credential, encoded: String) {
+        val now = Instant.now()
+        val opened = RelayCodec(credential.macId, credential.deviceId, credential.key).open(encoded, now, "s2c", setOf("event"))
+        val r = obj(opened.plaintext); require(r.string("type") == "event")
+        val event = r.getValue("event").jsonObject; require(event.string("id") == opened.id)
+        ReminderDelivery.post(context, credential, event, now)
     }
 }
 

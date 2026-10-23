@@ -69,7 +69,8 @@ class RelayCodec(private val macId: String, private val deviceId: String, privat
 }
 
 /** No redirect or automatic upload retry, including after a timeout. */
-class RelayHttp(private val endpoint: RelayEndpoint, private val macId: String, private val deviceId: String, private val bearer: String, private val authTicket: String, client: OkHttpClient = defaultClient) {
+class RelayHttp internal constructor(private val endpoint: RelayEndpoint, private val macId: String, private val deviceId: String, private val bearer: String, private val authTicket: String, client: OkHttpClient) {
+    constructor(endpoint: RelayEndpoint, macId: String, deviceId: String, bearer: String, authTicket: String) : this(endpoint, macId, deviceId, bearer, authTicket, defaultClient)
     companion object { private val defaultClient = OkHttpClient() }
     // One-shot bodies additionally prevent HTTP status/authentication follow-up resubmissions.
     private val client = client.newBuilder().retryOnConnectionFailure(false).followRedirects(false).followSslRedirects(false).callTimeout(15, TimeUnit.SECONDS).connectTimeout(5, TimeUnit.SECONDS).readTimeout(5, TimeUnit.SECONDS).writeTimeout(5, TimeUnit.SECONDS).cache(null).build()

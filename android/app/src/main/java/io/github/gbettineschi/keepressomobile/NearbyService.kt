@@ -45,7 +45,6 @@ class NearbyService : Service() {
     private var remoteBusy = false
     private var nextRemotePoll = 0L
     private var nextNearbyPoll = 0L
-    private var pushRegistered: String? = null
     private val reconciledThisConnection = mutableSetOf<String>()
     private data class Pending(val id: String, val action: String, val mutation: Boolean, val route: String, val epoch: String?, val sent: Instant, val operationId: String? = null, val fastPoll: Boolean = false)
     private var pending: Pending? = null
@@ -104,7 +103,7 @@ class NearbyService : Service() {
     }
     fun foreground(value: Boolean) {
         foregroundActivity = value
-        if (value) nextRemotePoll = 0
+        if (value) { nextRemotePoll = 0; PushRegistration.configurationChanged(this) }
         else {
             relayFresh.disconnect()
             if (session?.ready != true) Companion.update { it.copy(authenticated = false) }
@@ -162,7 +161,7 @@ class NearbyService : Service() {
                     credential = requireNotNull(credential).copy(relayUrl = url, relayAuthTicket = ticket).also(store::save)
                     Companion.update { it.copy(internetConfigured = url != null) }
                     relayFresh.disconnect()
-                    pushRegistered = null; nextRemotePoll = 0
+                    PushRegistration.configurationChanged(this); nextRemotePoll = 0
                     Companion.activity(if (enabled) "Internet fallback configured by the authorized Mac" else "Internet fallback disabled by the Mac")
                 }
                 "response" -> response(message, "nearby", null)
@@ -203,15 +202,10 @@ class NearbyService : Service() {
                             Companion.update { it.copy(authenticated = fresh, connection = if (fresh) "Connected over internet" else "Verifying internet connection", transport = "Internet", serverOffsetSeconds = serverOffset.seconds) }
                             if (pending == null && relayFresh.epoch != null && !fresh) send("status", quiet = true)
                         }
-                        val token = PushRegistration.token(this)
-                        if (token != null && token != pushRegistered) registerPush(c, token)
                     }.onFailure { relayFresh.disconnect(); if (session?.ready != true) Companion.update { it.copy(authenticated = false, connection = "Internet response could not be authenticated") } }
                 }.onFailure { relayFresh.disconnect(); if (session?.ready != true) Companion.update { it.copy(authenticated = false, connection = "Internet unavailable; last-known readings") } }
             }
         }
-    }
-    private fun registerPush(c: Credential, token: String) {
-        network.execute { val success = runCatching { http(c).call("push", token = token).boolOrNull("registered") == true }.getOrDefault(false); main.post { if (success && credential === c) pushRegistered = token } }
     }
     fun send(action: String, duration: Int? = null, settings: ReminderSettings? = null, quiet: Boolean = false) {
         val now = Instant.now(); val serverNow = now.plus(serverOffset)

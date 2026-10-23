@@ -5,9 +5,15 @@ import Foundation
 @MainActor public final class MutationExecutor {
     private let journal:MutationJournal;private var busy=false
     public init(journal:MutationJournal){self.journal=journal}
-    public func execute(_ request:CommandRequest,device:String,body:Data,now:Date,authorized:()->Bool,operation:() async ->CommandResponse)async ->CommandResponse {
+    public func execute(_ request:CommandRequest,device:String,body:Data,now:Date,authorized:()->Bool,rejection:String?=nil,operation:() async ->CommandResponse)async ->CommandResponse {
         guard authorized() else{return CommandResponse(id:request.id,status:"error",message:"Device authorization was revoked.")}
         do{try request.validate(now:now)}catch{return CommandResponse(id:request.id,status:"error",message:"The request is invalid or expired.")}
+        if request.action == "operation_status" {
+            do {
+                let result=try journal.lookup(id:request.operationId!,device:device,bodyDigest:request.bodyDigest!)
+                return CommandResponse(id:request.id,status:"ok",operationId:request.operationId,operationStatus:result?.status ?? "not_found",operationMessage:result?.message)
+            }catch{return CommandResponse(id:request.id,status:"error",message:"The operation lookup does not match its original authorized request.")}
+        }
         guard request.isMutation else{return await operation()}
         do{
             // Reserve even a busy rejection: the same ID always has one stored
@@ -15,7 +21,8 @@ import Foundation
             if let previous=try journal.reserve(id:request.id,device:device,body:body){return previous}
         }catch{return CommandResponse(id:request.id,status:"error",message:"The command ID cannot be durably reserved or does not match its original request.")}
         let result:CommandResponse
-        if busy{result=CommandResponse(id:request.id,status:"error",message:"Another command is still awaiting native acknowledgement. This command was not executed.")}
+        if let rejection{result=CommandResponse(id:request.id,status:"error",message:rejection)}
+        else if busy{result=CommandResponse(id:request.id,status:"error",message:"Another command is still awaiting native acknowledgement. This command was not executed.")}
         else if !authorized(){result=CommandResponse(id:request.id,status:"error",message:"Device authorization was revoked.")}
         else{busy=true;result=await operation();busy=false}
         do{try journal.finish(id:request.id,result:result);return result}catch{return CommandResponse(id:request.id,status:"uncertain",message:"The outcome could not be durably saved. Do not retry automatically.")}

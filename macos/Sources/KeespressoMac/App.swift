@@ -58,6 +58,16 @@ struct CompanionView:View{
             if model.devices.isEmpty{Text("No authorized phones").foregroundStyle(.secondary)}
             ForEach(model.devices){device in HStack{Text(device.name);Spacer();Button("Revoke"){model.revoke(device)}}}
             Divider()
+            Text("Internet fallback").font(.headline)
+            Text(model.relayState).font(.caption).foregroundStyle(.secondary)
+            TextField("HTTPS relay URL",text:$model.relayURLInput).textFieldStyle(.roundedBorder)
+            SecureField("Independent Mac bearer (Base64)",text:$model.relayBearerInput).textFieldStyle(.roundedBorder)
+            HStack{
+                Button("Save and enable"){model.configureRelay()}.disabled(model.relayBearerInput.isEmpty)
+                if model.relayEnabled{Button("Disable Internet"){model.disableRelay()}}else{Button("Enable saved relay"){model.enableStoredRelay()}.disabled(model.relayURLInput.isEmpty)}
+            }
+            Text("Your relay must already be deployed and configured. The Mac bearer is saved in Keychain. Authorized phones receive internet access through their existing nearby pairing.").font(.caption).foregroundStyle(.secondary)
+            Divider()
             Text("Keepresso must be installed in Applications. Start/Stop require an observed native acknowledgement. Pause/Resume additionally need Accessibility access and a uniquely exposed native control; otherwise they are unavailable. Safe remote sleep is unavailable. Temperature readings are unsupported; thermal pressure remains available.").font(.caption).foregroundStyle(.secondary)
             Text("Reminders: \(model.reminders.settings.enabled ? "enabled":"routine off"), every \(model.reminders.settings.intervalSeconds/3600) hour(s). Phone Settings can change the interval and still-awake delay.").font(.caption)
             Button("Quit Keespresso Mac"){NSApp.terminate(nil)}

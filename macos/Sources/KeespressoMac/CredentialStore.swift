@@ -18,3 +18,20 @@ final class CredentialStore {
         if status==errSecItemNotFound { var insert=q;values.forEach { insert[$0.key]=$0.value };guard SecItemAdd(insert as CFDictionary,nil)==errSecSuccess else{throw CompanionError.unavailable} } else if status != errSecSuccess { throw CompanionError.unavailable }
     }
 }
+
+extension CredentialStore {
+    func loadRelay()->RelayConfiguration? {
+        var q=query("relay");q[kSecReturnData as String]=true;q[kSecMatchLimit as String]=kSecMatchLimitOne
+        var result:CFTypeRef?
+        guard SecItemCopyMatching(q as CFDictionary,&result)==errSecSuccess,let data=result as? Data,data.count<=8192,let decoded=try? WireJSON.decoder.decode(RelayConfiguration.self,from:data) else{return nil}
+        // Codable decoding must not bypass the production HTTPS/bearer validator.
+        return try? RelayConfiguration(url:decoded.url,macBearer:decoded.macBearer)
+    }
+    func saveRelay(_ configuration:RelayConfiguration)throws {
+        let data=try WireJSON.encoder.encode(configuration);let q=query("relay")
+        let values:[String:Any]=[kSecValueData as String:data,kSecAttrAccessible as String:kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
+        let status=SecItemUpdate(q as CFDictionary,values as CFDictionary)
+        if status==errSecItemNotFound{var insert=q;values.forEach{insert[$0.key]=$0.value};guard SecItemAdd(insert as CFDictionary,nil)==errSecSuccess else{throw CompanionError.unavailable}}
+        else if status != errSecSuccess{throw CompanionError.unavailable}
+    }
+}

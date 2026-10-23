@@ -16,7 +16,8 @@ import CompanionCore
     let model:CompanionModel
     init(model:CompanionModel){self.model=model;super.init()}
     func start(){guard manager==nil else{return};manager=CBPeripheralManager(delegate:self,queue:.main,options:[CBPeripheralManagerOptionShowPowerAlertKey:false])}
-    func stop(){manager?.stopAdvertising();manager?.removeAllServices();manager=nil;peers.values.forEach{$0.channel?.close()};peers.removeAll();notify=nil}
+    var authenticatedDevices:Set<String>{Set(peers.values.compactMap{peer in guard peer.channel != nil,let device=peer.device,model.isAuthorized(device) else{return nil};return device})}
+    func stop(){manager?.stopAdvertising();manager?.removeAllServices();manager=nil;peers.values.forEach{$0.channel?.close()};peers.removeAll();notify=nil;model.connectionCount=0;model.nearbyChanged()}
     func peripheralManagerDidUpdateState(_ peripheral:CBPeripheralManager){
         model.bluetoothState=String(describing:peripheral.state)
         guard peripheral.state == .poweredOn else { peers.removeAll();return }
@@ -47,7 +48,7 @@ import CompanionCore
         guard !peer.busy else{throw CompanionError.limit}
         let object=try WireJSON.object(data);let type=object["type"] as? String
         if let channel=peer.channel {
-            guard model.devices.contains(where:{$0.deviceId==peer.device}) else{throw CompanionError.unauthorized}
+            guard let device=peer.device,model.isAuthorized(device) else{throw CompanionError.unauthorized}
             let record=try WireJSON.decoder.decode(SealedRecord.self,from:data)
             let plain=try channel.open(record)
             let command=try WireJSON.decoder.decode(CommandRequest.self,from:plain)
@@ -58,7 +59,7 @@ import CompanionCore
                 guard let self,let peer else{return}
                 let response=await self.model.handle(command,device:device,body:plain)
                 defer{peer.busy=false}
-                guard self.peers[peer.central.identifier] === peer,self.model.devices.contains(where:{$0.deviceId==device}) else{return}
+                guard self.peers[peer.central.identifier] === peer,self.model.isAuthorized(device) else{return}
                 do { var object=try WireJSON.object(WireJSON.encoder.encode(response));object["snapshot"]=self.model.snapshot();try self.sendPrivate(object,peer:peer) } catch { self.drop(peer.central.identifier,ban:true) }
             }
             return
@@ -73,13 +74,14 @@ import CompanionCore
             guard peer.handshake==nil,peers.values.filter({$0.handshake != nil}).count<4,
                   (object["version"] as? Int)==1,(object["macId"] as? String)==model.macId,
                   let device=object["deviceId"] as? String,let nonce=object["clientNonce"] as? String,
-                  let credential=model.devices.first(where:{$0.deviceId==device}) else{throw CompanionError.unauthorized}
+                  model.isAuthorized(device),let credential=model.devices.first(where:{$0.deviceId==device}) else{throw CompanionError.unauthorized}
             let handshake=try ServerHandshake(mac:model.macId,device:device,clientNonce:nonce,key:credential.key,now:Date());peer.handshake=handshake;peer.device=device
             try send(handshake.challenge,peer:peer)
         case "authenticate":
-            guard let handshake=peer.handshake,let proof=object["proof"] as? String,model.devices.contains(where:{$0.deviceId==handshake.deviceId}) else{throw CompanionError.unauthorized}
+            guard let handshake=peer.handshake,let proof=object["proof"] as? String,model.isAuthorized(handshake.deviceId) else{throw CompanionError.unauthorized}
             peer.channel=try handshake.authenticate(proof:proof,now:Date());peer.handshake=nil;peer.authenticatedAt=Date()
             try sendPrivate(["type":"ready","macId":model.macId,"deviceId":handshake.deviceId,"serverTime":WireJSON.iso(Date())],peer:peer)
+            model.deviceBecameNearby(handshake.deviceId)
         default:throw CompanionError.unauthorized
         }
     }
@@ -104,12 +106,20 @@ import CompanionCore
         if let p=model.pairing.pending,now>=p.expires{denyPending()}
         model.pairing.expire(now:now)
     }
-    func broadcast(_ event:CompanionEvent){guard let payload=try? WireJSON.object(WireJSON.encoder.encode(event)) else{return};for (id,peer) in peers where peer.channel != nil {do{try sendPrivate(["type":"event","event":payload],peer:peer)}catch{drop(id,ban:true)}}}
-    private func sendPrivate(_ object:[String:Any],peer:Peer)throws {guard let c=peer.channel else{throw CompanionError.unauthorized};let record=try c.seal(WireJSON.data(object));try send(record,peer:peer)}
+    func sendRelayConfiguration(device:String,url:String,authTicket:String){
+        guard model.isAuthorized(device) else{return}
+        for (id,peer) in peers where peer.device==device && peer.channel != nil{do{try sendPrivate(["type":"relay_config","url":url,"enabled":true,"authTicket":authTicket],peer:peer)}catch{drop(id,ban:true)}}
+    }
+    func sendEvent(_ event:CompanionEvent,device:String){
+        guard model.isAuthorized(device),Date().timeIntervalSince(event.createdAt)<300,let payload=try? WireJSON.object(WireJSON.encoder.encode(event)) else{return}
+        for (id,peer) in peers where peer.device==device && peer.channel != nil{do{try sendPrivate(["type":"event","event":payload],peer:peer)}catch{drop(id,ban:true)}}
+    }
+    func broadcast(_ event:CompanionEvent){guard let payload=try? WireJSON.object(WireJSON.encoder.encode(event)) else{return};for (id,peer) in peers where peer.channel != nil && peer.device.map(model.isAuthorized)==true {do{try sendPrivate(["type":"event","event":payload],peer:peer)}catch{drop(id,ban:true)}}}
+    private func sendPrivate(_ object:[String:Any],peer:Peer)throws {guard let c=peer.channel,let device=peer.device,model.isAuthorized(device) else{throw CompanionError.unauthorized};let record=try c.seal(WireJSON.data(object));try send(record,peer:peer)}
     private func send<T:Encodable>(_ object:T,peer:Peer)throws {try enqueue(WireJSON.encoder.encode(object),peer:peer)}
     private func send(_ object:[String:Any],peer:Peer)throws {try enqueue(WireJSON.data(object),peer:peer)}
     private func enqueue(_ data:Data,peer:Peer)throws {try peer.queue.enqueue(record:data,mtu:peer.central.maximumUpdateValueLength);flush()}
     private func flush(){guard let manager,let notify else{return};for peer in peers.values {while let next=peer.queue.next {guard manager.updateValue(next,for:notify,onSubscribedCentrals:[peer.central]) else{return};peer.queue.accepted()}}}
     func peripheralManagerIsReady(toUpdateSubscribers peripheral:CBPeripheralManager){flush()}
-    private func drop(_ id:UUID,ban:Bool){peers[id]?.channel?.close();peers.removeValue(forKey:id);model.connectionCount=peers.count;if ban{if banned.count<64{banned[id]=Date().addingTimeInterval(60)}else{globallyBlockedUntil=Date().addingTimeInterval(60)}};if model.pairing.pending?.peer==id.uuidString{model.pairing.deny();model.pairingChanged()}}
+    private func drop(_ id:UUID,ban:Bool){let authenticated=peers[id]?.channel != nil;peers[id]?.channel?.close();peers.removeValue(forKey:id);if authenticated{model.nearbyChanged()};model.connectionCount=peers.count;if ban{if banned.count<64{banned[id]=Date().addingTimeInterval(60)}else{globallyBlockedUntil=Date().addingTimeInterval(60)}};if model.pairing.pending?.peer==id.uuidString{model.pairing.deny();model.pairingChanged()}}
 }

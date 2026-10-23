@@ -114,7 +114,7 @@ export class Relay {
             tx.set(path,record);
           }
         }
-        return{commands:output.filter(e=>!replying.has(e.id)),retryEvents};
+        return{commands:output.filter(e=>!replying.has(e.id)).slice(0,16),retryEvents};
       });
       for(const p of pendingPush){
         // FCM is outside the database retry loop. A crash leaves a bounded lease;

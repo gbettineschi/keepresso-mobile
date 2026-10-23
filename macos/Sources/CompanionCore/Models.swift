@@ -20,11 +20,13 @@ public struct ReminderSettings: Codable, Equatable {
 public struct CommandRequest: Codable {
     public var type = "request"; public var id: String; public var action: String; public var issuedAt: Date; public var expiresAt: Date
     public var durationMinutes: Int?; public var durationSeconds: Int?; public var reminderSettings: ReminderSettings?
-    public init(id: String, action: String, issuedAt: Date, expiresAt: Date, durationMinutes: Int? = nil, durationSeconds: Int? = nil, reminderSettings: ReminderSettings? = nil) { self.id=id; self.action=action; self.issuedAt=issuedAt; self.expiresAt=expiresAt; self.durationMinutes=durationMinutes; self.durationSeconds=durationSeconds; self.reminderSettings=reminderSettings }
-    public var isMutation: Bool { !["status", "refresh_triggers"].contains(action) }
+    public var operationId:String?; public var bodyDigest:String?
+    public init(id: String, action: String, issuedAt: Date, expiresAt: Date, durationMinutes: Int? = nil, durationSeconds: Int? = nil, reminderSettings: ReminderSettings? = nil, operationId:String? = nil, bodyDigest:String? = nil) { self.operationId=operationId; self.bodyDigest=bodyDigest; self.id=id; self.action=action; self.issuedAt=issuedAt; self.expiresAt=expiresAt; self.durationMinutes=durationMinutes; self.durationSeconds=durationSeconds; self.reminderSettings=reminderSettings }
+    public var isMutation: Bool { !["status", "refresh_triggers", "operation_status"].contains(action) }
     public func validate(now: Date) throws {
         guard type == "request", WireCrypto.validID(id), expiresAt > now, expiresAt > issuedAt, expiresAt.timeIntervalSince(issuedAt) <= 30, issuedAt.timeIntervalSince(now) <= 10 else { throw CompanionError.expired }
-        guard ["status","refresh_triggers","start_manual","stop_manual","pause_triggers","resume_triggers","sleep_now","snooze_reminders","resume_reminders","ack_reminder","set_reminder_settings"].contains(action) else { throw CompanionError.invalid }
+        guard ["status","refresh_triggers","operation_status","start_manual","stop_manual","pause_triggers","resume_triggers","sleep_now","snooze_reminders","resume_reminders","ack_reminder","set_reminder_settings"].contains(action) else { throw CompanionError.invalid }
+        if action == "operation_status" { guard let operationId,WireCrypto.validID(operationId),let bodyDigest else{throw CompanionError.invalid};_ = try WireCrypto.bytes32(bodyDigest) } else if operationId != nil || bodyDigest != nil {throw CompanionError.invalid}
         if action == "start_manual" { guard let n=durationMinutes, (15...10080).contains(n), n % 15 == 0 else { throw CompanionError.invalid } } else if durationMinutes != nil { throw CompanionError.invalid }
         if action == "snooze_reminders" { guard durationSeconds == 21600 else { throw CompanionError.invalid } } else if durationSeconds != nil { throw CompanionError.invalid }
         if action == "set_reminder_settings" { guard let s=reminderSettings else { throw CompanionError.invalid }; try s.validate() } else if reminderSettings != nil { throw CompanionError.invalid }
@@ -32,7 +34,8 @@ public struct CommandRequest: Codable {
 }
 public struct CommandResponse: Codable, Equatable {
     public var type = "response"; public var id: String; public var status: String; public var message: String?
-    public init(id: String, status: String, message: String? = nil) { self.id=id; self.status=status; self.message=message }
+    public var operationId:String?; public var operationStatus:String?; public var operationMessage:String?
+    public init(id: String, status: String, message: String? = nil,operationId:String? = nil,operationStatus:String? = nil,operationMessage:String? = nil) { self.id=id; self.status=status; self.message=message;self.operationId=operationId;self.operationStatus=operationStatus;self.operationMessage=operationMessage }
 }
 public struct CompanionEvent: Codable {
     public var id = UUID().uuidString.lowercased(); public var kind: String; public var createdAt: Date; public var title: String; public var body: String; public var scheduledEnd: Date?; public var snoozedUntil: Date?
