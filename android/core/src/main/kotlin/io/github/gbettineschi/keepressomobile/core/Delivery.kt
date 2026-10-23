@@ -2,7 +2,8 @@ package io.github.gbettineschi.keepressomobile.core
 
 class Delivery {
     private val pending = linkedMapOf<String, Boolean>()
-    fun sent(id: String, mutation: Boolean) { require(pending.size < 32 && !pending.containsKey(id)); pending[id] = mutation }
+    val hasPending: Boolean get() = pending.isNotEmpty()
+    fun sent(id: String, mutation: Boolean) { require(pending.isEmpty()); pending[id] = mutation }
     fun acknowledge(id: String, status: String) { require(status in setOf("ok", "error", "uncertain")); require(pending.remove(id) != null) }
     fun disconnect(): Map<String, String> = pending.mapValues { if (it.value) "uncertain" else "disconnected" }.also { pending.clear() }
 }

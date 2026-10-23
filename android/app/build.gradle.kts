@@ -1,7 +1,7 @@
 plugins {
-    id("com.android.application") version "8.9.2"
-    kotlin("android") version "2.1.20"
-    id("org.jetbrains.kotlin.plugin.compose") version "2.1.20"
+    id("com.android.application")
+    kotlin("android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 android {
     namespace = "io.github.gbettineschi.keepressomobile"

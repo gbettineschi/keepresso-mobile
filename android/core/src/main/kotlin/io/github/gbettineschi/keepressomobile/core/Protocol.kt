@@ -104,7 +104,7 @@ data class Invitation(val macId: String, val token: ByteArray, val name: String,
             val params = mutableMapOf<String, String>()
             u.rawQuery.split('&').forEach { val pair = it.split('=', limit = 2); require(pair.size == 2); val k = URLDecoder.decode(pair[0], "UTF-8"); require(!params.containsKey(k)); params[k] = URLDecoder.decode(pair[1], "UTF-8") }
             require(params.keys == setOf("v", "mac", "token", "expires", "name") && params["v"] == "1")
-            val expires = params.getValue("expires").toLong(); require(expires > nowSeconds && expires - nowSeconds <= 600)
+            val expires = params.getValue("expires").toLong(); require(expires > 0 && expires - nowSeconds in -300..600)
             val name = params.getValue("name"); require(name.isNotBlank() && name.toByteArray().size <= 80)
             return Invitation(canonicalId(params.getValue("mac")), decode64(params.getValue("token"), 32), name, expires)
         }

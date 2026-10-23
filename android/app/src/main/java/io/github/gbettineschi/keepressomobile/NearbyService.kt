@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.*
 
 data class ActivityEntry(val time: Instant, val text: String)
-data class UiState(val connection: String = "Not connected", val authenticated: Boolean = false, val snapshot: JsonObject? = null, val receivedAt: Instant? = null, val lastContact: Instant? = null, val pairedName: String? = null, val result: String? = null, val busy: Boolean = false, val activity: List<ActivityEntry> = emptyList()) {
+data class UiState(val connection: String = "Not connected", val authenticated: Boolean = false, val snapshot: JsonObject? = null, val receivedAt: Instant? = null, val lastContact: Instant? = null, val pairedName: String? = null, val result: String? = null, val busy: Boolean = false, val serverOffsetSeconds: Long = 0, val activity: List<ActivityEntry> = emptyList()) {
     fun reachable(now: Instant): Boolean = authenticated && receivedAt?.let { java.time.Duration.between(it, now).seconds in 0..15 } == true
 }
 object Companion {
@@ -33,11 +33,15 @@ class NearbyService : Service() {
     private var session: ClientSession? = null
     private var delivery = Delivery()
     private var pendingMutation: String? = null
+    private var pendingRequestId: String? = null
+    private var pendingAction: String? = null
     private var enabled = true
     private var reconnectGeneration = 0
     private val preferences by lazy { getSharedPreferences("reminders", MODE_PRIVATE) }
     private val seenEvents = linkedSetOf<String>()
     private var serverOffset = java.time.Duration.ZERO
+    private var requestedPreview = false
+    private var protocolFailures = 0
     private val poll = object : Runnable { override fun run() {
         if (!enabled) return
         if (session?.ready == true) send("status", quiet = true)
@@ -50,14 +54,14 @@ class NearbyService : Service() {
         Companion.update { it.copy(pairedName = credential?.name) }
         Notifications.channels(this)
         startForeground(1, Notifications.connection(this, "Nearby connection enabled"))
-        ble = BleCentral(this, { text -> Companion.update { it.copy(connection = text) } }, ::subscribed, ::receive, ::disconnected)
+        ble = BleCentral(this, { text -> Companion.update { it.copy(connection = text) }; Notifications.updateConnection(this, text) }, ::subscribed, ::receive, ::disconnected)
         main.postDelayed(poll, 10000)
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             "pair" -> {
                 runCatching { Invitation.parse(intent.getStringExtra("invitation") ?: "", Instant.now().epochSecond) }.onSuccess {
-                    invitation = it; credential = null; enabled = true; ble.start()
+                    invitation = null; credential = null; enabled = true; protocolFailures = 0; ble.start(); invitation = it
                 }.onFailure { Companion.update { s -> s.copy(result = "Invalid or expired pairing invitation") } }
             }
             "reset" -> {
@@ -66,7 +70,7 @@ class NearbyService : Service() {
             }
             "snooze" -> { preferences.edit().putLong("snoozeUntil", Instant.now().plusSeconds(21600).epochSecond).apply(); if (session?.ready == true) send("snooze_reminders") else Companion.activity("Routine notifications snoozed locally for 6 hours; Mac unreachable") }
             "ack" -> if (session?.ready == true) send("ack_reminder")
-            else -> if (credential != null) { enabled = true; ble.start() } else Companion.update { it.copy(connection = "Pair with your Mac") }
+            else -> if (credential != null) { enabled = true; protocolFailures = 0; ble.start() } else Companion.update { it.copy(connection = "Pair with your Mac") }
         }
         return START_NOT_STICKY
     }
@@ -109,44 +113,51 @@ class NearbyService : Service() {
             when (message.string("type")) {
                 "ready" -> {
                     serverOffset = java.time.Duration.between(now, Instant.parse(message.string("serverTime"))); ble.authenticated()
-                    Companion.update { it.copy(authenticated = true, connection = "Connected nearby", lastContact = now) }; Companion.activity("Nearby encrypted connection authenticated")
+                    Companion.update { it.copy(authenticated = true, connection = "Connected nearby", lastContact = now, serverOffsetSeconds = serverOffset.seconds) }; Companion.activity("Nearby encrypted connection authenticated")
                     send("status", quiet = true)
                 }
                 "response" -> {
                     val id = canonicalId(message.string("id")); val status = message.string("status"); delivery.acknowledge(id, status)
+                    pendingRequestId = null; Companion.update { it.copy(busy = false) }
+                    if (pendingAction == "refresh_triggers" && status != "ok") Companion.update { it.copy(result = message.stringOrNull("message") ?: "Trigger assessment unavailable; last successful check preserved") }
+                    pendingAction = null
                     if (pendingMutation == id) { pendingMutation = null; Companion.update { it.copy(busy = false, result = message.stringOrNull("message") ?: when (status) { "ok" -> "Mac acknowledged the command"; "uncertain" -> "Outcome uncertain. Check your Mac before trying again."; else -> "Mac could not complete the command" }) }; Companion.activity("Command outcome: $status") }
                     val snapshot = message["snapshot"]?.takeUnless { it == JsonNull }?.jsonObject
                     if (snapshot != null) {
-                        val checked = DashboardState(); checked.update(snapshot.toString(), SystemClock.elapsedRealtime())
+                        val checked = DashboardState(); checked.update(snapshot.toString(), SystemClock.elapsedRealtime(), now.plus(serverOffset))
                         val captured = Instant.parse(snapshot.string("capturedAt")); val serverNow = now.plus(serverOffset)
                         val age = java.time.Duration.between(captured, serverNow).seconds
                         require(age >= -10)
                         val localCaptured = captured.minus(serverOffset)
                         Companion.update { it.copy(snapshot = snapshot, receivedAt = localCaptured, lastContact = now) }
+                        if (!requestedPreview && checked.run { connected = true; reachable(SystemClock.elapsedRealtime()) } && snapshot["capabilities"]?.jsonObject?.boolOrNull("refreshTriggers") == true) {
+                            requestedPreview = true; send("refresh_triggers", quiet = true)
+                        }
                     } else Companion.update { it.copy(lastContact = now) }
                 }
                 "event" -> event(message.getValue("event").jsonObject)
             }
-        } catch (_: Exception) { ble.close("Secure protocol validation failed; connection closed") }
+        } catch (_: Exception) { protocolFailures++; if (protocolFailures >= 4) enabled = false; ble.close(if (enabled) "Secure protocol validation failed; connection closed" else "Repeated authorization failures. Check your Mac, then reconnect.") }
     }
     fun send(action: String, duration: Int? = null, settings: ReminderSettings? = null, quiet: Boolean = false) {
         val s = session
         if (s?.ready != true || (action != "status" && !Companion.state.value.reachable(Instant.now()))) { if (!quiet) Companion.update { it.copy(result = "Mac unreachable. No command was queued.") }; return }
         val mutation = action !in setOf("status", "refresh_triggers")
-        if (mutation && pendingMutation != null) { Companion.update { it.copy(result = "Wait for the current command outcome") }; return }
+        if (delivery.hasPending) { if (!quiet) Companion.update { it.copy(result = "Wait for the current Mac response") }; return }
         try {
             val record = s.request(action, Instant.now(), duration, settings); val id = requireNotNull(s.lastRequestId)
-            delivery.sent(id, mutation)
+            delivery.sent(id, mutation); pendingRequestId = id; pendingAction = action
+            Companion.update { it.copy(busy = true) }
             if (mutation) { pendingMutation = id; Companion.update { it.copy(busy = true, result = "Waiting for Mac acknowledgement…") } }
             ble.send(record)
             val epoch = reconnectGeneration
-            main.postDelayed({ if (epoch == reconnectGeneration) { if (pendingMutation == id) ble.close("Command outcome uncertain; connection closed") } }, 31000)
+            main.postDelayed({ if (epoch == reconnectGeneration) { if (pendingRequestId == id) ble.close(if (pendingMutation == id) "Command outcome uncertain; connection closed" else "Mac response timed out; connection closed") } }, 31000)
         } catch (_: Exception) { ble.close("Command delivery uncertain; connection closed") }
     }
     private fun disconnected() {
-        reconnectGeneration++; session = null
+        reconnectGeneration++; session = null; invitation = null; requestedPreview = false
         val outcomes = delivery.disconnect()
-        val uncertain = outcomes.values.any { it == "uncertain" }; pendingMutation = null
+        val uncertain = outcomes.values.any { it == "uncertain" }; pendingMutation = null; pendingRequestId = null; pendingAction = null
         Companion.update { it.copy(authenticated = false, busy = false, result = if (uncertain) "Command outcome uncertain. It will never be retried automatically." else it.result) }
         if (uncertain) Companion.activity("Connection lost before command acknowledgement — outcome uncertain")
         val epoch = reconnectGeneration
@@ -163,6 +174,8 @@ class NearbyService : Service() {
     override fun onDestroy() { enabled = false; main.removeCallbacksAndMessages(null); if (::ble.isInitialized) ble.close(null); Companion.service = null; super.onDestroy() }
 }
 object Notifications {
+    private val posted = linkedSetOf<Int>()
+    fun updateConnection(c: Context, text: String) { runCatching { c.getSystemService(NotificationManager::class.java).notify(1, connection(c, text)) } }
     fun channels(c: Context) { c.getSystemService(NotificationManager::class.java).createNotificationChannels(listOf(NotificationChannel("nearby", "Nearby connection", NotificationManager.IMPORTANCE_LOW), NotificationChannel("reminders", "Routine reminders", NotificationManager.IMPORTANCE_DEFAULT), NotificationChannel("warnings", "Battery, heat and sleep warnings", NotificationManager.IMPORTANCE_HIGH))) }
     private fun open(c: Context, id: Int) = PendingIntent.getActivity(c, id, Intent(c, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     fun connection(c: Context, text: String): Notification = NotificationCompat.Builder(c, "nearby").setSmallIcon(R.drawable.keepresso_menu_idle).setContentTitle("Keespresso nearby").setContentText(text).setContentIntent(open(c, 0)).setOngoing(true).build()
@@ -170,7 +183,7 @@ object Notifications {
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(c, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         val b = NotificationCompat.Builder(c, if (routine) "reminders" else "warnings").setSmallIcon(R.drawable.keepresso_menu_brewing).setContentTitle(title).setContentText(body).setStyle(NotificationCompat.BigTextStyle().bigText(body)).setContentIntent(open(c, id)).setAutoCancel(true)
         if (routine) for ((action, label) in listOf("ack" to "OK", "snooze" to "Snooze 6 hours")) b.addAction(0, label, PendingIntent.getBroadcast(c, id xor action.hashCode(), Intent(c, ReminderReceiver::class.java).setAction(action).putExtra("notificationId", id), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
-        b.addAction(0, "Open", open(c, id)); c.getSystemService(NotificationManager::class.java).notify(id, b.build())
+        b.addAction(0, "Open", open(c, id)); val manager = c.getSystemService(NotificationManager::class.java); posted.add(id); while (posted.size > 24) manager.cancel(posted.first().also { posted.remove(it) }); manager.notify(id, b.build())
     }
 }
 class ReminderReceiver : BroadcastReceiver() {

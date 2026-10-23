@@ -41,7 +41,7 @@ class ProtocolTest {
     @Test fun pairInvitationRejectsExpiredAndDuplicateFields() {
         val uri = "keespresso://pair?v=1&mac=${s("macId")}&token=${java.net.URLEncoder.encode(s("token"), "UTF-8")}&expires=1300&name=MacBook"
         assertEquals("MacBook", Invitation.parse(uri, 1000).name)
-        assertFailsWith<IllegalArgumentException> { Invitation.parse(uri, 1300) }; assertFailsWith<IllegalArgumentException> { Invitation.parse(uri + "&v=1", 1000) }
+        assertFailsWith<IllegalArgumentException> { Invitation.parse(uri, 1601) }; assertFailsWith<IllegalArgumentException> { Invitation.parse(uri + "&v=1", 1000) }
     }
     @Test fun requestFreshnessAndDurationBounds() {
         val now = Instant.parse("2026-10-23T12:00:00Z")

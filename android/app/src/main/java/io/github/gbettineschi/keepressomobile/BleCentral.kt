@@ -24,6 +24,12 @@ class BleCentral(private val context: Context, private val state: (String) -> Un
     private var framer = Framer()
     private var chunkSize = 20
     private var scanning = false
+    private var subscriptionReady = false
+    private val frameExpiry = object : Runnable { override fun run() {
+        if (gatt == null) return
+        try { framer.feed(byteArrayOf(), android.os.SystemClock.elapsedRealtime()) } catch (_: Exception) { close("Partial Bluetooth record expired"); return }
+        handler.postDelayed(this, 1000)
+    } }
     private var generation = 0
     private var writeToken = 0
     private var handshakeTimer: Runnable? = null
@@ -32,7 +38,7 @@ class BleCentral(private val context: Context, private val state: (String) -> Un
             if (!scanning || gatt != null) return@post
             stopScan(); state("Connecting nearby…")
             gatt = result.device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
-            val epoch = generation; handler.postDelayed({ if (epoch == generation && input == null) close("Bluetooth connection timed out") }, 15000)
+            val epoch = generation; handler.postDelayed({ if (epoch == generation && !subscriptionReady) close("Bluetooth connection timed out") }, 15000)
         } }
         override fun onScanFailed(errorCode: Int) { handler.post { close("Bluetooth scan unavailable ($errorCode)") } }
     }
@@ -40,7 +46,7 @@ class BleCentral(private val context: Context, private val state: (String) -> Un
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) { handler.post {
             if (g !== gatt) return@post
             if (status != BluetoothGatt.GATT_SUCCESS || newState == BluetoothProfile.STATE_DISCONNECTED) { close("Unreachable"); return@post }
-            if (newState == BluetoothProfile.STATE_CONNECTED && !g.discoverServices()) close("Service discovery failed")
+            if (newState == BluetoothProfile.STATE_CONNECTED) { handler.post(frameExpiry); if (!g.discoverServices()) close("Service discovery failed") }
         } }
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) { handler.post {
             if (g !== gatt) return@post
@@ -56,7 +62,7 @@ class BleCentral(private val context: Context, private val state: (String) -> Un
         override fun onDescriptorWrite(g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) { handler.post {
             if (g !== gatt) return@post
             if (status != BluetoothGatt.GATT_SUCCESS) close("Notification subscription failed") else {
-                state("Authenticating…"); subscribed()
+                subscriptionReady = true; state("Authenticating…"); subscribed()
                 val epoch = generation; handshakeTimer = Runnable { if (generation == epoch) close("Authorization timed out") }.also { handler.postDelayed(it, 300000) }
             }
         } }
@@ -66,7 +72,7 @@ class BleCentral(private val context: Context, private val state: (String) -> Un
             if (status != BluetoothGatt.GATT_SUCCESS) close("Write delivery uncertain") else { queue.complete(); drain() }
         } }
         override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic, value: ByteArray) { receive(g, c, value.copyOf()) }
-        override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic) { receive(g, c, c.value.copyOf()) }
+        override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic) { receive(g, c, c.value?.copyOf() ?: return) }
     }
     private fun receive(g: BluetoothGatt, c: BluetoothGattCharacteristic, value: ByteArray) { handler.post {
         if (g !== gatt || c.uuid != OUTPUT) return@post
@@ -101,7 +107,7 @@ class BleCentral(private val context: Context, private val state: (String) -> Un
     }
     fun authenticated() { handshakeTimer?.let(handler::removeCallbacks); handshakeTimer = null }
     fun close(reason: String?) {
-        generation++; writeToken++; stopScan(); handshakeTimer?.let(handler::removeCallbacks); handshakeTimer = null
+        generation++; writeToken++; subscriptionReady = false; handler.removeCallbacks(frameExpiry); stopScan(); handshakeTimer?.let(handler::removeCallbacks); handshakeTimer = null
         val old = gatt; gatt = null; input = null; output = null; queue.clear(); framer = Framer(); chunkSize = 20
         try { old?.disconnect(); old?.close() } catch (_: SecurityException) { }
         disconnected(); if (reason != null) state(reason)

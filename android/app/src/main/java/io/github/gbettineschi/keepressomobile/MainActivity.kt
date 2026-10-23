@@ -49,6 +49,11 @@ class MainActivity : ComponentActivity() {
     private fun pair(text: String) { startNearby("pair", text) }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val restored = runCatching { CredentialStore(this).load() }.getOrNull()
+        restored?.let { saved ->
+            Companion.update { it.copy(pairedName = saved.name) }
+            if (requiredBluetooth().all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED } && Companion.service == null) startNearby()
+        }
         setContent {
             val dark = isSystemInDarkTheme()
             val accent = if (dark) Color(0xFFD98F52) else Color(0xFFA64B23)
@@ -149,9 +154,9 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
                 Spacer(Modifier.width(8.dp)); Text("Brewing session", style = MaterialTheme.typography.titleSmall); Spacer(Modifier.weight(1f))
                 Text(when(active) { true -> "Running"; false -> "Not running"; null -> "Unknown" }, style = MaterialTheme.typography.labelSmall)
             }
-            val end = parsed(k.text("endsAt")); val remaining = end?.let { java.time.Duration.between(now, it).toMinutes().coerceAtLeast(0) }
+            val end = parsed(k.text("endsAt")); val remaining = end?.let { java.time.Duration.between(now.plusSeconds(state.serverOffsetSeconds), it).toMinutes().coerceAtLeast(0) }
             Text(when { batteryPaused -> "Paused"; manual && remaining != null -> "${duration(remaining)} remaining"; active == true -> "Active"; active == false -> "Inactive"; else -> "Unknown" }, style = MaterialTheme.typography.headlineSmall)
-            Text(when { batteryPaused -> "Paused for low battery."; manual -> "Manual session. Triggers are paused."; active == true -> "Automatic trigger session."; active == false -> if (k.flag("triggersPaused") == true) "No manual session. Triggers are paused." else "No active brewing session."; else -> "Session status unavailable." }, style = MaterialTheme.typography.bodySmall)
+            Text(when { batteryPaused -> "Paused for low battery."; manual -> "Manual session. Triggers are paused."; active == true -> when (k.text("sessionKind")) { "automatic" -> "Automatic trigger session."; "lease" -> "Companion session."; "manual" -> "Manual session."; else -> "Session kind unknown." }; active == false -> if (k.flag("triggersPaused") == true) "No manual session. Triggers are paused." else "No active brewing session."; else -> "Session status unavailable." }, style = MaterialTheme.typography.bodySmall)
         }
     }
     Text("Active triggers", style = MaterialTheme.typography.titleSmall)
@@ -183,7 +188,7 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
             OutlinedButton(onClick = { minutes -= 15 }, enabled = minutes > 15) { Text("−") }
             Text(duration(minutes.toLong()), style = MaterialTheme.typography.bodyMedium)
             OutlinedButton(onClick = { minutes += 15 }, enabled = minutes < 10080) { Text("+") }
-            Button(onClick = { Companion.service?.send("start_manual", minutes) }, enabled = can("startManual"), modifier = Modifier.weight(1f)) { Text("Start") }
+            Button(onClick = { Companion.service?.send("start_manual", minutes) }, enabled = can("startManual") && !batteryPaused, modifier = Modifier.weight(1f)) { Text("Start") }
         }
     }
     if (reachable && caps.flag(if (manual) "stopManual" else "startManual") != true) Text("Manual control unavailable on this Mac. Check Keepresso and the helper's supported actions.", style = MaterialTheme.typography.labelSmall)
@@ -200,12 +205,13 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
     Text("Internet access", style = MaterialTheme.typography.titleSmall); Text("Not implemented. Delivery requires a nearby Bluetooth connection.", style = MaterialTheme.typography.bodySmall)
     HorizontalDivider()
     val currentEnabled = r.flag("enabled"); val currentInterval = r.number("intervalSeconds")?.toInt(); val currentDelay = r.number("endedAwakeDelaySeconds")?.toInt()
-    fun save(enabled: Boolean = currentEnabled ?: true, interval: Int = currentInterval ?: 3600, delay: Int = currentDelay ?: 300) { Companion.service?.send("set_reminder_settings", settings = ReminderSettings(enabled, interval, delay)) }
+    val completeSettings = currentEnabled != null && currentInterval != null && currentDelay != null
+    fun save(enabled: Boolean? = currentEnabled, interval: Int? = currentInterval, delay: Int? = currentDelay) { if (enabled != null && interval != null && delay != null) Companion.service?.send("set_reminder_settings", settings = ReminderSettings(enabled, interval, delay)) }
     Text("Still-running reminder", style = MaterialTheme.typography.titleSmall)
-    Row { listOf("Every hour" to 3600, "Every 2 hours" to 7200).forEach { (label, value) -> FilterChip(selected = currentEnabled == true && currentInterval == value, onClick = { save(enabled = true, interval = value) }, enabled = reachable && !state.busy && r != null, label = { Text(label) }) } }
-    FilterChip(selected = currentEnabled == false, onClick = { save(enabled = false) }, enabled = reachable && !state.busy && r != null, label = { Text("Off") })
+    Row { listOf("Every hour" to 3600, "Every 2 hours" to 7200).forEach { (label, value) -> FilterChip(selected = currentEnabled == true && currentInterval == value, onClick = { save(enabled = true, interval = value) }, enabled = reachable && !state.busy && completeSettings, label = { Text(label) }) } }
+    FilterChip(selected = currentEnabled == false, onClick = { save(enabled = false) }, enabled = reachable && !state.busy && completeSettings, label = { Text("Off") })
     Text("Still awake after stopping", style = MaterialTheme.typography.titleSmall)
-    Row { listOf(120, 300, 600).forEach { value -> FilterChip(selected = currentDelay == value, onClick = { save(delay = value) }, enabled = reachable && !state.busy && r != null, label = { Text("${value / 60} min") }) } }
+    Row { listOf(120, 300, 600).forEach { value -> FilterChip(selected = currentDelay == value, onClick = { save(delay = value) }, enabled = reachable && !state.busy && completeSettings, label = { Text("${value / 60} min") }) } }
     Text("Routine reminders", style = MaterialTheme.typography.titleSmall)
     Row { TextButton(onClick = { Companion.service?.send("snooze_reminders") }, enabled = reachable && !state.busy) { Text("Snooze 6 hours") }; TextButton(onClick = { Companion.service?.send("resume_reminders") }, enabled = reachable && !state.busy) { Text("Resume") } }
     Text("Battery, heat and sleep warnings stay on during routine-reminder snoozes.", style = MaterialTheme.typography.bodySmall)

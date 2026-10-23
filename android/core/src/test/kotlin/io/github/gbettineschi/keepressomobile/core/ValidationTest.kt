@@ -17,6 +17,7 @@ class ValidationTest {
         val token = URLEncoder.encode(encode64(ByteArray(32)), "UTF-8")
         val uri = "keespresso://pair?v=1&mac=11111111-1111-4111-8111-111111111111&token=$token&expires=1300&name=Mac"
         assertEquals(1300, Invitation.parse(uri, 995).expires)
+        assertEquals(1300, Invitation.parse(uri, 1305).expires)
     }
     @Test fun rejectsInvalidReminderSettingAndPreservesAllFields() {
         val now = Instant.parse("2026-10-23T12:00:00Z")
