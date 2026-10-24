@@ -3,7 +3,7 @@ public struct PairRequest: Codable {
     public var type = "pair"; public var version: Int; public var macId: String; public var deviceId: String; public var deviceName: String; public var clientNonce: String; public var proof: String
     public init(version: Int,macId: String,deviceId: String,deviceName: String,clientNonce: String,proof: String) { self.version=version;self.macId=macId;self.deviceId=deviceId;self.deviceName=deviceName;self.clientNonce=clientNonce;self.proof=proof }
 }
-public struct AuthorizedDevice: Codable, Identifiable { public var id: String { deviceId }; public var deviceId: String; public var name: String; public var key: Data; public var approvedAt: Date }
+public struct AuthorizedDevice: Codable, Identifiable, Sendable { public var id: String { deviceId }; public var deviceId: String; public var name: String; public var key: Data; public var approvedAt: Date }
 public struct PairInvitation {
     public let token: Data; public let expires: Date; public let url: URL
 }

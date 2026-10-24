@@ -78,6 +78,7 @@ import Darwin
         let reopen=UserDefaults.standard.bool(forKey:BackgroundLoginSession.reopenKey)
         UserDefaults.standard.removeObject(forKey:BackgroundLoginSession.reopenKey)
         if !background || reopen{showSettings()}
+        model.loadSavedAuthorization()
         follow.requestManagedStart()
     }
     private func reconcileNativeApp(){
@@ -91,7 +92,7 @@ import Darwin
             let value=NSWindow(contentRect:NSRect(x:0,y:0,width:430,height:760),styleMask:[.titled,.closable,.miniaturizable,.resizable],backing:.buffered,defer:false)
             value.title="Keepresso Mobile";value.isReleasedWhenClosed=false;value.delegate=self
             value.minSize=NSSize(width:430,height:500)
-            value.contentViewController=NSHostingController(rootView:CompanionView(model:model,follow:follow))
+            value.contentViewController=NSHostingController(rootView:CompanionView(model:model,follow:follow,authorization:model.authorization))
             value.center();window=value
         }
         NSApp.setActivationPolicy(.regular)
@@ -124,6 +125,7 @@ import Darwin
 struct CompanionView:View{
     @ObservedObject var model:CompanionModel
     @ObservedObject var follow:BackgroundControl
+    @ObservedObject var authorization:SavedAuthorizationLoader
     private var copper:Color{Color(red:0.65,green:0.29,blue:0.14)}
     var body:some View{
         ScrollView{VStack(alignment:.leading,spacing:16){
@@ -140,18 +142,26 @@ struct CompanionView:View{
                 }.frame(maxWidth:.infinity,alignment:.leading)
             }
             Text(model.message).font(.callout)
+            if !model.authorizationReady {
+                GroupBox("Saved pairing"){
+                    VStack(alignment:.leading,spacing:8){
+                        Text(authorization.state == .loading ? "Reading saved pairing keys… You can leave this window open or quit normally." : "Saved pairing keys need access to macOS Keychain. Your existing pairing is retained; connections are paused.").font(.callout)
+                        Button("Unlock saved pairing…"){model.loadSavedAuthorization(allowInteraction:true)}.disabled(authorization.state == .loading)
+                    }.frame(maxWidth:.infinity,alignment:.leading)
+                }
+            }
             HStack{Text("Nearby: \(model.bluetoothState)");Spacer();Text("\(model.connectionCount) connected").foregroundStyle(.secondary)}.font(.caption)
-            if model.nearbyEnabled{Button("Disable Nearby"){model.disableNearby()}}else{Button("Enable Nearby Bluetooth"){model.enableNearby()}.buttonStyle(.borderedProminent)}
+            if model.nearbyEnabled{Button("Disable Nearby"){model.disableNearby()}}else{Button("Enable Nearby Bluetooth"){model.enableNearby()}.buttonStyle(.borderedProminent).disabled(!model.authorizationReady)}
             Divider()
             Text("Authorize a phone").font(.headline)
-            Button("Show pairing QR code"){model.armPairing()}.disabled(!model.nearbyEnabled || !model.nativeRunning)
+            Button("Show pairing QR code"){model.armPairing()}.disabled(!model.authorizationReady || !model.nearbyEnabled || !model.nativeRunning)
             if let invite=model.invitation{
                 if let image=qr(invite.url.absoluteString){Image(nsImage:image).interpolation(.none).resizable().frame(width:230,height:230).padding(8).background(.white).frame(maxWidth:.infinity)}
                 Text("Expires at \(invite.expires.formatted(date:.omitted,time:.shortened)). Approve only the phone you are pairing.").font(.caption).foregroundStyle(.secondary)
             }
             if let name=model.pendingName{Text("Allow \(name) to read status and control Keepresso?").font(.headline);HStack{Button("Approve"){model.approve()}.buttonStyle(.borderedProminent);Button("Deny"){model.deny()}}}
             Divider();Text("Authorized phones").font(.headline)
-            if model.devices.isEmpty{Text("No authorized phones").foregroundStyle(.secondary)}
+            if model.devices.isEmpty{Text(model.authorizationReady ? "No authorized phones":"Saved phones have not been loaded yet.").foregroundStyle(.secondary)}
             ForEach(model.devices){device in HStack{Text(device.name);Spacer();Button("Revoke"){model.revoke(device)}}}
             Divider()
             Text("Internet fallback").font(.headline)
@@ -159,8 +169,8 @@ struct CompanionView:View{
             TextField("HTTPS relay URL",text:$model.relayURLInput).textFieldStyle(.roundedBorder)
             SecureField("Independent Mac bearer (Base64)",text:$model.relayBearerInput).textFieldStyle(.roundedBorder)
             HStack{
-                Button("Save and enable"){model.configureRelay()}.disabled(model.relayBearerInput.isEmpty)
-                if model.relayEnabled{Button("Disable Internet"){model.disableRelay()}}else{Button("Enable saved relay"){model.enableStoredRelay()}.disabled(model.relayURLInput.isEmpty)}
+                Button("Save and enable"){model.configureRelay()}.disabled(!model.authorizationReady || model.relayBearerInput.isEmpty)
+                if model.relayEnabled{Button("Disable Internet"){model.disableRelay()}}else{Button("Enable saved relay"){model.enableStoredRelay()}.disabled(!model.authorizationReady || model.relayURLInput.isEmpty)}
             }
             Text("Your relay must already be deployed and configured. The Mac bearer is saved in Keychain. Authorized phones receive internet access through their existing nearby pairing.").font(.caption).foregroundStyle(.secondary)
             Divider()

@@ -64,7 +64,7 @@ enum BackgroundLoginSession {
         checkingLaunch=true
         Task{
             defer{checkingLaunch=false}
-            if let data=try? await BoundedWorker.run(executable:URL(fileURLWithPath:"/bin/launchctl"),arguments:["print","gui/\(getuid())/\(Self.label)"],timeout:2,outputLimit:16384),let text=String(data:data,encoding:.utf8),BackgroundLaunchEvidence.requiresRefresh(text){
+            if let data=try? await BoundedWorker.run(executable:URL(fileURLWithPath:"/bin/launchctl"),arguments:["print","gui/\(getuid())/\(Self.label)"],timeout:2,outputLimit:16384),let text=String(data:data,encoding:.utf8),BackgroundLaunchEvidence.requiresRefresh(text,currentBuild:Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String){
                 requiresRefresh=true
                 status="This local update needs automatic startup refreshed. Pairing is retained; this app is running normally."
             }

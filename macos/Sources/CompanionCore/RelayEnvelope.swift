@@ -62,7 +62,7 @@ public struct RelayEnvelope: Codable, Equatable {
     }
 }
 
-public struct RelayConfiguration:Codable,Equatable {
+public struct RelayConfiguration:Codable,Equatable,Sendable {
     public let url:String; public let macBearer:String
     public var endpoint:URL {URL(string:url)!.appendingPathComponent("api/relay")}
     public init(url:String,macBearer:String,allowLocalhost:Bool=false)throws {

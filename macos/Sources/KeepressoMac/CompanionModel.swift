@@ -4,6 +4,8 @@ import CompanionCore
 import KeepressoCore
 
 @MainActor final class CompanionModel:ObservableObject {
+    let authorization=SavedAuthorizationLoader()
+    @Published private(set) var authorizationReady=false
     @Published private(set) var nativeRunning = false
     private var lifecycle = NativeLifecycleGate()
     private let refreshOwner=TriggerRefreshOwner()
@@ -30,10 +32,8 @@ import KeepressoCore
         directory=FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("Keespresso")
         do {
             let revoked=try DeviceRevocations(url:directory.appendingPathComponent("revocations.json"));revocations=revoked
-            devices=credentials.load().filter{!revoked.contains($0.deviceId)}
         }catch{devices=[];message="Local authorization storage is unavailable. Phone access is disabled."}
         eventOutbox=try? RelayOutbox(url:directory.appendingPathComponent("delivery-outbox.json"))
-        relayConfiguration=credentials.loadRelay();relayURLInput=relayConfiguration?.url ?? ""
         if let journal=try? MutationJournal(url:directory.appendingPathComponent("mutations.json")){executor=MutationExecutor(journal:journal)}
         let reminderURL=directory.appendingPathComponent("reminders.json")
         if FileManager.default.fileExists(atPath:reminderURL.path){
@@ -41,8 +41,19 @@ import KeepressoCore
             else{message="Saved reminder state could not be read. Routine reminders are disabled until settings are saved.";reminders.settings.enabled=false}
         }
         nearbyEnabled=defaults.bool(forKey:"nearbyEnabled") && revocations != nil
-        relayEnabled=defaults.bool(forKey:"relayEnabled") && relayConfiguration != nil
+        relayEnabled=defaults.bool(forKey:"relayEnabled")
         message="Waiting for native Keepresso. Your saved connection choices are retained."
+    }
+    func loadSavedAuthorization(allowInteraction:Bool=false){
+        let store=credentials
+        authorization.load(operation:{try store.loadSaved(allowInteraction:allowInteraction)}){[weak self] saved in
+            guard let self,self.revocations != nil else{return}
+            self.devices=saved.devices.filter{self.revocations?.contains($0.deviceId) != true}
+            self.relayConfiguration=saved.relay;self.relayURLInput=saved.relay?.url ?? ""
+            self.relayEnabled=UserDefaults.standard.bool(forKey:"relayEnabled") && saved.relay != nil
+            self.authorizationReady=true
+            if self.lifecycle.isActive{self.resume()}
+        }
     }
     func updateNativeApplication(token: String?) {
         for action in lifecycle.update(applicationToken: token) {
@@ -50,7 +61,9 @@ import KeepressoCore
         }
     }
     private func resume() {
-        nativeRunning=true; reminders.resumedAfterUnknownInterval(); lastSignature=nil
+        nativeRunning=true
+        guard authorizationReady else{message="Connections are paused until saved pairing keys can be read.";return}
+        reminders.resumedAfterUnknownInterval(); lastSignature=nil
         resolveEvents(["lid_awake","session_ended_awake","sleep_failed"])
         let generation=lifecycle.generation
         sleepToken=NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.willSleepNotification,object:nil,queue:.main){[weak self] _ in Task{@MainActor in guard let self,self.lifecycle.accepts(generation:generation) else{return};self.observedSleep()}}
@@ -71,20 +84,21 @@ import KeepressoCore
         bluetoothState="Waiting for Keepresso";relayState="Waiting for Keepresso"
         message="Waiting for native Keepresso. Connections are paused; your saved choices are retained."
     }
-    func shutdown() { _=lifecycle.update(applicationToken:nil);suspend() }
-    func enableNearby(){guard revocations != nil else{message="Local authorization storage is unavailable.";return};UserDefaults.standard.set(true,forKey:"nearbyEnabled");nearbyEnabled=true;guard nativeRunning else{bluetoothState="Waiting for Keepresso";return};bluetooth.start();message="Nearby Bluetooth is enabled. Authorize a phone using the QR code on this Mac."}
+    func shutdown() { authorization.stop();authorizationReady=false;_=lifecycle.update(applicationToken:nil);suspend() }
+    func enableNearby(){guard authorizationReady,revocations != nil else{message="Unlock saved pairing keys first.";return};UserDefaults.standard.set(true,forKey:"nearbyEnabled");nearbyEnabled=true;guard nativeRunning else{bluetoothState="Waiting for Keepresso";return};bluetooth.start();message="Nearby Bluetooth is enabled. Authorize a phone using the QR code on this Mac."}
     func disableNearby(){UserDefaults.standard.set(false,forKey:"nearbyEnabled");bluetooth.stop();nearbyEnabled=false;bluetoothState="Off";pairing.deny();pairingChanged()}
-    func armPairing(){guard nativeRunning else{return};do{invitation=try pairing.arm(name:Host.current().localizedName ?? "Mac",now:Date());message="Scan this five-minute invitation on your phone, then approve its name here."}catch{message="Could not create a secure invitation."}}
+    func armPairing(){guard nativeRunning,authorizationReady else{return};do{invitation=try pairing.arm(name:Host.current().localizedName ?? "Mac",now:Date());message="Scan this five-minute invitation on your phone, then approve its name here."}catch{message="Could not create a secure invitation."}}
     func pairingChanged(){invitation=pairing.invitation;pendingName=pairing.pending?.request.deviceName}
     func approve(){do{try bluetooth.approvePending();message="Phone authorized. It must now complete the encrypted handshake."}catch{pairing.deny();pairingChanged();message="Approval could not be saved securely. Pair again."}}
     func deny(){bluetooth.denyPending()}
-    func isAuthorized(_ device:String)->Bool{nativeRunning && lifecycle.isActive && revocations != nil && !locallyRevoked.contains(device) && revocations?.contains(device) != true && devices.contains{$0.deviceId==device}}
+    func isAuthorized(_ device:String)->Bool{authorizationReady && nativeRunning && lifecycle.isActive && revocations != nil && !locallyRevoked.contains(device) && revocations?.contains(device) != true && devices.contains{$0.deviceId==device}}
     private var authorizedDevices:[AuthorizedDevice]{devices.filter{isAuthorized($0.deviceId)}}
     func addDevice(_ device:AuthorizedDevice)throws{
-        guard revocations != nil,!locallyRevoked.contains(device.deviceId),revocations?.contains(device.deviceId) != true,!devices.contains(where:{$0.deviceId==device.deviceId}),devices.count<8 else{throw CompanionError.invalid}
+        guard authorizationReady,revocations != nil,!locallyRevoked.contains(device.deviceId),revocations?.contains(device.deviceId) != true,!devices.contains(where:{$0.deviceId==device.deviceId}),devices.count<8 else{throw CompanionError.invalid}
         let updated=devices+[device];try credentials.save(updated);devices=updated;relay?.nearbyChanged();runRelayTick()
     }
     func revoke(_ device:AuthorizedDevice){
+        guard authorizationReady else{return}
         // Local tombstones gate both transports before any fallible cleanup.
         locallyRevoked.insert(device.deviceId);devices.removeAll{$0.deviceId==device.deviceId};bluetooth.revoke(device.deviceId)
         var durable=false
@@ -95,6 +109,7 @@ import KeepressoCore
         else{disableNearby();disableRelay();message="Phone access is blocked for this session, but revocation could not be saved. Both connections are disabled; retry after storage is available."}
     }
     func configureRelay(){
+        guard authorizationReady else{return}
         do {
             let configuration=try RelayConfiguration(url:relayURLInput.trimmingCharacters(in:.whitespacesAndNewlines),macBearer:relayBearerInput.trimmingCharacters(in:.whitespacesAndNewlines))
             guard !devices.contains(where:{$0.key.base64EncodedString()==configuration.macBearer || (try? RelayEnvelope.phoneBearer(deviceKey:$0.key,macId:macId,deviceId:$0.deviceId))==configuration.macBearer}) else{throw CompanionError.invalid}
@@ -104,6 +119,7 @@ import KeepressoCore
     func enableStoredRelay(){if let configuration=relayConfiguration{startRelay(configuration)}}
     func disableRelay(){UserDefaults.standard.set(false,forKey:"relayEnabled");relay?.stop();relay=nil;relayTask?.cancel();relayTask=nil;relayTaskID=nil;relayEnabled=false;relayState="Internet disabled. Nearby authorization is retained."}
     private func startRelay(_ configuration:RelayConfiguration){
+        guard authorizationReady else{return}
         relay?.stop();relay=nil
         relayEnabled=true;UserDefaults.standard.set(true,forKey:"relayEnabled")
         guard nativeRunning else{relayState="Saved; waiting for Keepresso.";return}
