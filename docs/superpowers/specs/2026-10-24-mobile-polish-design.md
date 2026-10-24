@@ -17,16 +17,16 @@ This checklist is the work ledger; no item is complete without recorded evidence
 | 09 | Active triggers, checked time and Check on one line | UI verified: five emulator tests in light and dark; backend dependencies tracked separately |
 | 10 | Remove Unknown/input unavailable prose without treating unknown as inactive | UI verified: five emulator tests in light and dark; backend dependencies tracked separately |
 | 11 | No disabled-button flicker from polling; bounded in-memory command wait behind a read | Verified: 64 core / 58 Swift tests, slow-read BLE and fallback-routing emulator checks |
-| 12 | Measure Bluetooth and live Vercel latency; test duplicates/failover; state physical gaps honestly | Verification recorded below |
+| 12 | Measure Bluetooth and live Vercel latency; test duplicates/failover; state physical gaps honestly | Verified synthetic BLE command204ms; actual Android/Swift internet status10381ms, command7029ms; duplicate1effect. Physical handoff/locked-phone push pending. |
 | 13 | Compact duration stepper, fixed-width duration and Start, space between controls | UI verified: five emulator tests in light and dark; backend dependencies tracked separately |
 | 14 | Implement safe Sleep now rather than hardcoded unavailable | Verified: 6 injected-power tests and emulator confirmation/cancel. Actual Mac sleep remains owner-run. |
 | 15 | Remove Checking Mac and other transient read boilerplate | Verified: 64 core / 58 Swift tests, slow-read BLE and fallback-routing emulator checks |
-| 16 | Native vs helper reminder responsibilities, no duplicate routine notification owners | Verification recorded below |
-| 17 | One lid-close warning: Mac sound plus best-effort haptic and phone warning | Verification recorded below |
-| 18 | Strong Android warning channel: sound/vibration, DND setup and truthful limits | Verification recorded below |
-| 19 | Closed-lid native menu icon suggestion, no fork or unsolicited upstream post | Verification recorded below |
+| 16 | Native vs helper reminder responsibilities, no duplicate routine notification owners | Native retains session/safety/end actions; helper owns mobile cadence, lid cue, thermal/sleep-request warnings; routine snooze never suppresses urgent warnings. |
+| 17 | One lid-close warning: Mac sound plus best-effort haptic and phone warning | Seven lid-machine tests and compiled cue integration pass. Physical sound/haptic/phone closure acceptance pending owner. |
+| 18 | Strong Android warning channel: sound/vibration, DND setup and truthful limits | Emulator proves high-importance alarm audio, vibration and durable duplicate claims; owner grants DND access and tests actual volume. |
+| 19 | Closed-lid native menu icon suggestion, no fork or unsolicited upstream post | Prepared docs/NATIVE_ICON_SUGGESTION.md; not posted. |
 | 20 | Polished Settings with compact grouped controls and useful setup/status | UI verified: five emulator tests in light and dark; backend dependencies tracked separately |
-| 21 | Emulator light/dark and failure-state verification; retained-key app updates | Verification recorded below |
+| 21 | Emulator light/dark and failure-state verification; retained-key app updates | Full emulator suite, six UI checks per theme, lint, retained-certificate APK and signed Mac ZIP verified. Final Mac repair awaits Keychain; phone offline. |
 
 ## Approach
 
@@ -96,8 +96,8 @@ posting it requires an explicit request to send it.
 
 ## 0.4.0 verification record
 
-70 Mac unit tests plus one opt-in live fixture,66 Kotlin core tests and18 relay tests. Full dedicated two-emulator suite passed: permission continuation/recreation, UI, quiet reads/one command, denied/approved pairing, reconnect, fallback state, Sleep confirmation and urgent warning metadata/dedup/resolution. Light/dark captures and owner app updates are recorded in the final trial report.
+72 Mac unit tests plus one opt-in live fixture,66 Kotlin core tests and18 relay tests. Full dedicated two-emulator suite passed: permission continuation/recreation, UI, quiet reads/one command, denied/approved pairing, reconnect, fallback state, Sleep confirmation and urgent warning metadata/dedup/resolution. Light/dark captures and owner app updates are recorded in the final trial report.
 
-Actual Android foreground internet + Swift production RelayCoordinator/MutationExecutor passed against deployed Vercel/Firestore using seeded synthetic phone keys and fake session controls: initial verified status12.097s, Start acknowledgement9.367s; duplicate caused one effect and Stop acknowledged. This is distinct from physical Bluetooth handoff, locked-phone FCM delivery, actual Mac sound/haptic and actual sleep acceptance.
+Actual Android foreground internet + Swift production RelayCoordinator/MutationExecutor passed against deployed Vercel/Firestore using seeded synthetic phone keys and fake session controls: latest initial verified status10.381s, Start acknowledgement7.029s; duplicate caused one effect and Stop acknowledged. This is distinct from physical Bluetooth handoff, locked-phone FCM delivery, actual Mac sound/haptic and actual sleep acceptance.
 
 Unknown trigger rows are unresolved upstream input evidence, not a claim that no trigger is active. Trigger Check stays explicit; ordinary status updates every2s nearby and roughly5s remotely. Fast remote publication is leased for65s by a60s demand request; hidden/background polling is unchanged.
