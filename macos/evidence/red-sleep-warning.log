@@ -1,0 +1,36 @@
+Building for debugging...
+[Pre-planning 1 / 182]
+[Planning deferred tasks]
+[4 / 19] CompanionCore
+[14 / 29] CompanionCore
+[18 / 40] CompanionCore
+[27 / 41] KeepressoCore
+[28 / 41] KeepressoCore
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCore: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[31 / 42] KeepressoCore
+[35 / 47] KeepressoCore
+[35 / 47] KeespressoMac-product
+[42 / 54] KeepressoCore
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeepressoCore: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[46 / 53] KeespressoMac-product
+[48 / 53] CompanionCoreTests-product
+[56 / 61] CompanionCoreTests-product
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeespressoMac-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/usr/lib' not found
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeespressoMac-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[61 / 64] CompanionCoreTests-product
+[63 / 67] CompanionCoreTests-product/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCoreTests-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/usr/lib' not found
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCoreTests-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+
+Build complete! (6,41 secs)
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite SafetyTests started.
+◇ Test sleepBeforeInactiveSampleCannotRearmEndedWarning() started.
+✘ Test sleepBeforeInactiveSampleCannotRearmEndedWarning() recorded an issue at Assertions.swift:3:83: Expectation failed: value
+↳ value → <not evaluated>
+✘ Test sleepBeforeInactiveSampleCannotRearmEndedWarning() failed after 0.001 seconds with 1 issue.
+✘ Suite SafetyTests failed after 0.001 seconds with 1 issue.
+✘ Test run with 1 test in 1 suite failed after 0.001 seconds with 1 issue.
+Note: Some test targets reported failures:
+  - CompanionCoreTests (Swift Testing)

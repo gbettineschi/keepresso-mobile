@@ -1,0 +1,53 @@
+warning: 'macos': found 1 file(s) which are unhandled; explicitly declare them as resources or exclude from the target
+    /Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/ThirdParty/KeepressoCore/LICENSE
+Building for debugging...
+[Constructing description]
+[Planning deferred tasks]
+[1 / 8] CompanionCoreTests-product
+[9 / 35] CompanionCore
+[11 / 37] CompanionCore
+[12 / 37] CompanionCore
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCore: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[21 / 34] KeespressoMac-product
+[32 / 46] CompanionCoreTests-product
+[33 / 46] CompanionCoreTests-product
+[38 / 46] KeespressoMac-product
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCoreTests-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/usr/lib' not found
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCoreTests-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[42 / 46] CompanionCoreTests-product
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeespressoMac-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/usr/lib' not found
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeespressoMac-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[44 / 46] KeespressoMac-product
+Build complete! (3,16 secs)
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite MutationTests started.
+◇ Test revokedOrExpiredRequestCannotReachPowerAdapter() started.
+◇ Test duplicateMutationNeverInvokesAdapterTwiceAndCrashReservationNeverExecutes() started.
+✘ Test revokedOrExpiredRequestCannotReachPowerAdapter() recorded an issue at Assertions.swift:2:138: Expectation failed: lhs == rhs
+↳ lhs == rhs → false
+↳   lhs → "ok"
+↳   rhs → "error"
+✘ Test revokedOrExpiredRequestCannotReachPowerAdapter() recorded an issue at Assertions.swift:2:138: Expectation failed: lhs == rhs
+↳ lhs == rhs → false
+↳   lhs → 1
+↳   rhs → 0
+✘ Test revokedOrExpiredRequestCannotReachPowerAdapter() failed after 0.002 seconds with 2 issues.
+✘ Test duplicateMutationNeverInvokesAdapterTwiceAndCrashReservationNeverExecutes() recorded an issue at Assertions.swift:2:138: Expectation failed: lhs == rhs
+↳ lhs == rhs → false
+↳   lhs → 2
+↳   rhs → 1
+✘ Test duplicateMutationNeverInvokesAdapterTwiceAndCrashReservationNeverExecutes() recorded an issue at Assertions.swift:2:138: Expectation failed: lhs == rhs
+↳ lhs == rhs → false
+↳   lhs → "ok"
+↳   rhs → "uncertain"
+✘ Test duplicateMutationNeverInvokesAdapterTwiceAndCrashReservationNeverExecutes() recorded an issue at Assertions.swift:2:138: Expectation failed: lhs == rhs
+↳ lhs == rhs → false
+↳   lhs → 3
+↳   rhs → 1
+✘ Test duplicateMutationNeverInvokesAdapterTwiceAndCrashReservationNeverExecutes() failed after 0.023 seconds with 3 issues.
+✘ Suite MutationTests failed after 0.023 seconds with 5 issues.
+✘ Test run with 2 tests in 1 suite failed after 0.023 seconds with 5 issues.
+Note: Some test targets reported failures:
+  - CompanionCoreTests (Swift Testing)

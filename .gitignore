@@ -13,3 +13,7 @@ local.properties
 artifacts/
 *.xcuserstate
 xcuserdata/
+node_modules/
+.vercel/
+*-adminsdk-*.json
+remote-config*.json

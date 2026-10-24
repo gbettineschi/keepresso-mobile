@@ -1,0 +1,143 @@
+warning: 'macos': found 1 file(s) which are unhandled; explicitly declare them as resources or exclude from the target
+    /Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/ThirdParty/KeepressoCore/LICENSE
+Building for debugging...
+[Pre-planning 1 / 182]
+[Planning deferred tasks]
+[8 / 38]
+[10 / 40] CompanionCore
+[19 / 49] CompanionCore
+[23 / 60] KeepressoCore
+[30 / 58] KeepressoCore
+[33 / 58] KeepressoCore
+[34 / 58] KeepressoCore
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCore: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[36 / 59] CompanionCore
+[37 / 59] KeepressoCore
+[41 / 59] KeepressoCore
+[41 / 59] KeespressoMac-product
+[44 / 69] KeepressoCore
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeepressoCore: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[48 / 68] CompanionCoreTests-product
+[55 / 75] CompanionCoreTests-product
+[59 / 75] CompanionCoreTests-product
+[61 / 75] CompanionCoreTests-product
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCoreTests-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/usr/lib' not found
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCoreTests-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[63 / 73]
+[70 / 73] KeespressoMac-product
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Sources/KeespressoMac/BluetoothServer.swift:5:51: warning: conformance of 'BluetoothServer' to protocol 'CBPeripheralManagerDelegate' crosses into main actor-isolated code and can cause data races; this is an error in the Swift 6 language mode [#ConformanceIsolation]
+  3 | import CompanionCore
+  4 |
+  5 | @MainActor final class BluetoothServer: NSObject, CBPeripheralManagerDelegate {
+    |                                                   |- warning: conformance of 'BluetoothServer' to protocol 'CBPeripheralManagerDelegate' crosses into main actor-isolated code and can cause data races; this is an error in the Swift 6 language mode [#ConformanceIsolation]
+    |                                                   |- note: isolate this conformance to the main actor with '@MainActor'
+    |                                                   `- note: turn data races into runtime errors with '@preconcurrency'
+  6 |     static let service=CBUUID(string:"73f8d1c0-823f-4c2f-9e0a-4454129f3001")
+  7 |     static let input=CBUUID(string:"73f8d1c0-823f-4c2f-9e0a-4454129f3002")
+    :
+ 18 |     func start(){guard manager==nil else{return};manager=CBPeripheralManager(delegate:self,queue:.main,options:[CBPeripheralManagerOptionShowPowerAlertKey:false])}
+ 19 |     func stop(){manager?.stopAdvertising();manager?.removeAllServices();manager=nil;peers.values.forEach{$0.channel?.close()};peers.removeAll();notify=nil}
+ 20 |     func peripheralManagerDidUpdateState(_ peripheral:CBPeripheralManager){
+    |          |- note: main actor-isolated instance method 'peripheralManagerDidUpdateState' cannot satisfy nonisolated requirement
+    |          `- note: mark instance method 'peripheralManagerDidUpdateState' 'nonisolated'
+ 21 |         model.bluetoothState=String(describing:peripheral.state)
+ 22 |         guard peripheral.state == .poweredOn else { peers.removeAll();return }
+    :
+ 25 |         notify=output;let service=CBMutableService(type:Self.service,primary:true);service.characteristics=[input,output];peripheral.add(service)
+ 26 |     }
+ 27 |     func peripheralManager(_ peripheral:CBPeripheralManager,didAdd service:CBService,error:Error?){guard error==nil else{model.bluetoothState="Bluetooth service unavailable";return};peripheral.startAdvertising([CBAdvertisementDataServiceUUIDsKey:[Self.service],CBAdvertisementDataLocalNameKey:"Keespresso Mac"])}
+    |          |- note: main actor-isolated instance method 'peripheralManager(_:didAdd:error:)' cannot satisfy nonisolated requirement
+    |          `- note: mark instance method 'peripheralManager(_:didAdd:error:)' 'nonisolated'
+ 28 |     func peripheralManager(_ peripheral:CBPeripheralManager,central:CBCentral,didSubscribeTo characteristic:CBCharacteristic){
+    |          |- note: main actor-isolated instance method 'peripheralManager(_:central:didSubscribeTo:)' cannot satisfy nonisolated requirement
+    |          `- note: mark instance method 'peripheralManager(_:central:didSubscribeTo:)' 'nonisolated'
+ 29 |         guard characteristic.uuid==Self.output,peers.count<8,banned[central.identifier].map({$0>Date()}) != true else{return}
+ 30 |         peers[central.identifier]=Peer(central);model.connectionCount=peers.count
+ 31 |     }
+ 32 |     func peripheralManager(_ peripheral:CBPeripheralManager,central:CBCentral,didUnsubscribeFrom characteristic:CBCharacteristic){drop(central.identifier,ban:false)}
+    |          |- note: main actor-isolated instance method 'peripheralManager(_:central:didUnsubscribeFrom:)' cannot satisfy nonisolated requirement
+    |          `- note: mark instance method 'peripheralManager(_:central:didUnsubscribeFrom:)' 'nonisolated'
+ 33 |     func peripheralManager(_ peripheral:CBPeripheralManager,didReceiveWrite requests:[CBATTRequest]){
+    |          |- note: main actor-isolated instance method 'peripheralManager(_:didReceiveWrite:)' cannot satisfy nonisolated requirement
+    |          `- note: mark instance method 'peripheralManager(_:didReceiveWrite:)' 'nonisolated'
+ 34 |         for request in requests {
+ 35 |             let id=request.central.identifier
+    :
+109 |     private func enqueue(_ data:Data,peer:Peer)throws {try peer.queue.enqueue(record:data,mtu:peer.central.maximumUpdateValueLength);flush()}
+110 |     private func flush(){guard let manager,let notify else{return};for peer in peers.values {while let next=peer.queue.next {guard manager.updateValue(next,for:notify,onSubscribedCentrals:[peer.central]) else{return};peer.queue.accepted()}}}
+111 |     func peripheralManagerIsReady(toUpdateSubscribers peripheral:CBPeripheralManager){flush()}
+    |          |- note: main actor-isolated instance method 'peripheralManagerIsReady(toUpdateSubscribers:)' cannot satisfy nonisolated requirement
+    |          `- note: mark instance method 'peripheralManagerIsReady(toUpdateSubscribers:)' 'nonisolated'
+112 |     private func drop(_ id:UUID,ban:Bool){peers[id]?.channel?.close();peers.removeValue(forKey:id);model.connectionCount=peers.count;if ban,banned.count<64{banned[id]=Date().addingTimeInterval(60)};if model.pairing.pending?.peer==id.uuidString{model.pairing.deny();model.pairingChanged()}}
+113 | }
+
+[#ConformanceIsolation]: <https://docs.swift.org/compiler/documentation/diagnostics/conformance-isolation>
+[71 / 73] KeespressoMac-product
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Sources/KeespressoMac/BluetoothServer.swift:5:51: warning: conformance of 'BluetoothServer' to protocol 'CBPeripheralManagerDelegate' crosses into main actor-isolated code and can cause data races; this is an error in the Swift 6 language mode [#ConformanceIsolation]
+  3 | import CompanionCore
+  4 |
+  5 | @MainActor final class BluetoothServer: NSObject, CBPeripheralManagerDelegate {
+    |                                                   |- warning: conformance of 'BluetoothServer' to protocol 'CBPeripheralManagerDelegate' crosses into main actor-isolated code and can cause data races; this is an error in the Swift 6 language mode [#ConformanceIsolation]
+    |                                                   |- note: isolate this conformance to the main actor with '@MainActor'
+    |                                                   `- note: turn data races into runtime errors with '@preconcurrency'
+  6 |     static let service=CBUUID(string:"73f8d1c0-823f-4c2f-9e0a-4454129f3001")
+  7 |     static let input=CBUUID(string:"73f8d1c0-823f-4c2f-9e0a-4454129f3002")
+    :
+ 18 |     func start(){guard manager==nil else{return};manager=CBPeripheralManager(delegate:self,queue:.main,options:[CBPeripheralManagerOptionShowPowerAlertKey:false])}
+ 19 |     func stop(){manager?.stopAdvertising();manager?.removeAllServices();manager=nil;peers.values.forEach{$0.channel?.close()};peers.removeAll();notify=nil}
+ 20 |     func peripheralManagerDidUpdateState(_ peripheral:CBPeripheralManager){
+    |          |- note: main actor-isolated instance method 'peripheralManagerDidUpdateState' cannot satisfy nonisolated requirement
+    |          `- note: mark instance method 'peripheralManagerDidUpdateState' 'nonisolated'
+ 21 |         model.bluetoothState=String(describing:peripheral.state)
+ 22 |         guard peripheral.state == .poweredOn else { peers.removeAll();return }
+    :
+ 25 |         notify=output;let service=CBMutableService(type:Self.service,primary:true);service.characteristics=[input,output];peripheral.add(service)
+ 26 |     }
+ 27 |     func peripheralManager(_ peripheral:CBPeripheralManager,didAdd service:CBService,error:Error?){guard error==nil else{model.bluetoothState="Bluetooth service unavailable";return};peripheral.startAdvertising([CBAdvertisementDataServiceUUIDsKey:[Self.service],CBAdvertisementDataLocalNameKey:"Keespresso Mac"])}
+    |          |- note: main actor-isolated instance method 'peripheralManager(_:didAdd:error:)' cannot satisfy nonisolated requirement
+    |          `- note: mark instance method 'peripheralManager(_:didAdd:error:)' 'nonisolated'
+ 28 |     func peripheralManager(_ peripheral:CBPeripheralManager,central:CBCentral,didSubscribeTo characteristic:CBCharacteristic){
+    |          |- note: main actor-isolated instance method 'peripheralManager(_:central:didSubscribeTo:)' cannot satisfy nonisolated requirement
+    |          `- note: mark instance method 'peripheralManager(_:central:didSubscribeTo:)' 'nonisolated'
+ 29 |         guard characteristic.uuid==Self.output,peers.count<8,banned[central.identifier].map({$0>Date()}) != true else{return}
+ 30 |         peers[central.identifier]=Peer(central);model.connectionCount=peers.count
+ 31 |     }
+ 32 |     func peripheralManager(_ peripheral:CBPeripheralManager,central:CBCentral,didUnsubscribeFrom characteristic:CBCharacteristic){drop(central.identifier,ban:false)}
+    |          |- note: main actor-isolated instance method 'peripheralManager(_:central:didUnsubscribeFrom:)' cannot satisfy nonisolated requirement
+    |          `- note: mark instance method 'peripheralManager(_:central:didUnsubscribeFrom:)' 'nonisolated'
+ 33 |     func peripheralManager(_ peripheral:CBPeripheralManager,didReceiveWrite requests:[CBATTRequest]){
+    |          |- note: main actor-isolated instance method 'peripheralManager(_:didReceiveWrite:)' cannot satisfy nonisolated requirement
+    |          `- note: mark instance method 'peripheralManager(_:didReceiveWrite:)' 'nonisolated'
+ 34 |         for request in requests {
+ 35 |             let id=request.central.identifier
+    :
+109 |     private func enqueue(_ data:Data,peer:Peer)throws {try peer.queue.enqueue(record:data,mtu:peer.central.maximumUpdateValueLength);flush()}
+110 |     private func flush(){guard let manager,let notify else{return};for peer in peers.values {while let next=peer.queue.next {guard manager.updateValue(next,for:notify,onSubscribedCentrals:[peer.central]) else{return};peer.queue.accepted()}}}
+111 |     func peripheralManagerIsReady(toUpdateSubscribers peripheral:CBPeripheralManager){flush()}
+    |          |- note: main actor-isolated instance method 'peripheralManagerIsReady(toUpdateSubscribers:)' cannot satisfy nonisolated requirement
+    |          `- note: mark instance method 'peripheralManagerIsReady(toUpdateSubscribers:)' 'nonisolated'
+112 |     private func drop(_ id:UUID,ban:Bool){peers[id]?.channel?.close();peers.removeValue(forKey:id);model.connectionCount=peers.count;if ban,banned.count<64{banned[id]=Date().addingTimeInterval(60)};if model.pairing.pending?.peer==id.uuidString{model.pairing.deny();model.pairingChanged()}}
+113 | }
+
+[#ConformanceIsolation]: <https://docs.swift.org/compiler/documentation/diagnostics/conformance-isolation>
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeespressoMac-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/usr/lib' not found
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeespressoMac-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[73 / 75] KeespressoMac-product
+Build complete! (8,64 secs)
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite StatusEvidenceTests started.
+◇ Test staleReusedPIDCannotIdentifyCurrentLaunch() started.
+◇ Test sameSecondNativeWriteUsesPreciseModificationTimeAndRejectsOldFile() started.
+✘ Test staleReusedPIDCannotIdentifyCurrentLaunch() recorded an issue at Assertions.swift:4:84: Expectation failed: !value
+↳ !value → <not evaluated>
+↳   value → <not evaluated>
+✘ Test sameSecondNativeWriteUsesPreciseModificationTimeAndRejectsOldFile() recorded an issue at Assertions.swift:3:83: Expectation failed: value
+↳ value → <not evaluated>
+✘ Test staleReusedPIDCannotIdentifyCurrentLaunch() failed after 0.001 seconds with 1 issue.
+✘ Test sameSecondNativeWriteUsesPreciseModificationTimeAndRejectsOldFile() failed after 0.001 seconds with 1 issue.
+✘ Suite StatusEvidenceTests failed after 0.001 seconds with 2 issues.
+✘ Test run with 2 tests in 1 suite failed after 0.001 seconds with 2 issues.
+Note: Some test targets reported failures:
+  - CompanionCoreTests (Swift Testing)

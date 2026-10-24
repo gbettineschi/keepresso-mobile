@@ -1,0 +1,55 @@
+warning: 'macos': found 1 file(s) which are unhandled; explicitly declare them as resources or exclude from the target
+    /Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/ThirdParty/KeepressoCore/LICENSE
+Building for debugging...
+[Constructing description]
+[Planning deferred tasks]
+[4 / 25] CompanionCore
+[5 / 33] KeepressoCore
+[15 / 44] KeepressoCore
+[16 / 44] CompanionCore
+[17 / 44] KeepressoCore
+[19 / 44] CompanionCore
+[20 / 44] CompanionCore
+[26 / 46] CompanionCore
+[26 / 46] KeepressoCore
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCore: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[31 / 45] CompanionCore
+[31 / 45] KeepressoCore
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeepressoCore: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[35 / 44] CompanionCoreTests-product
+[40 / 49] CompanionCoreTests-product
+[44 / 48] CompanionCoreTests-product
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCoreTests-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/usr/lib' not found
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCoreTests-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[46 / 48] CompanionCoreTests-product
+[50 / 52] KeespressoMac-product
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeespressoMac-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/usr/lib' not found
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeespressoMac-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[55 / 56] KeespressoMac-product
+Build complete! (6,01 secs)
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite SafetyTests started.
+◇ Suite CryptoTests started.
+◇ Test testFreshnessAndDurationBounds() started.
+◇ Test testReminderOKKeepsCadenceSnoozeOnlyRoutineAndNewSessionCancelsWarning() started.
+◇ Test testObservedSleepCancelsEndedWarningAcrossRestart() started.
+◇ Test testPairProofRequiresLocalApprovalAndInvitationIsSingleUse() started.
+◇ Test testFramingEverySplitAndOversizeAndPartialTimeout() started.
+◇ Test testNodeProofsKeysAndAESVector() started.
+◇ Test testTamperWrongKeyAndOutOfOrderCloseSession() started.
+◇ Test testIndependentNodeDeviceKeyVector() started.
+◇ Test testDurableJournalReturnsUncertainAfterCrashAndRejectsOwnerOrBodyMismatch() started.
+✔ Test testFreshnessAndDurationBounds() passed after 0.001 seconds.
+✔ Test testTamperWrongKeyAndOutOfOrderCloseSession() passed after 0.001 seconds.
+✔ Test testReminderOKKeepsCadenceSnoozeOnlyRoutineAndNewSessionCancelsWarning() passed after 0.001 seconds.
+✔ Test testObservedSleepCancelsEndedWarningAcrossRestart() passed after 0.001 seconds.
+✔ Test testFramingEverySplitAndOversizeAndPartialTimeout() passed after 0.001 seconds.
+✔ Test testPairProofRequiresLocalApprovalAndInvitationIsSingleUse() passed after 0.001 seconds.
+✔ Test testIndependentNodeDeviceKeyVector() passed after 0.001 seconds.
+✔ Test testNodeProofsKeysAndAESVector() passed after 0.001 seconds.
+✔ Suite CryptoTests passed after 0.001 seconds.
+✔ Test testDurableJournalReturnsUncertainAfterCrashAndRejectsOwnerOrBodyMismatch() passed after 0.014 seconds.
+✔ Suite SafetyTests passed after 0.014 seconds.
+✔ Test run with 9 tests in 2 suites passed after 0.014 seconds.

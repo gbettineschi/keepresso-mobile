@@ -12,6 +12,8 @@ Each logical record is 4-byte unsigned big-endian length followed by UTF-8 JSON,
 ## Pair invitation and authorization
 
 QR is `keespresso://pair?v=1&mac=<macUUID>&token=<standard-base64-percent-encoded-32-bytes>&expires=<unix-seconds>&name=<percent-encoded-name>`.
+
+The v1 invitation scheme retains its original spelling for compatibility with already installed phones. The product name is **Keepresso**; branding changes do not change pairing keys or the wire protocol.
 The token is valid for 300 seconds on the Mac, one successful approval only. Device names are <=80 UTF-8 bytes. IDs and nonces have strict length/format validation before use.
 
 Phone sends `{type:"pair",version:1,macId,deviceId,deviceName,clientNonce,proof}`.
@@ -46,7 +48,7 @@ Maximum validity 30 s; issuedAt cannot be >10 s ahead of Mac clock. Phone uses r
 
 Response: `{type:"response",id,status:"ok"|"error"|"uncertain",message?:<safe-user-text>,snapshot?:<Snapshot>}`. A delivered command is not an executed/acknowledged command. Connection loss after send becomes uncertain for mutations. Never automatically resend mutations. A repeated mutation ID returns its stored outcome (or uncertain), not another execution. Bind ID reservation to authorized device and request-body fingerprint; reserve durably before side effects. Reject mismatched duplicate bodies.
 
-Server may send `{type:"event",event:{id,kind,createdAt,title,body,scheduledEnd?:<ISO8601>,snoozedUntil?:<ISO8601>}}` after authentication. Kinds: `hourly`, `session_ended_awake`, `battery`, `thermal`, `sleep_failed`. Android notification actions issue authenticated commands only while reachable, otherwise open the app with no queued power action.
+Server may send `{type:"event",event:{id,kind,createdAt,title,body,scheduledEnd?:<ISO8601>,snoozedUntil?:<ISO8601>}}` after authentication. Kinds: `hourly`, `session_ended_awake`, `battery`, `thermal`, `sleep_failed`, `lid_awake`. Android notification actions issue authenticated commands only while reachable, otherwise open the app with no queued power action.
 
 ## Snapshot
 
@@ -57,7 +59,7 @@ All timestamps ISO8601 UTC. Missing/null values mean unknown; no defaults implyi
   capturedAt, macName,
   mac: { lock: "locked|unlocked|unknown", display: "on|dimmed|off|unknown",
     lid: "open|closed|unknown", batteryPercent: number|null,
-    powerSource: "battery|ac|unknown", temperatureC: number|null,
+    powerSource: "battery|ac|unknown", isCharging?: boolean|null, temperatureC: number|null,
     temperatureSensor: string|null, thermal: "normal|warm|hot|unknown" },
   keepresso: { appRunning: boolean, version: string|null, isActive: boolean|null,
     endsAt: string|null, triggersEnabled: boolean|null, triggersPaused: boolean|null,
@@ -74,4 +76,4 @@ All timestamps ISO8601 UTC. Missing/null values mean unknown; no defaults implyi
 
 Reachability is derived by Android from authenticated fresh responses and transport state, not a remote claimed awake field. After disconnect show Unreachable and last-known readings, disable mutations. Mark snapshots stale after 15 s without an authenticated update.
 
-Triggers always represent an independent snapshot. Successful refresh alone replaces checkedAt. Failure preserves the old timestamp and marks uncertainty. Never advertise observer-only grace as a guarantee of native handover. A native status/mode/setting change makes the old preview stale.
+Triggers always represent an independent snapshot. A successfully completed, structurally valid assessment replaces checkedAt, including a partial assessment with unknown per-rule inputs. Such a partial assessment uses state unknown and an explicit message; the phone preserves unknown rows with an accessible question indicator. Worker timeout, parse failure or incompatible settings preserve the previous successful timestamp and mark stale/unknown as appropriate. Never advertise observer-only grace as a guarantee of native handover. A native status/mode/setting change makes the old preview stale.

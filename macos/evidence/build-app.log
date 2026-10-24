@@ -1,0 +1,14 @@
+[0/1] Planning build
+Building for production...
+[0/5] Write sources
+[2/5] Write swift-version--1AB21518FC5DEDBE.txt
+[4/6] Compiling CompanionCore AssessmentEvidence.swift
+[5/7] Compiling KeespressoMac App.swift
+[5/7] Write Objects.LinkFileList
+[6/7] Linking KeespressoMac
+Build of product 'KeespressoMac' complete! (5.82s)
+warning: '--build-system native' has been deprecated and will be removed in a future release; please report an issue at https://github.com/swiftlang/swift-package-manager/issues if you are unable to adopt the default build system.
+warning: '--build-system native' has been deprecated and will be removed in a future release; please report an issue at https://github.com/swiftlang/swift-package-manager/issues if you are unable to adopt the default build system.
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/artifacts/KeespressoMac.app: replacing existing signature
+Keespresso Mac self-check passed (crypto/framing only; no Bluetooth, permissions or power operations).
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/artifacts/KeespressoMac.app

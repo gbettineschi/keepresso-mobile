@@ -1,0 +1,40 @@
+Building for debugging...
+[Pre-planning 1 / 153]
+[Planning deferred tasks]
+[9 / 36] CompanionCore
+[19 / 47] CompanionCore
+[20 / 47] CompanionCore
+[32 / 57] KeepressoCore
+[34 / 57] KeepressoCore
+[35 / 57] KeepressoCore
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCore: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[38 / 57] CompanionCore-product
+[38 / 57] KeepressoCore
+[42 / 58] KeepressoCore
+[42 / 58] KeespressoMac-product
+[49 / 65] KeespressoMac-product
+[50 / 65] KeespressoMac-product
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeepressoCore: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[56 / 67] CompanionCoreTests-product
+[65 / 76] CompanionCoreTests-product
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeespressoMac-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/usr/lib' not found
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeespressoMac-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[69 / 75] CompanionCoreTests-product
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCoreTests-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/usr/lib' not found
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCoreTests-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[71 / 75] CompanionCoreTests-product
+Build complete! (5,75 secs)
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite InputEvidenceTests started.
+◇ Test collapsedMonitorFailureCannotBecomeAnInactiveRule() started.
+✘ Test collapsedMonitorFailureCannotBecomeAnInactiveRule() recorded an issue at Assertions.swift:5:83: Expectation failed: value == nil
+↳ value == nil → false
+↳   value → false
+↳     some → false
+✘ Test collapsedMonitorFailureCannotBecomeAnInactiveRule() failed after 0.001 seconds with 1 issue.
+✘ Suite InputEvidenceTests failed after 0.001 seconds with 1 issue.
+✘ Test run with 1 test in 1 suite failed after 0.001 seconds with 1 issue.
+Note: Some test targets reported failures:
+  - CompanionCoreTests (Swift Testing)

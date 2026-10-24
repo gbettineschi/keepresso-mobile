@@ -1,0 +1,27 @@
+{
+  "displayName": "Keepresso — Firestore quota 80%",
+  "documentation": {
+    "content": "A daily Firestore read, write or delete operation allowance exceeded 80% over the last rolling 24 hours. This may warn before the midnight-Pacific quota-day total reaches 80%. Check Firebase Usage. Keep Firebase on Spark without a billing account and Vercel on Hobby. Nearby Bluetooth remains independent of cloud quotas.",
+    "mimeType": "text/markdown",
+    "subject": "Keepresso: Firestore quota above 80%"
+  },
+  "conditions": [
+    {
+      "displayName": "Firestore operation quota above 80% (rolling 24h)",
+      "conditionPrometheusQueryLanguage": {
+        "duration": "0s",
+        "evaluationInterval": "60s",
+        "query": "max(sum by (project_id, quota_metric) (increase({\"serviceruntime.googleapis.com/quota/rate/net_usage\",monitored_resource=\"consumer_quota\",project_id=\"YOUR_FIREBASE_PROJECT_ID\",service=\"firestore.googleapis.com\",quota_metric=~\"firestore.googleapis.com/(read|write|delete)_operations_per_project\"}[24h])) / on (project_id, quota_metric) min by (project_id, quota_metric) (last_over_time({\"serviceruntime.googleapis.com/quota/limit\",monitored_resource=\"consumer_quota\",project_id=\"YOUR_FIREBASE_PROJECT_ID\",service=\"firestore.googleapis.com\",limit_name=~\"(Read|Write|Delete)OperationsPerProjectPerDay\"}[24h]))) > 0.8"
+      }
+    }
+  ],
+  "alertStrategy": {
+    "autoClose": "86400s",
+    "notificationPrompts": ["OPENED"]
+  },
+  "combiner": "OR",
+  "enabled": true,
+  "notificationChannels": [
+    "projects/YOUR_FIREBASE_PROJECT_ID/notificationChannels/YOUR_EMAIL_CHANNEL_ID"
+  ]
+}

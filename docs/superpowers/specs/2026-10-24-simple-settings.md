@@ -1,0 +1,7 @@
+# Simple Mac settings
+
+Owner request, 24 October 2026: remove Enable/Refresh Follow controls. One Open Login Items button, visible warning when startup is blocked or needs approval. Automatically register the bundled agent and repair a positively identified stale build in one bounded sequence per foreground process. Never unregister/reregister a service requiring approval, including an owner-disabled item. No unbounded repair loops, no concurrent registrations or post-shutdown registration. Keep one managed process and the existing native Keepresso lifecycle.
+
+One Pairing section has two button positions. Without pairing, Show pairing QR code is enabled and Delete pairing disabled. With pairing, Show is disabled and Delete enabled. Until saved keys load, the primary position says Unlock saved pairing; Delete is disabled. Loading disables both. QR starts Nearby if necessary. Delete asks local confirmation and revokes all existing authorized phone records using the existing durable revocation path; tests/install must never delete the owner's pairing. Compatibility with existing multiple records remains, while new local UI exposes one pairing slot. Named pending phone approval stays an inline prompt only while pairing.
+
+Owner authorizes automatic startup registration/repair in production, superseding earlier manual-only AGENTS guidance. macOS approval and Keychain dialogs remain owner-operated. Native app, keys, protocol, preferences and phone installation unchanged. Mac update is in place.

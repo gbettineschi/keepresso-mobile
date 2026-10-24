@@ -2,7 +2,7 @@
 
 > **For agentic workers:** Use the platform-specific plan below. Native platform implementations can run independently against docs/protocol.md; one integration/security review checks the combined branch.
 
-**Goal:** Build an installable Android app and macOS helper implementing the approved nearby Keespresso companion.
+**Goal:** Build an installable Android app and macOS helper implementing the approved nearby Keepresso companion.
 
 **Architecture:** Swift peripheral and Kotlin central communicate with the authenticated/encrypted shared record protocol. Ordinary status uses native cheap readings; trigger assessment reuses pinned KeepressoCore only during a bounded refresh. OS adapters preserve unavailable/unknown state and never synthesize success.
 
@@ -12,7 +12,7 @@
 
 ## Global constraints
 
-- App name Keespresso; private repository keepresso-mobile; original artwork and copper theme.
+- App name Keepresso; private repository keepresso-mobile; original artwork and copper theme.
 - Official Keepresso stays unmodified; no Tailscale, remote wake or permanent duplicate detector.
 - Trigger timestamp is Triggers checked at… directly below Active triggers, before rows.
 - Secure authorized devices only; app-level authentication over unbonded BLE; no plaintext private status.
@@ -38,9 +38,9 @@ Files: docs/protocol.md, shared/vectors.json, scripts/generate-vectors.mjs, shar
 
 ### Task 2: Swift native helper
 
-Files: macos/Package.swift; macos/Sources/CompanionCore (models, crypto, framing, pairing, command journal, reminders); macos/Sources/KeespressoMac (status, BLE, UI, native adapters); macos/ThirdParty/KeepressoCore/Adapters; macos/Tests; macos/scripts/build-app.sh.
+Files: macos/Package.swift; macos/Sources/CompanionCore (models, crypto, framing, pairing, command journal, reminders); macos/Sources/KeepressoMac (status, BLE, UI, native adapters); macos/ThirdParty/KeepressoCore/Adapters; macos/Tests; macos/scripts/build-app.sh.
 
-Interfaces: consumes docs/protocol.md and shared/vectors.json; produces executable KeespressoMac, .app build script, native status/command/trigger/notification protocol server.
+Interfaces: consumes docs/protocol.md and shared/vectors.json; produces executable KeepressoMac, .app build script, native status/command/trigger/notification protocol server.
 
 - [ ] Write security/framing/journal/reminder tests before their implementations; record expected RED and GREEN results.
 - [ ] Implement genuine crypto over common vectors, exact counter checks and strict bounded framing.
