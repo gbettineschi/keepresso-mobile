@@ -31,7 +31,7 @@ The repository is public. The Android and Mac applications implement nearby and 
 
 The key next acceptance step is to pair the actual Android phone and Mac, inspect read-only status first, and then deliberately test commands and background reminders. Follow [ACCEPTANCE.md](ACCEPTANCE.md); no successful build or simulated acknowledgement substitutes for those observations.
 
-## Prepared internet-status update — awaiting installation approval
+## Internet-status update — installed owner trial
 
 Mac 0.4.4 (8) and Android 0.4.1 (6) add one compact Internet / Wi-Fi-or-Network facts row. This is independent of Bluetooth transport. A fresh, credential-free HTTPS check is required for Online; no route is Offline; both public endpoint checks failing is Check failed, rather than a claim that every internet destination is down. Optional Wi-Fi name access requests macOS Location authorization only from the settings button. See [protocol](protocol.md) and [recovery](RECOVERY.md) for refresh timing, privacy and setup.
 
@@ -39,4 +39,6 @@ Verification on 24 October: 104 Swift, 68 Kotlin core and 18 relay tests passed;
 
 A bounded read-only diagnostic on the actual Mac returned Online / Wi-Fi, with no SSID supplied by macOS. It did not request permission or create the app model, transports, login item or power controls. Live network disruption/captive portals, actual permission-dialog behavior after consent, installed-device acceptance and live timeout/cancellation delivery remain unverified. HTTP failure/fallback responses and obsolete check tokens were tested with controlled fixtures. No hardware acceptance is inferred from these tests.
 
-Both packages were prepared locally with the retained identities. Owner installations remain Mac 0.4.3 (7) / Android 0.4.0 (5), verified read-only. The official Keepresso executable and all 107 pinned source files are unchanged. No loose staged app remains. Do not install this update until the owner explicitly approves it.
+The owner explicitly approved installation with “Go” on 24 October. The canonical Mac app was updated after graceful Quit to 0.4.4 (8), and the selected Samsung was updated in place to Android 0.4.1 (6). Versions, signatures, unchanged connection choices and byte-identical wrapped phone pairing were verified. macOS is running build 8 under its registered background agent, with the installed executable fingerprint matching. The official Keepresso executable and all 107 pinned source files are unchanged. The previous companion is retained in Trash and no loose staged app remains.
+
+The Mac settings show that this locally signed update needs the owner to use **Unlock saved pairing…** and handle Keychain before connections resume. The phone was dozing during the initial dashboard check; owner unlock/open is pending. No Keychain/Location approval was granted by the agent, pairing was not reset, and installed-device connection acceptance is not yet claimed. Optional **Allow Wi-Fi name…** remains an owner action.
