@@ -57,6 +57,7 @@ class NearbyService : Service() {
     private val poll = object : Runnable { override fun run() {
         if (!enabled) return
         val now = Instant.now()
+        discardStaleWait(now)
         if(waitingCommand.expire(SystemClock.elapsedRealtime()))Companion.update{it.copy(busy=false,result="Mac is busy. Your command wasn't sent; tap again.")}
         triggerCheckRequestedAt?.takeIf{SystemClock.elapsedRealtime()-it>=8000}?.let{triggerCheckRequestedAt=null;Companion.update{it.copy(checkingTriggers=pending?.action=="refresh_triggers")}}
         pending?.takeIf {
@@ -302,10 +303,16 @@ class NearbyService : Service() {
     }
     private fun updateSnapshot(snapshot: JsonObject) {
         val now = Instant.now(); val captured = Instant.parse(snapshot.string("capturedAt")); require(captured <= now.plus(serverOffset).plusSeconds(10)); validateSnapshot(snapshot)
+        // A new response must not revive intent that expired while the read was in flight.
+        discardStaleWait(now)
         val existing = Companion.state.value.snapshot?.stringOrNull("capturedAt")?.let(Instant::parse)
         if (existing != null && captured < existing) return
         ReminderDelivery.snapshot(this, snapshot)
         Companion.update { it.copy(snapshot = snapshot, receivedAt = minOf(captured.minus(serverOffset),now), lastContact = now) }
+    }
+    private fun discardStaleWait(now:Instant){
+        if(waitingCommand.hasCommand && !Companion.state.value.reachable(now) && waitingCommand.clear())
+            Companion.update{it.copy(busy=pending?.mutation==true,result="Status became stale. Your command wasn't sent; tap again.")}
     }
     private fun deliveryLost() {
         val p = pending ?: return; pending = null

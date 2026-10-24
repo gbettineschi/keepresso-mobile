@@ -31,6 +31,8 @@ enum BackgroundLoginSession {
     @Published private(set) var status = "Automatic startup is off."
     @Published private(set) var enabled = false
     @Published private(set) var approvalRequired = false
+    @Published private(set) var requiresRefresh = false
+    private var checkingLaunch = false
     private var takeoverToken: NSObjectProtocol?
     private var starting = false
     var onManagedHandoff: (() -> Void)?
@@ -57,6 +59,26 @@ enum BackgroundLoginSession {
         case .notRegistered: status = "Follow Keepresso is off. This app stays open until you quit it."
         case .notFound: status = "Background startup is unavailable. Reinstall the complete app bundle."
         @unknown default: status = "Background startup status is unavailable."
+        }
+        guard !managed,!checkingLaunch else{return}
+        checkingLaunch=true
+        Task{
+            defer{checkingLaunch=false}
+            if let data=try? await BoundedWorker.run(executable:URL(fileURLWithPath:"/bin/launchctl"),arguments:["print","gui/\(getuid())/\(Self.label)"],timeout:2,outputLimit:16384),let text=String(data:data,encoding:.utf8),BackgroundLaunchEvidence.requiresRefresh(text){
+                requiresRefresh=true
+                status="This local update needs automatic startup refreshed. Pairing is retained; this app is running normally."
+            }
+        }
+    }
+    /// Explicit owner action only: replace the old build's registered signing requirement.
+    func refreshRegistration(){
+        guard !managed else{return}
+        Task{
+            // A new ad-hoc identity may report notRegistered for the old registration.
+            // Still attempt its cleanup, then let macOS apply approval to the new one.
+            try? await service.unregister()
+            do{try service.register();requiresRefresh=false;refresh();requestManagedStart()}
+            catch{status="Automatic startup could not be refreshed. Check macOS Login Items and try again."}
         }
     }
     func enable() {

@@ -13,7 +13,7 @@ public struct ReminderMachine: Codable {
         return now>=since && now.timeIntervalSince(since)<=5
     }
     public mutating func observeLid(closed:Bool?,sleepDisabled:Bool?,now:Date)->CompanionEvent?{
-        guard let closed else{return nil}
+        guard let closed else{lidWarning=nil;return nil}
         var lid=lidWarning ?? LidWarningState();defer{lidWarning=lid}
         if !closed{lid.pendingSince=nil;lid.warned=false}
         else if lid.lastClosed==false{lid.pendingSince=now;lid.warned=false}

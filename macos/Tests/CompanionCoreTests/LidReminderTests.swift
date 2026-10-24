@@ -20,6 +20,18 @@ struct LidReminderTests {
         XCTAssertNil(r.observeLid(closed:true,sleepDisabled:true,now:t+7))
         XCTAssertFalse(r.needsLidCheck(now:t+7))
     }
+    @Test func unknownLidSampleInvalidatesBothOpenBaselineAndPendingClosure(){
+        var r=ReminderMachine();_=r.observeLid(closed:false,sleepDisabled:nil,now:t)
+        _=r.observeLid(closed:nil,sleepDisabled:nil,now:t+1)
+        XCTAssertNil(r.observeLid(closed:true,sleepDisabled:true,now:t+120))
+        _=r.observeLid(closed:false,sleepDisabled:nil,now:t+121)
+        _=r.observeLid(closed:true,sleepDisabled:nil,now:t+122)
+        _=r.observeLid(closed:nil,sleepDisabled:nil,now:t+123)
+        XCTAssertFalse(r.needsLidCheck(now:t+124))
+        XCTAssertNil(r.observeLid(closed:true,sleepDisabled:true,now:t+124))
+        _=r.observeLid(closed:false,sleepDisabled:nil,now:t+125)
+        XCTAssertNotNil(r.observeLid(closed:true,sleepDisabled:true,now:t+126))
+    }
     @Test func reopeningCancelsPendingCueAndSnoozeDoesNotSuppressNextRealClosure(){
         var r=ReminderMachine();r.settings.enabled=false;r.snooze(now:t)
         _=r.observeLid(closed:false,sleepDisabled:nil,now:t)

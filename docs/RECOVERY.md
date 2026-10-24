@@ -118,3 +118,11 @@ If the Android signing private key is lost, the installed APK contains only its 
 An authenticated project owner can deploy a verified source copy without a Git integration. From the linked `relay/` directory, create a fresh staging directory outside Git and copy **only** `api/`, `src/`, `public/`, `package.json`, `package-lock.json`, `vercel.json`, `.vercelignore`, and `.vercel/project.json`. Do not copy `.env*`, server keys, the private setup directory, or `.git`. Run `npm ci`, `npm test`, then `vercel deploy --prod --scope YOUR_ORGANIZATION_ID` from that directory. Keep a record of the source commit and compare the copied source hashes before deployment. This is a manual owner deployment, not a change to repository authorship or a broader GitHub permission grant.
 
 These procedures were checked against the existing source, UI labels and Vercel CLI 64.7.0. The token-generation example can be tested entirely in a temporary directory. Resetting the live credentials was intentionally not performed just to test the documentation.
+
+## After a locally signed Mac update
+
+Keep the same Applications path, bundle ID and Keychain service. Do not delete pairing keys or re-pair merely because an update cannot read them. An ad-hoc signed development build has a new signing requirement: macOS may ask for Keychain access to the existing companion items. The owner handles that prompt in macOS; a blocked Keychain read can delay startup before the settings window appears. No password belongs in chat or setup files.
+
+The already registered background launcher can also reject the new build with a code-signing failure. Open the updated app and click **Refresh Follow Keepresso** if shown, then use **Manage automatic startup…** to approve in Login Items if macOS requests it. This action refreshes the old registered requirement only after the owner's click. It retains pairing and relay configuration. Until it is refreshed, a manually opened companion can run, but automatic startup/crash recovery is not established. Do not assume copying the app refreshed macOS approval.
+
+Future trial updates replace the canonical bundle and update Android with the retained signing certificate; neither requires uninstalling or clearing phone data. The current ad-hoc Mac distribution may still need the above owner approvals after an update.

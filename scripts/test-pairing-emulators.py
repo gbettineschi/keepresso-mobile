@@ -93,6 +93,8 @@ def peer_case(mode,method):
         test('flow-'+mode,method,'deny' if mode=='deny' else 'true')
         if outage is not None:outage.result(timeout=15)
         if mode=='approve':
+            report=subprocess.check_output([args.adb,'-s',args.client,'exec-out','run-as',package,'cat','cache/local-report.json'])
+            (results/'local-report.json').write_bytes(report)
             screenshot=subprocess.check_output([args.adb,'-s',args.client,'exec-out','run-as',package,'cat','cache/pairing-flow.png'])
             (results/'pairing-flow.png').write_bytes(screenshot)
     finally:

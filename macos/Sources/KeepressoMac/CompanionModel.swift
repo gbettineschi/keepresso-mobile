@@ -202,7 +202,7 @@ import KeepressoCore
     private func cancelLidProbe(){lidProbe?.cancel();lidProbe=nil;lidProbeID=nil}
     private func checkLid(){
         let closed=IORegistryLidState().isClosed()
-        if closed==false{
+        if closed != true{
             cancelLidProbe()
             if lastLid != false{resolveEvents(["lid_awake"])}
         }

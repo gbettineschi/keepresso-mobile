@@ -132,7 +132,8 @@ struct CompanionView:View{
                 VStack(alignment:.leading,spacing:8){
                     Text(follow.status).font(.callout)
                     HStack{
-                        if !follow.enabled && !follow.approvalRequired{Button("Enable Follow Keepresso"){follow.enable()}.buttonStyle(.borderedProminent)}
+                        if follow.requiresRefresh{Button("Refresh Follow Keepresso"){follow.refreshRegistration()}.buttonStyle(.borderedProminent)}
+                        else if !follow.enabled && !follow.approvalRequired{Button("Enable Follow Keepresso"){follow.enable()}.buttonStyle(.borderedProminent)}
                         Button(follow.approvalRequired ? "Allow in Login Items…":"Manage automatic startup…"){follow.openLoginItems()}
                     }
                     Text("Close this window to keep running quietly. Open this app from Finder or the launcher to show settings again. Enabling automatic startup restarts the companion once; pairing is retained.").font(.caption).foregroundStyle(.secondary)
