@@ -79,7 +79,7 @@ import Darwin
         UserDefaults.standard.removeObject(forKey:BackgroundLoginSession.reopenKey)
         if !background || reopen{showSettings()}
         model.loadSavedAuthorization()
-        follow.requestManagedStart()
+        follow.refresh()
     }
     private func reconcileNativeApp(){
         guard !terminating else{return}
@@ -99,7 +99,7 @@ import Darwin
         window?.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true)
     }
     func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool{showSettings();return true}
-    func applicationDidBecomeActive(_ notification:Notification){follow.refresh();follow.requestManagedStart()}
+    func applicationDidBecomeActive(_ notification:Notification){follow.refresh()}
     func applicationShouldTerminateAfterLastWindowClosed(_ sender:NSApplication)->Bool{false}
     func windowShouldClose(_ sender:NSWindow)->Bool{sender.orderOut(nil);NSApp.setActivationPolicy(.accessory);return false}
     func applicationShouldTerminate(_ sender:NSApplication)->NSApplication.TerminateReply{
@@ -127,42 +127,43 @@ struct CompanionView:View{
     @ObservedObject var follow:BackgroundControl
     @ObservedObject var authorization:SavedAuthorizationLoader
     private var copper:Color{Color(red:0.65,green:0.29,blue:0.14)}
+    private var pairingControls:PairingControls{PairingControls(savedKeysReady:model.authorizationReady,loading:authorization.state == .loading,pairedPhoneCount:model.devices.count,nativeRunning:model.nativeRunning)}
     var body:some View{
         ScrollView{VStack(alignment:.leading,spacing:16){
             HStack{if let image=NSImage(contentsOf:Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/keepresso-mobile-mac-icon.png")){Image(nsImage:image).resizable().frame(width:42,height:42)};VStack(alignment:.leading){Text("Keepresso Mobile").font(.title2.bold());Text("Unofficial Keepresso companion").font(.caption).foregroundStyle(.secondary)}}
-            GroupBox("Follow Keepresso"){
+            GroupBox("Automatic startup"){
                 VStack(alignment:.leading,spacing:8){
-                    Text(follow.status).font(.callout)
-                    HStack{
-                        if follow.requiresRefresh{Button("Refresh Follow Keepresso"){follow.refreshRegistration()}.buttonStyle(.borderedProminent)}
-                        else if !follow.enabled && !follow.approvalRequired{Button("Enable Follow Keepresso"){follow.enable()}.buttonStyle(.borderedProminent)}
-                        Button(follow.approvalRequired ? "Allow in Login Items…":"Manage automatic startup…"){follow.openLoginItems()}
-                    }
-                    Text("Close this window to keep running quietly. Open this app from Finder or the launcher to show settings again. Enabling automatic startup restarts the companion once; pairing is retained.").font(.caption).foregroundStyle(.secondary)
+                    HStack(alignment:.top,spacing:8){if follow.warning{Image(systemName:"exclamationmark.triangle.fill").foregroundStyle(.orange)};Text(follow.status).font(.callout)}
+                    Button("Open Login Items…"){follow.openLoginItems()}
+                    Text("Close this window to keep running quietly. Open Keepresso Mobile again to show settings. You control background permission in macOS Login Items.").font(.caption).foregroundStyle(.secondary)
                 }.frame(maxWidth:.infinity,alignment:.leading)
             }
             Text(model.message).font(.callout)
-            if !model.authorizationReady {
-                GroupBox("Saved pairing"){
-                    VStack(alignment:.leading,spacing:8){
-                        Text(authorization.state == .loading ? "Reading saved pairing keys… You can leave this window open or quit normally." : "Saved pairing keys need access to macOS Keychain. Your existing pairing is retained; connections are paused.").font(.callout)
-                        Button("Unlock saved pairing…"){model.loadSavedAuthorization(allowInteraction:true)}.disabled(authorization.state == .loading)
-                    }.frame(maxWidth:.infinity,alignment:.leading)
-                }
-            }
-            HStack{Text("Nearby: \(model.bluetoothState)");Spacer();Text("\(model.connectionCount) connected").foregroundStyle(.secondary)}.font(.caption)
-            if model.nearbyEnabled{Button("Disable Nearby"){model.disableNearby()}}else{Button("Enable Nearby Bluetooth"){model.enableNearby()}.buttonStyle(.borderedProminent).disabled(!model.authorizationReady)}
-            Divider()
-            Text("Authorize a phone").font(.headline)
-            Button("Show pairing QR code"){model.armPairing()}.disabled(!model.authorizationReady || !model.nearbyEnabled || !model.nativeRunning)
-            if let invite=model.invitation{
-                if let image=qr(invite.url.absoluteString){Image(nsImage:image).interpolation(.none).resizable().frame(width:230,height:230).padding(8).background(.white).frame(maxWidth:.infinity)}
-                Text("Expires at \(invite.expires.formatted(date:.omitted,time:.shortened)). Approve only the phone you are pairing.").font(.caption).foregroundStyle(.secondary)
-            }
-            if let name=model.pendingName{Text("Allow \(name) to read status and control Keepresso?").font(.headline);HStack{Button("Approve"){model.approve()}.buttonStyle(.borderedProminent);Button("Deny"){model.deny()}}}
-            Divider();Text("Authorized phones").font(.headline)
-            if model.devices.isEmpty{Text(model.authorizationReady ? "No authorized phones":"Saved phones have not been loaded yet.").foregroundStyle(.secondary)}
-            ForEach(model.devices){device in HStack{Text(device.name);Spacer();Button("Revoke"){model.revoke(device)}}}
+            GroupBox("Pairing"){
+                VStack(alignment:.leading,spacing:10){
+                    if !model.authorizationReady {
+                        Text(authorization.state == .loading ? "Reading saved pairing…":"Unlock your saved pairing in macOS Keychain to reconnect.").font(.callout).foregroundStyle(.secondary)
+                    }else if model.devices.isEmpty{Text("No paired phone").foregroundStyle(.secondary)}
+                    else{ForEach(model.devices){device in Label(device.name,systemImage:"checkmark.shield").font(.callout)}}
+                    HStack(spacing:12){
+                        Button(pairingControls.primary == .unlock ? "Unlock saved pairing…":"Show pairing QR code"){
+                            if pairingControls.primary == .unlock{model.loadSavedAuthorization(allowInteraction:true)}else{model.armPairing()}
+                        }.disabled(!pairingControls.primaryEnabled)
+                        Button("Delete pairing",role:.destructive){model.deletingPairing=true}.disabled(!pairingControls.deleteEnabled)
+                    }
+                    if let invite=model.invitation{
+                        if let image=qr(invite.url.absoluteString){Image(nsImage:image).interpolation(.none).resizable().frame(width:230,height:230).padding(8).background(.white).frame(maxWidth:.infinity)}
+                        Text("Expires at \(invite.expires.formatted(date:.omitted,time:.shortened)). Approve only the phone you are pairing.").font(.caption).foregroundStyle(.secondary)
+                    }
+                    if let name=model.pendingName{Text("Allow \(name) to read status and control Keepresso?").font(.headline);HStack{Button("Approve"){model.approve()}.buttonStyle(.borderedProminent);Button("Deny"){model.deny()}}}
+                    Divider()
+                    Toggle("Nearby Bluetooth",isOn:Binding(get:{model.nearbyEnabled},set:{if $0{model.enableNearby()}else{model.disableNearby()}})).disabled(!model.authorizationReady)
+                    HStack{Text(model.bluetoothState);Spacer();Text("\(model.connectionCount) connected")}.font(.caption).foregroundStyle(.secondary)
+                }.frame(maxWidth:.infinity,alignment:.leading)
+            }.alert("Delete pairing?",isPresented:$model.deletingPairing){
+                Button("Cancel",role:.cancel){}
+                Button("Delete pairing",role:.destructive){model.deletePairing()}
+            }message:{Text(model.devices.count>1 ? "All \(model.devices.count) paired phones will lose access. Remove their old authorization in Android Settings before scanning a new QR code.":"Your phone will lose nearby and internet access. Remove its old authorization in the phone app's Settings before scanning a new QR code.")}
             Divider()
             Text("Internet fallback").font(.headline)
             Text(model.relayState).font(.caption).foregroundStyle(.secondary)

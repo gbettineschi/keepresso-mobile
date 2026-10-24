@@ -9,8 +9,13 @@ struct BackgroundEvidenceTests {
     @Test func olderRegisteredBuildWithConfigFailureOffersOwnerRefresh(){
         let stale="parent bundle version = 3\nstate = spawn scheduled\nlast exit code = 78: EX_CONFIG\njob state = spawn failed"
         #expect(BackgroundLaunchEvidence.requiresRefresh(stale,currentBuild:"5"))
-        #expect(!BackgroundLaunchEvidence.requiresRefresh(stale,currentBuild:"3"))
+        #expect(BackgroundLaunchEvidence.requiresRefresh(stale,currentBuild:"3"))
         #expect(!BackgroundLaunchEvidence.requiresRefresh(stale.replacingOccurrences(of:"spawn failed",with:"running"),currentBuild:"5"))
         #expect(!BackgroundLaunchEvidence.requiresRefresh(stale.replacingOccurrences(of:"78: EX_CONFIG",with:"1"),currentBuild:"5"))
+    }
+    @Test func anEnabledRegistrationIsNotProofOfARunningJob(){
+        #expect(BackgroundLaunchEvidence.launchHealth("state = running\npid = 123") == .running)
+        #expect(BackgroundLaunchEvidence.launchHealth("state = running") == .unavailable)
+        #expect(BackgroundLaunchEvidence.launchHealth("state = spawn scheduled\nlast exit reason = OS_REASON_CODESIGNING") == .failed)
     }
 }

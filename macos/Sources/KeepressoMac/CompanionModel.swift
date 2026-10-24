@@ -6,6 +6,7 @@ import KeepressoCore
 @MainActor final class CompanionModel:ObservableObject {
     let authorization=SavedAuthorizationLoader()
     @Published private(set) var authorizationReady=false
+    @Published var deletingPairing=false
     @Published private(set) var nativeRunning = false
     private var lifecycle = NativeLifecycleGate()
     private let refreshOwner=TriggerRefreshOwner()
@@ -87,14 +88,19 @@ import KeepressoCore
     func shutdown() { authorization.stop();authorizationReady=false;_=lifecycle.update(applicationToken:nil);suspend() }
     func enableNearby(){guard authorizationReady,revocations != nil else{message="Unlock saved pairing keys first.";return};UserDefaults.standard.set(true,forKey:"nearbyEnabled");nearbyEnabled=true;guard nativeRunning else{bluetoothState="Waiting for Keepresso";return};bluetooth.start();message="Nearby Bluetooth is enabled. Authorize a phone using the QR code on this Mac."}
     func disableNearby(){UserDefaults.standard.set(false,forKey:"nearbyEnabled");bluetooth.stop();nearbyEnabled=false;bluetoothState="Off";pairing.deny();pairingChanged()}
-    func armPairing(){guard nativeRunning,authorizationReady else{return};do{invitation=try pairing.arm(name:Host.current().localizedName ?? "Mac",now:Date());message="Scan this five-minute invitation on your phone, then approve its name here."}catch{message="Could not create a secure invitation."}}
+    func armPairing(){guard nativeRunning,authorizationReady,devices.isEmpty else{return};if !nearbyEnabled{enableNearby()};do{invitation=try pairing.arm(name:Host.current().localizedName ?? "Mac",now:Date());message="Scan this five-minute invitation on your phone, then approve its name here."}catch{message="Could not create a secure invitation."}}
     func pairingChanged(){invitation=pairing.invitation;pendingName=pairing.pending?.request.deviceName}
     func approve(){do{try bluetooth.approvePending();message="Phone authorized. It must now complete the encrypted handshake."}catch{pairing.deny();pairingChanged();message="Approval could not be saved securely. Pair again."}}
     func deny(){bluetooth.denyPending()}
+    func deletePairing(){
+        guard authorizationReady else{return}
+        deny()
+        for device in devices{revoke(device)}
+    }
     func isAuthorized(_ device:String)->Bool{authorizationReady && nativeRunning && lifecycle.isActive && revocations != nil && !locallyRevoked.contains(device) && revocations?.contains(device) != true && devices.contains{$0.deviceId==device}}
     private var authorizedDevices:[AuthorizedDevice]{devices.filter{isAuthorized($0.deviceId)}}
     func addDevice(_ device:AuthorizedDevice)throws{
-        guard authorizationReady,revocations != nil,!locallyRevoked.contains(device.deviceId),revocations?.contains(device.deviceId) != true,!devices.contains(where:{$0.deviceId==device.deviceId}),devices.count<8 else{throw CompanionError.invalid}
+        guard authorizationReady,revocations != nil,devices.isEmpty,!locallyRevoked.contains(device.deviceId),revocations?.contains(device.deviceId) != true else{throw CompanionError.invalid}
         let updated=devices+[device];try credentials.save(updated);devices=updated;relay?.nearbyChanged();runRelayTick()
     }
     func revoke(_ device:AuthorizedDevice){
