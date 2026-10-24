@@ -3,6 +3,17 @@ import java.time.Instant
 import java.net.URLEncoder
 import kotlin.test.*
 class ValidationTest {
+    @Test fun internetReadingsRejectWrongTypesAndUnsupportedStates() {
+        for (fields in listOf("\"internet\":true", "\"internet\":\"connected\"", "\"networkType\":\"magic\"", "\"wifiName\":42")) {
+            assertFailsWith<IllegalArgumentException> { DashboardState().update("""{"capturedAt":"2026-10-23T12:00:00Z","mac":{$fields}}""", 0) }
+        }
+        assertFails { DashboardState().update("""{"capturedAt":"2026-10-23T12:00:00Z","mac":{"internetCheckedAt":"yesterday"}}""", 0) }
+    }
+    @Test fun olderHelpersAndUnavailableWifiNamesRemainValid() {
+        for (fields in listOf("", "\"internet\":\"offline\",\"networkType\":\"wifi\",\"wifiName\":null,\"internetCheckedAt\":\"2026-10-23T12:00:00Z\"")) {
+            DashboardState().update("""{"capturedAt":"2026-10-23T12:00:00Z","mac":{$fields}}""", 0)
+        }
+    }
     @Test fun oldSnapshotDoesNotRenewFreshness() {
         val state = DashboardState(); state.connected = true
         state.update("""{"capturedAt":"2026-10-23T11:59:00Z","keepresso":{"isActive":true}}""", 60000, Instant.parse("2026-10-23T12:00:00Z"))

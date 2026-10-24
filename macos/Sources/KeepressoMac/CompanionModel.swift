@@ -64,11 +64,12 @@ import KeepressoCore
     private func resume() {
         nativeRunning=true
         guard authorizationReady else{message="Connections are paused until saved pairing keys can be read.";return}
+        native.network.start()
         reminders.resumedAfterUnknownInterval(); lastSignature=nil
         resolveEvents(["lid_awake","session_ended_awake","sleep_failed"])
         let generation=lifecycle.generation
         sleepToken=NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.willSleepNotification,object:nil,queue:.main){[weak self] _ in Task{@MainActor in guard let self,self.lifecycle.accepts(generation:generation) else{return};self.observedSleep()}}
-        wakeToken=NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.didWakeNotification,object:nil,queue:.main){[weak self] _ in Task{@MainActor in guard let self,self.lifecycle.accepts(generation:generation) else{return};self.relay?.wake();self.runRelayTick()}}
+        wakeToken=NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.didWakeNotification,object:nil,queue:.main){[weak self] _ in Task{@MainActor in guard let self,self.lifecycle.accepts(generation:generation) else{return};self.native.network.reset();self.relay?.wake();self.runRelayTick()}}
         if nearbyEnabled { enableNearby() }
         if relayEnabled,let configuration=relayConfiguration { startRelay(configuration) }
         message="Native Keepresso is running. Saved connections resume automatically."
@@ -76,6 +77,7 @@ import KeepressoCore
     }
     private func suspend() {
         nativeRunning=false;timer?.invalidate();timer=nil
+        native.network.stop()
         cancelLidProbe();lastLid=nil;reminders.resumedAfterUnknownInterval()
         relay?.stop();relay=nil;relayTask?.cancel();relayTask=nil;relayTaskID=nil
         refreshOwner.cancel();observer.invalidate()
@@ -249,7 +251,7 @@ import KeepressoCore
             }
         }
     }
-    private func observedSleep(){cancelLidProbe();lastLid=nil;relay?.wake();reminders.observedSleep();resolveEvents(["hourly","lid_awake","session_ended_awake","sleep_failed"]);try? persistReminders();observer.markStale()}
+    private func observedSleep(){native.network.stop();cancelLidProbe();lastLid=nil;relay?.wake();reminders.observedSleep();resolveEvents(["hourly","lid_awake","session_ended_awake","sleep_failed"]);try? persistReminders();observer.markStale()}
     private func persistReminders()throws{
         try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
         let data=try WireJSON.encoder.encode(reminders);guard data != persistedReminderData else{return}

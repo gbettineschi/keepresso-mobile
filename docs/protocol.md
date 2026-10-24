@@ -60,7 +60,10 @@ All timestamps ISO8601 UTC. Missing/null values mean unknown; no defaults implyi
   mac: { lock: "locked|unlocked|unknown", display: "on|dimmed|off|unknown",
     lid: "open|closed|unknown", batteryPercent: number|null,
     powerSource: "battery|ac|unknown", isCharging?: boolean|null, temperatureC: number|null,
-    temperatureSensor: string|null, thermal: "normal|warm|hot|unknown" },
+    temperatureSensor: string|null, thermal: "normal|warm|hot|unknown",
+    internet?: "online|offline|check_failed|checking|unknown",
+    internetCheckedAt?: string|null,
+    networkType?: "wifi|ethernet|cellular|other|none|unknown", wifiName?: string|null },
   keepresso: { appRunning: boolean, version: string|null, isActive: boolean|null,
     endsAt: string|null, triggersEnabled: boolean|null, triggersPaused: boolean|null,
     sessionKind: "manual|automatic|lease|unknown", safetyPause: "battery|thermal|none|unknown" },
@@ -75,5 +78,11 @@ All timestamps ISO8601 UTC. Missing/null values mean unknown; no defaults implyi
 ```
 
 Reachability is derived by Android from authenticated fresh responses and transport state, not a remote claimed awake field. After disconnect show Unreachable and last-known readings, disable mutations. Mark snapshots stale after 15 s without an authenticated update.
+
+Internet telemetry describes the **Mac**, independently of the phone's internet and BLE/relay transport. Online requires a fresh HTTPS 204 response from a credential-free, uncached HEAD request to `https://www.gstatic.com/generate_204`, with `https://cp.cloudflare.com/generate_204` as an independent fallback. Redirects and unexpected responses fail; each request has a three-second resource budget. Offline means no usable network path; Check failed means a path exists but neither endpoint passed (an endpoint outage/filter can also cause this). This checks usable public HTTPS, not every website, VPN route, or relay health. The hosts receive the Mac's public connection metadata, never pairing keys or application payloads.
+
+Checks coalesce, run on path changes or when requested snapshots are due (15 seconds after the last result), and expire after 45 seconds. No additional polling timer or wake assertion. Network changes, stopping the monitor and sleep/wake invalidate old results and late completions. Android additionally rejects stale/future internet evidence using authenticated server time. Missing new fields from older helpers display Not checked/Unknown. Unreachable readings remain explicitly last-known.
+
+wifiName is only the current associated CoreWLAN SSID (up to 128 UTF-8 bytes to accommodate conversion from legacy SSID encodings); null is not evidence of disconnected Wi-Fi. macOS can require optional Location permission, requested only by a Mac settings button. No coordinates, saved-network inference or Wi-Fi scans. Network type describes the active path, or an associated Wi-Fi network when no route exists and its name can be read.
 
 Triggers always represent an independent snapshot. A successfully completed, structurally valid assessment replaces checkedAt, including a partial assessment with unknown per-rule inputs. Such a partial assessment uses state unknown and an explicit message; the phone preserves unknown rows with an accessible question indicator. Worker timeout, parse failure or incompatible settings preserve the previous successful timestamp and mark stale/unknown as appropriate. Never advertise observer-only grace as a guarantee of native handover. A native status/mode/setting change makes the old preview stale.

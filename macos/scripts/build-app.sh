@@ -28,14 +28,16 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundleDisplayName</key><string>Keepresso Mobile</string>
 <key>CFBundleExecutable</key><string>KeepressoMac</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.4.3</string>
-<key>CFBundleVersion</key><string>7</string>
+<key>CFBundleShortVersionString</key><string>0.4.4</string>
+<key>CFBundleVersion</key><string>8</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>
 <key>CFBundleIconFile</key><string>AppIcon.icns</string>
 <key>NSBluetoothAlwaysUsageDescription</key><string>Connect to your authorized Keepresso phone nearby using encrypted Bluetooth messages.</string>
 <key>NSBluetoothPeripheralUsageDescription</key><string>Share status and controls only with phones you explicitly authorize on this Mac.</string>
+<key>NSLocationUsageDescription</key><string>Show your Mac's current Wi-Fi name on your paired phone. No coordinates are collected.</string>
+<key>NSLocationWhenInUseUsageDescription</key><string>Show your Mac's current Wi-Fi name on your paired phone. No coordinates are collected.</string>
 <key>NSHumanReadableCopyright</key><string>Unofficial companion. Original Keepresso artwork belongs to its author.</string>
 </dict></plist>
 PLIST

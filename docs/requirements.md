@@ -16,8 +16,10 @@ Current scope: retain official Keepresso updates and avoid maintaining a persona
 
 6. App header: original app icon and Keepresso name.
 7. MacBook status: **Awake** or **Unreachable**.
-8. Group all dashboard readings together in two rows: **Lock / Display / Lid** in the first row, **Battery / Temperature** in the second, with one thin separator between them. Show Locked/Unlocked, Display On/Dimmed/Off, Lid Open/Closed, battery percentage and power source, and temperature with severity colour. Temperature has no separate section.
+8. Group all dashboard readings together: **Lock / Display / Lid**, a thin separator, then **Battery / Temperature**, and **Internet / Wi-Fi or Network** below. Show Locked/Unlocked, Display On/Dimmed/Off, Lid Open/Closed, battery percentage and power source, and temperature with severity colour. Temperature has no separate section.
 9. Preserve unknown and last-known readings. An unreachable Mac must not be presented as currently off, asleep, locked or unlocked based only on a lost connection.
+
+    Owner addition, 24 October: a compact third facts row shows the Mac's actual Internet check and current Wi-Fi name (or Ethernet/other network), independently of nearby Bluetooth. No route is Offline; a route without successful public HTTPS checks is Check failed. Unknown/Checking remain explicit; Wi-Fi permission is optional and denied/hidden names are unavailable, never inferred. No new notifications. Prepare and emulator-test this addition, then wait for explicit approval before installing either updated app.
 10. Call the Keepresso session section **Brewing session**.
 11. Display **Running** or **Not running**, accompanied by the original brewing/idle coffee mark.
 12. Remove the large elapsed-session counter.

@@ -30,3 +30,13 @@ The repository is public. The Android and Mac applications implement nearby and 
 | Distribution | Development APK and ad-hoc Mac bundle. No Play Store release, notarization or unattended installation. |
 
 The key next acceptance step is to pair the actual Android phone and Mac, inspect read-only status first, and then deliberately test commands and background reminders. Follow [ACCEPTANCE.md](ACCEPTANCE.md); no successful build or simulated acknowledgement substitutes for those observations.
+
+## Prepared internet-status update — awaiting installation approval
+
+Mac 0.4.4 (8) and Android 0.4.1 (6) add one compact Internet / Wi-Fi-or-Network facts row. This is independent of Bluetooth transport. A fresh, credential-free HTTPS check is required for Online; no route is Offline; both public endpoint checks failing is Check failed, rather than a claim that every internet destination is down. Optional Wi-Fi name access requests macOS Location authorization only from the settings button. See [protocol](protocol.md) and [recovery](RECOVERY.md) for refresh timing, privacy and setup.
+
+Verification on 24 October: 104 Swift, 68 Kotlin core and 18 relay tests passed; Android built and lint completed with no errors (existing warnings remain). Eight new internet dashboard cases plus six existing dashboard/settings cases passed in each of light and dark mode on the dedicated emulator. Cases include route loss with associated Wi-Fi, failed proof, checking/hidden SSID, long names/Ethernet, old helper fields, stale/future/extreme timestamps and unreachable controls. One fresh review found a potential extreme-timestamp overflow; a failing emulator regression reproduced it, and comparison against an Instant window fixed it. No review findings were deferred.
+
+A bounded read-only diagnostic on the actual Mac returned Online / Wi-Fi, with no SSID supplied by macOS. It did not request permission or create the app model, transports, login item or power controls. Live network disruption/captive portals, actual permission-dialog behavior after consent, installed-device acceptance and live timeout/cancellation delivery remain unverified. HTTP failure/fallback responses and obsolete check tokens were tested with controlled fixtures. No hardware acceptance is inferred from these tests.
+
+Both packages were prepared locally with the retained identities. Owner installations remain Mac 0.4.3 (7) / Android 0.4.0 (5), verified read-only. The official Keepresso executable and all 107 pinned source files are unchanged. No loose staged app remains. Do not install this update until the owner explicitly approves it.

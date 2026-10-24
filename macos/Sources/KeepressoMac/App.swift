@@ -26,6 +26,21 @@ import Darwin
             if let data{try? FileHandle.standardOutput.write(contentsOf:data)}
             exit(reading==nil ? 1:0)
         }
+        if CommandLine.arguments.contains("--read-connectivity"){
+            // Read-only diagnostic: no app model, authorization or power path.
+            Task{@MainActor in
+                let network=MacNetworkStatus();network.start()
+                for _ in 0..<80{
+                    try? await Task.sleep(nanoseconds:100_000_000)
+                    let snapshot=network.snapshot()
+                    if ["online","offline","check_failed"].contains(snapshot["internet"] as? String ?? ""){
+                        network.stop();if let data=try? WireJSON.data(snapshot){try? FileHandle.standardOutput.write(contentsOf:data)};exit(0)
+                    }
+                }
+                network.stop();exit(1)
+            }
+            dispatchMain()
+        }
         if CommandLine.arguments.contains("--self-check"){
             // Branch before NSApplication, Keychain, BLE, timers, native status,
             // observer or any control adapter is created.
@@ -123,6 +138,7 @@ import Darwin
     }
 }
 struct CompanionView:View{
+    @StateObject private var wifiAccess=WifiNameAccess()
     @ObservedObject var model:CompanionModel
     @ObservedObject var follow:BackgroundControl
     @ObservedObject var authorization:SavedAuthorizationLoader
@@ -174,6 +190,12 @@ struct CompanionView:View{
                 if model.relayEnabled{Button("Disable Internet"){model.disableRelay()}}else{Button("Enable saved relay"){model.enableStoredRelay()}.disabled(!model.authorizationReady || model.relayURLInput.isEmpty)}
             }
             Text("Your relay must already be deployed and configured. The Mac bearer is saved in Keychain. Authorized phones receive internet access through their existing nearby pairing.").font(.caption).foregroundStyle(.secondary)
+            GroupBox("Wi-Fi name"){
+                VStack(alignment:.leading,spacing:8){
+                    Text(wifiAccess.allowed ? "Wi-Fi name access is allowed.":"macOS requires Location permission to share the current Wi-Fi name with your phone. Internet checks work without it.").font(.caption).foregroundStyle(.secondary)
+                    if !wifiAccess.allowed{Button(wifiAccess.needsSettings ? "Open Location Settings…":"Allow Wi-Fi name…"){wifiAccess.request()}}
+                }.frame(maxWidth:.infinity,alignment:.leading)
+            }
             Divider()
             Text("Native Keepresso manages sessions and safeguards. Sleep ends the session and pauses triggers first. Manually latched closed-lid mode must be turned off on the Mac; Only while brewing releases it automatically. Temperature uses the hottest readable CPU sensor.").font(.caption).foregroundStyle(.secondary)
             Text("Reminders: \(model.reminders.settings.enabled ? "enabled":"routine off"), every \(model.reminders.settings.intervalSeconds/3600) hour(s). Phone Settings can change the interval and still-awake delay.").font(.caption)

@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -156,13 +157,13 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
     OutlinedTextField(value = pasted, onValueChange = { pasted = it.take(2048) }, label = { Text("Or paste pairing invitation") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
     TextButton(onClick = { onPair(pasted); pasted = "" }, enabled = pasted.isNotBlank()) { Text("Pair with Mac") }
 }
-@Composable private fun Fact(label: String, value: String, detail: String? = null, modifier: Modifier = Modifier, severity: String? = null, icon:ImageVector?=null,iconLabel:String?=null) {
+@Composable private fun Fact(label: String, value: String, detail: String? = null, modifier: Modifier = Modifier, severity: String? = null, icon:ImageVector?=null,iconLabel:String?=null,valueMaxLines:Int=Int.MAX_VALUE) {
     val color = when (severity) { "warm" -> if (isSystemInDarkTheme()) Color(0xFFF5CB5B) else Color(0xFF8A6100); "hot" -> if (isSystemInDarkTheme()) Color(0xFFFF9D90) else Color(0xFFB3332B); else -> MaterialTheme.colorScheme.onSurface }
     Column(modifier) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(5.dp))
         Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)){
-            Text(value, style = MaterialTheme.typography.bodyMedium,fontWeight=FontWeight.Normal,color=color)
+            Text(value, style = MaterialTheme.typography.bodyMedium,fontWeight=FontWeight.Normal,color=color,maxLines=valueMaxLines,overflow=TextOverflow.Ellipsis)
             icon?.let{Icon(it,iconLabel,Modifier.size(16.dp),tint=color)}
         }
         detail?.let { Text(it, style = MaterialTheme.typography.bodySmall,fontWeight=FontWeight.Normal,color=color) }
@@ -186,6 +187,16 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
         val charging=mac.flag("isCharging")==true
         Fact("Battery",battery?.let{"${it.roundToInt()}%"} ?: "—",modifier=Modifier.weight(1f),severity=when{battery==null->null;battery<=10->"hot";battery<=20->"warm";else->null},icon=if(charging)Icons.Default.Bolt else if(mac.text("powerSource")=="ac")Icons.Default.Power else null,iconLabel=if(charging)"Charging" else "External power")
         Fact("Temperature", mac.number("temperatureC")?.let { "${it.roundToInt()} °C" } ?: "—",modifier=Modifier.weight(1f),severity=mac.text("thermal"))
+    }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        val checked=parsed(mac.text("internetCheckedAt"))
+        val serverNow=now.plusSeconds(state.serverOffsetSeconds)
+        val fresh=checked?.let{it>=serverNow.minusSeconds(45) && it<=serverNow.plusSeconds(10)}==true
+        val internet=mac.text("internet").let{if(it=="checking" || fresh)it else "unknown"}
+        Fact("Internet",when(internet){"online"->"Online";"offline"->"Offline";"check_failed"->"Check failed";"checking"->"Checking…";else->"Not checked"},modifier=Modifier.weight(1f).semantics{contentDescription="Mac internet"},severity=when(internet){"offline"->"hot";"check_failed"->"warm";else->null})
+        val network=mac.text("networkType")
+        val wifiName=mac.text("wifiName")?.map{if(it.isISOControl())' ' else it}?.joinToString("")?.takeIf{it.isNotBlank()}
+        Fact(if(network=="wifi")"Wi-Fi" else "Network",when(network){"wifi"->wifiName ?: "Name unavailable";"ethernet"->"Ethernet";"cellular"->"Cellular";"other"->"Other connection";"none"->"Disconnected";else->"Unknown"},modifier=Modifier.weight(1f),valueMaxLines=2)
     }
     HorizontalDivider()
     val active = k.flag("isActive"); val manual = k.text("sessionKind") == "manual" && active == true
