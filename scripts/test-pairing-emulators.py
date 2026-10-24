@@ -10,7 +10,7 @@ parser.add_argument('--adb',default='adb')
 parser.add_argument('--client',required=True)
 parser.add_argument('--peer',required=True)
 parser.add_argument('--netsim',help='Emulator radio-control executable (default: sibling SDK emulator/netsim)')
-parser.add_argument('--case',choices=['all','approve','deny','slow','sleep'],default='all',help='Run the full suite or one focused Bluetooth flow')
+parser.add_argument('--case',choices=['all','approve','deny','slow','sleep','warning'],default='all',help='Run the full suite or one focused Bluetooth flow')
 args=parser.parse_args()
 if args.client==args.peer:parser.error('Client and peer must be different emulators')
 package='io.github.gbettineschi.keepressomobile'
@@ -75,6 +75,7 @@ if args.case=='all':
     test('dashboard','DashboardUiTest')
     clear_client()
     test('transport-state','TransportStateTest')
+    test('warning-channel','WarningChannelTest')
 
 def peer_case(mode,method):
     clear_client();adb(args.peer,'shell','am','force-stop',package);adb(args.peer,'logcat','-c')
@@ -105,4 +106,5 @@ if args.case in ['all','approve']:peer_case('approve','PairingFlowTest#qrApprova
 if args.case in ['all','deny']:peer_case('deny','PairingFlowTest#localDenialDoesNotPersistPhoneAuthorization')
 if args.case in ['all','slow']:peer_case('slow','PairingFlowTest#quietPollKeepsControlsEnabledAndTapWaitsBehindReadWithoutDuplicates')
 if args.case in ['all','sleep']:peer_case('sleep','PairingFlowTest#sleepNeedsConfirmationAndAcceptedRequestDoesNotClaimCompletedSleep')
+if args.case in ['all','warning']:peer_case('warning','PairingFlowTest#lidWarningUsesUrgentChannelAndDuplicateRoutesCannotPostAgain')
 print('PASS: '+args.case+' pairing emulator checks. Results: '+str(results),flush=True)

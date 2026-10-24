@@ -48,7 +48,7 @@ Only perform these when prepared for the Mac to become unreachable. Save work fi
 
 ## Outside this build
 
-Internet delivery/relay, remote wake, official app trigger-state restoration, Play Store release, notarized Mac distribution and an independent security audit are not completed by these tests.
+Remote wake, official app trigger-state restoration, Play Store release, notarized Mac distribution and an independent security audit are outside this build. Internet foreground protocol flows are tested with synthetic peers; physical handoff and locked-phone push are not established by those tests.
 # Internet transport acceptance
 
 These are additional to the nearby checks below. Keep all real power changes owner-initiated; no development test may start Keepresso or put the Mac to sleep.
@@ -71,3 +71,9 @@ These checks require the owner; development did not enable the background item o
 - From the app's permanent Applications location, click Enable Follow Keepresso and approve in Login Items if required. Verify actual status, the one-time managed restart, unchanged pairing and reconnection. Deny/disable approval and check the UI describes that state honestly.
 - Log out/in: enabled companion starts hidden and waits for native Keepresso. Force-kill only the companion intentionally: it restarts without opening settings. Choose explicit Quit: it stays stopped for that login until manually reopened; a later login starts it again.
 - Reopen after explicit Quit and verify it returns to managed operation. Disable automatic startup in Login Items and confirm it remains disabled after another login. Verify upgrades/moving the registered app do not leave an obsolete background item enabled.
+
+## Urgent warnings (0.4.0)
+
+- In Android Settings → Warning alerts, check alarm volume, Android alert settings and the Do Not Disturb exception. Grant special access yourself if desired, then tap Test alert. Silent ringer mode is separate from alarm volume; zero alarm volume and some DND/phone policies can still silence sound. The app does not raise volume or change global DND.
+- While Only while brewing is holding the Mac awake, deliberately close its lid: expect one Glass sound and one best-effort trackpad feedback request, plus one urgent phone warning. No repeated warning while it stays closed; reopen and close again for a new event. Closed-at-startup, sleep or an unknown gap must not manufacture a lid closure. Mac haptics may not be felt without trackpad contact.
+- After a real Sleep now confirmation, verify the Mac actually sleeps. The app says Sleep requested only; disconnecting is not proof of sleep. A manually enabled global closed-lid override requires the owner's native setting change first.

@@ -272,11 +272,8 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
         snoozed?.let{Text("Snoozed until ${time(it)}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){TextButton(onClick={Companion.service?.send("snooze_reminders")},enabled=reachable && !state.busy){Text("Snooze 6 hours")};if(snoozed!=null)TextButton(onClick={Companion.service?.send("resume_reminders")},enabled=reachable && !state.busy){Text("Resume")}}
     }
-    SettingsGroup("Warning alerts"){
-        Text("Lid closed, heat and sleep problems. These stay on when routine reminders are snoozed.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick={context.startActivity(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,context.packageName).putExtra(Settings.EXTRA_CHANNEL_ID,"warnings"))}){Icon(Icons.Default.NotificationsActive,null,Modifier.size(18.dp));Spacer(Modifier.width(8.dp));Text("Android alert settings")}
-        TextButton(onClick={context.startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))}){Text("Allow during Do Not Disturb")}
-    }
+    SettingsGroup("Warning alerts"){WarningAlertSettings()}
+
     TextButton(onClick=onReset,enabled=state.pairedName!=null,colors=ButtonDefaults.textButtonColors(contentColor=MaterialTheme.colorScheme.error)){Text("Remove phone authorization")}
 }
 @Composable private fun SettingsGroup(title:String,content:@Composable ColumnScope.()->Unit){
@@ -290,6 +287,7 @@ private fun duration(minutes: Long): String = if (minutes >= 60) "${minutes / 60
 class ReminderActionActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Companion.service?.foreground(true)
         val action = intent.action?.takeIf { it in setOf("ack", "snooze") }
         val macId = intent.getStringExtra("macId")
         if (action != null && macId != null) {

@@ -17,16 +17,16 @@ This checklist is the work ledger; no item is complete without recorded evidence
 | 09 | Active triggers, checked time and Check on one line | UI verified: five emulator tests in light and dark; backend dependencies tracked separately |
 | 10 | Remove Unknown/input unavailable prose without treating unknown as inactive | UI verified: five emulator tests in light and dark; backend dependencies tracked separately |
 | 11 | No disabled-button flicker from polling; bounded in-memory command wait behind a read | Verified: 64 core / 58 Swift tests, slow-read BLE and fallback-routing emulator checks |
-| 12 | Measure Bluetooth and live Vercel latency; test duplicates/failover; state physical gaps honestly | Pending |
+| 12 | Measure Bluetooth and live Vercel latency; test duplicates/failover; state physical gaps honestly | Verification recorded below |
 | 13 | Compact duration stepper, fixed-width duration and Start, space between controls | UI verified: five emulator tests in light and dark; backend dependencies tracked separately |
 | 14 | Implement safe Sleep now rather than hardcoded unavailable | Verified: 6 injected-power tests and emulator confirmation/cancel. Actual Mac sleep remains owner-run. |
 | 15 | Remove Checking Mac and other transient read boilerplate | Verified: 64 core / 58 Swift tests, slow-read BLE and fallback-routing emulator checks |
-| 16 | Native vs helper reminder responsibilities, no duplicate routine notification owners | Pending |
-| 17 | One lid-close warning: Mac sound plus best-effort haptic and phone warning | Pending |
-| 18 | Strong Android warning channel: sound/vibration, DND setup and truthful limits | Pending |
-| 19 | Closed-lid native menu icon suggestion, no fork or unsolicited upstream post | Pending |
+| 16 | Native vs helper reminder responsibilities, no duplicate routine notification owners | Verification recorded below |
+| 17 | One lid-close warning: Mac sound plus best-effort haptic and phone warning | Verification recorded below |
+| 18 | Strong Android warning channel: sound/vibration, DND setup and truthful limits | Verification recorded below |
+| 19 | Closed-lid native menu icon suggestion, no fork or unsolicited upstream post | Verification recorded below |
 | 20 | Polished Settings with compact grouped controls and useful setup/status | UI verified: five emulator tests in light and dark; backend dependencies tracked separately |
-| 21 | Emulator light/dark and failure-state verification; retained-key app updates | Pending |
+| 21 | Emulator light/dark and failure-state verification; retained-key app updates | Verification recorded below |
 
 ## Approach
 
@@ -93,3 +93,11 @@ posting it requires an explicit request to send it.
 - A privileged companion daemon could forcibly clear global sleep settings, but
   adds installation/authorization and ownership hazards. Use verified native stop
   plus normal system sleep, reporting actual blockers.
+
+## 0.4.0 verification record
+
+70 Mac unit tests plus one opt-in live fixture,66 Kotlin core tests and18 relay tests. Full dedicated two-emulator suite passed: permission continuation/recreation, UI, quiet reads/one command, denied/approved pairing, reconnect, fallback state, Sleep confirmation and urgent warning metadata/dedup/resolution. Light/dark captures and owner app updates are recorded in the final trial report.
+
+Actual Android foreground internet + Swift production RelayCoordinator/MutationExecutor passed against deployed Vercel/Firestore using seeded synthetic phone keys and fake session controls: initial verified status12.097s, Start acknowledgement9.367s; duplicate caused one effect and Stop acknowledged. This is distinct from physical Bluetooth handoff, locked-phone FCM delivery, actual Mac sound/haptic and actual sleep acceptance.
+
+Unknown trigger rows are unresolved upstream input evidence, not a claim that no trigger is active. Trigger Check stays explicit; ordinary status updates every2s nearby and roughly5s remotely. Fast remote publication is leased for65s by a60s demand request; hidden/background polling is unchanged.

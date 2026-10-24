@@ -5,6 +5,8 @@ import android.app.*
 import android.content.*
 import android.content.pm.PackageManager
 import android.os.*
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import io.github.gbettineschi.keepressomobile.core.*
@@ -68,7 +70,7 @@ class NearbyService : Service() {
                 pollRelay()
             }
             if (session?.ready != true && !relayFresh.reachable(now.plus(serverOffset))) Companion.update { it.copy(authenticated = false, connection = "Internet status is stale or unavailable") }
-            if(session?.ready!=true && relayFresh.epoch!=null && now.epochSecond>=nextRemoteStatus){nextRemoteStatus=now.epochSecond+10;send("status",quiet=true)}
+            if(session?.ready!=true && relayFresh.epoch!=null && now.epochSecond>=nextRemoteStatus){nextRemoteStatus=now.epochSecond+60;send("status",quiet=true)}
         }
         main.postDelayed(this, 1000)
     } }
@@ -332,14 +334,47 @@ class NearbyService : Service() {
 object Notifications {
     private val posted = linkedSetOf<Int>()
     fun updateConnection(c: Context, text: String) { runCatching { c.getSystemService(NotificationManager::class.java).notify(1, connection(c, text)) } }
-    fun channels(c: Context) { c.getSystemService(NotificationManager::class.java).createNotificationChannels(listOf(NotificationChannel("nearby", "Nearby connection", NotificationManager.IMPORTANCE_LOW), NotificationChannel("reminders", "Routine reminders", NotificationManager.IMPORTANCE_DEFAULT), NotificationChannel("warnings", "Battery, heat and sleep warnings", NotificationManager.IMPORTANCE_HIGH))) }
+    const val URGENT_CHANNEL = "urgent_warnings_v1"
+    fun channels(c: Context) {
+        val manager = c.getSystemService(NotificationManager::class.java)
+        // Existing channels retain the owner's sound/importance choices. A versioned new
+        // category is necessary because Android cannot change an existing channel's audio usage.
+        val urgent = manager.getNotificationChannel(URGENT_CHANNEL) ?: NotificationChannel(URGENT_CHANNEL, "Urgent Mac warnings", NotificationManager.IMPORTANCE_HIGH).apply {
+            description = "Lid closed while awake, heat and sleep problems"
+            setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM), AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+            enableVibration(true); vibrationPattern = longArrayOf(0, 350, 150, 350)
+        }
+        urgent.setBypassDnd(manager.isNotificationPolicyAccessGranted)
+        manager.createNotificationChannels(listOf(NotificationChannel("nearby", "Nearby connection", NotificationManager.IMPORTANCE_LOW), NotificationChannel("reminders", "Routine reminders", NotificationManager.IMPORTANCE_DEFAULT), urgent))
+    }
     private fun open(c: Context, id: Int) = PendingIntent.getActivity(c, id, Intent(c, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     fun connection(c: Context, text: String): Notification = NotificationCompat.Builder(c, "nearby").setSmallIcon(R.drawable.keepresso_menu_idle).setContentTitle("Keepresso nearby").setContentText(text).setContentIntent(open(c, 0)).setOngoing(true).build()
-    fun reminder(c: Context, id: Int, title: String, body: String, routine: Boolean, macId: String) {
+    fun reminder(c: Context, id: Int, title: String, body: String, kind: String, macId: String, createdAt: Instant) {
+        val routine = kind == "hourly"
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(c, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
-        val b = NotificationCompat.Builder(c, if (routine) "reminders" else "warnings").setSmallIcon(R.drawable.keepresso_menu_brewing).setContentTitle(title).setContentText(body).setStyle(NotificationCompat.BigTextStyle().bigText(body)).setContentIntent(open(c, id)).setAutoCancel(true)
+        val b = NotificationCompat.Builder(c, if (routine) "reminders" else URGENT_CHANNEL).setSmallIcon(R.drawable.keepresso_menu_brewing).setContentTitle(title).setContentText(body).setStyle(NotificationCompat.BigTextStyle().bigText(body)).setContentIntent(open(c, id)).setAutoCancel(true)
+            .setPriority(if(routine) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_MAX)
+            .setCategory(if(routine) NotificationCompat.CATEGORY_REMINDER else NotificationCompat.CATEGORY_ALARM)
+            .addExtras(Bundle().apply { putString("keepresso.kind",kind);putString("keepresso.mac",macId);putLong("keepresso.created",createdAt.toEpochMilli()) })
         if (routine) for ((action, label) in listOf("ack" to "OK", "snooze" to "Snooze 6 hours")) b.addAction(0, label, PendingIntent.getActivity(c, id xor action.hashCode(), Intent(c, ReminderActionActivity::class.java).setAction(action).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("notificationId", id).putExtra("macId", macId), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
         b.addAction(0, "Open", open(c, id)); val manager = c.getSystemService(NotificationManager::class.java); posted.add(id); while (posted.size > 24) manager.cancel(posted.first().also { posted.remove(it) }); manager.notify(id, b.build())
+    }
+    fun cancelResolved(c: Context, macId: String, snapshot: JsonObject) {
+        val captured = Instant.parse(snapshot.string("capturedAt")).toEpochMilli()
+        val m = snapshot["mac"]?.jsonObject; val k = snapshot["keepresso"]?.jsonObject
+        val manager = c.getSystemService(NotificationManager::class.java)
+        manager.activeNotifications.forEach { item ->
+            val extras = item.notification.extras
+            if(extras.getString("keepresso.mac") != macId || extras.getLong("keepresso.created",Long.MAX_VALUE) >= captured) return@forEach
+            val resolved = when(extras.getString("keepresso.kind")) {
+                "lid_awake" -> m?.stringOrNull("lid") == "open"
+                "thermal" -> m?.stringOrNull("thermal") == "normal"
+                "hourly" -> k?.boolOrNull("isActive") == false
+                "session_ended_awake", "sleep_failed" -> k?.boolOrNull("isActive") == true
+                else -> false
+            }
+            if(resolved) { manager.cancel(item.id); posted.remove(item.id) }
+        }
     }
 }
 

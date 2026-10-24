@@ -48,7 +48,7 @@ Maximum validity 30 s; issuedAt cannot be >10 s ahead of Mac clock. Phone uses r
 
 Response: `{type:"response",id,status:"ok"|"error"|"uncertain",message?:<safe-user-text>,snapshot?:<Snapshot>}`. A delivered command is not an executed/acknowledged command. Connection loss after send becomes uncertain for mutations. Never automatically resend mutations. A repeated mutation ID returns its stored outcome (or uncertain), not another execution. Bind ID reservation to authorized device and request-body fingerprint; reserve durably before side effects. Reject mismatched duplicate bodies.
 
-Server may send `{type:"event",event:{id,kind,createdAt,title,body,scheduledEnd?:<ISO8601>,snoozedUntil?:<ISO8601>}}` after authentication. Kinds: `hourly`, `session_ended_awake`, `battery`, `thermal`, `sleep_failed`. Android notification actions issue authenticated commands only while reachable, otherwise open the app with no queued power action.
+Server may send `{type:"event",event:{id,kind,createdAt,title,body,scheduledEnd?:<ISO8601>,snoozedUntil?:<ISO8601>}}` after authentication. Kinds: `hourly`, `session_ended_awake`, `battery`, `thermal`, `sleep_failed`, `lid_awake`. Android notification actions issue authenticated commands only while reachable, otherwise open the app with no queued power action.
 
 ## Snapshot
 
@@ -76,4 +76,4 @@ All timestamps ISO8601 UTC. Missing/null values mean unknown; no defaults implyi
 
 Reachability is derived by Android from authenticated fresh responses and transport state, not a remote claimed awake field. After disconnect show Unreachable and last-known readings, disable mutations. Mark snapshots stale after 15 s without an authenticated update.
 
-Triggers always represent an independent snapshot. A successfully completed, structurally valid assessment replaces checkedAt, including a partial assessment with unknown per-rule inputs. Such a partial assessment uses state unknown and an explicit message; the phone labels it Some inputs unknown, rather than Stale. Worker timeout, parse failure or incompatible settings preserve the previous successful timestamp and mark stale/unknown as appropriate. Never advertise observer-only grace as a guarantee of native handover. A native status/mode/setting change makes the old preview stale.
+Triggers always represent an independent snapshot. A successfully completed, structurally valid assessment replaces checkedAt, including a partial assessment with unknown per-rule inputs. Such a partial assessment uses state unknown and an explicit message; the phone preserves unknown rows with an accessible question indicator. Worker timeout, parse failure or incompatible settings preserve the previous successful timestamp and mark stale/unknown as appropriate. Never advertise observer-only grace as a guarantee of native handover. A native status/mode/setting change makes the old preview stale.

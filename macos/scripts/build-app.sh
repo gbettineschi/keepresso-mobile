@@ -6,7 +6,7 @@ REPO_ROOT="$(cd "$MACOS_ROOT/.." && pwd)"
 # Tools. No Xcode project, installation, permissions or power test is needed.
 swift build --package-path "$MACOS_ROOT" --build-system native -c release --product KeepressoMac
 BIN_DIR="$(swift build --package-path "$MACOS_ROOT" --build-system native -c release --show-bin-path)"
-APP="$MACOS_ROOT/artifacts/KeepressoMobile.app"
+APP="${KEEPRESSO_APP_DESTINATION:-$MACOS_ROOT/artifacts/KeepressoMobile.app}"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 mkdir -p "$APP/Contents/Library/LaunchAgents"
@@ -28,8 +28,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundleDisplayName</key><string>Keepresso Mobile</string>
 <key>CFBundleExecutable</key><string>KeepressoMac</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.3.0</string>
-<key>CFBundleVersion</key><string>3</string>
+<key>CFBundleShortVersionString</key><string>0.4.0</string>
+<key>CFBundleVersion</key><string>4</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>

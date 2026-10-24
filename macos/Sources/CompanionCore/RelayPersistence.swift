@@ -92,6 +92,14 @@ public final class RelayOutbox {
         for envelope in envelopes {if let i=next.records.firstIndex(where:{$0.envelope==envelope}){next.records[i].uploaded=true}}
         try persist(next)
     }
+    public func resolve(kinds:Set<String>,now:Date)throws{
+        var next=pruned(now:now)
+        let ids=Set(next.events.filter{kinds.contains($0.kind)}.map(\.id))
+        guard !ids.isEmpty else{return}
+        next.events.removeAll{ids.contains($0.id)}
+        next.records.removeAll{$0.envelope.kind=="event" && ids.contains($0.envelope.id)}
+        try persist(next)
+    }
     public func events(now:Date)->[CompanionEvent] {pruned(now:now).events}
     public func events(deviceId:String,epoch:String,now:Date)->[CompanionEvent] {
         let ids=Set(state.records.filter{$0.envelope.deviceId==deviceId && $0.envelope.kind=="event" && Double($0.envelope.expiresAt)>now.timeIntervalSince1970}.map{$0.envelope.id})

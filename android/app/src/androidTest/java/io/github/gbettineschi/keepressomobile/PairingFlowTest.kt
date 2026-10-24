@@ -32,6 +32,25 @@ class PairingFlowTest {
         intending(hasComponent("com.journeyapps.barcodescanner.CaptureActivity")).respondWith(ActivityResult(Activity.RESULT_OK,Intent().putExtra("SCAN_RESULT",invitation).putExtra("SCAN_RESULT_FORMAT","QR_CODE")))
         ui.onNodeWithText("Scan QR").performClick()
     }
+    @Test fun lidWarningUsesUrgentChannelAndDuplicateRoutesCannotPostAgain(){
+        Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("virtualPeer")=="true")
+        scan();ui.waitUntil(25000){Companion.state.value.reachable(Instant.now())}
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val manager=context.getSystemService(NotificationManager::class.java)
+        fun warnings()=manager.activeNotifications.filter{it.notification.extras.getString("keepresso.kind")=="lid_awake"}
+        ui.waitUntil(5000){warnings().isNotEmpty()}
+        val warning=warnings().single();val notification=warning.notification
+        Assert.assertEquals(Notifications.URGENT_CHANNEL,notification.channelId)
+        Assert.assertEquals(android.app.Notification.CATEGORY_ALARM,notification.category)
+        Assert.assertEquals(listOf("Open"),notification.actions.map{it.title.toString()})
+        val credential=requireNotNull(CredentialStore(context).load())
+        val event=buildJsonObject{put("id","44444444-4444-4444-8444-444444444444");put("kind","lid_awake");put("createdAt",Instant.ofEpochMilli(notification.extras.getLong("keepresso.created")).toString());put("title","Mac awake with lid closed");put("body","Synthetic warning")}
+        ReminderDelivery.post(context,credential,event,Instant.now())
+        Assert.assertEquals("The same event from another route must not beep again",warning.postTime,warnings().single().postTime)
+        val current=requireNotNull(Companion.state.value.snapshot)
+        ReminderDelivery.snapshot(context,buildJsonObject{current.forEach{(k,v)->put(k,v)};put("capturedAt",Instant.now().plusMillis(1).toString());put("mac",buildJsonObject{current.getValue("mac").jsonObject.forEach{(k,v)->put(k,v)};put("lid","open")})})
+        ui.waitUntil(3000){warnings().isEmpty()}
+    }
     @Test fun qrApprovalEncryptedDashboardControlsAndReconnect(){
         Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("virtualPeer")=="true")
         scan()
@@ -40,8 +59,11 @@ class PairingFlowTest {
         ui.waitUntil(25000){Companion.state.value.reachable(Instant.now())}
         ui.onNodeWithText("Awake").assertIsDisplayed()
         ui.onNodeWithText("83%").performScrollTo().assertIsDisplayed()
+        val startNanos=System.nanoTime()
         ui.onNodeWithText("Start").performScrollTo().assertIsEnabled().performClick()
         ui.waitUntil(10000){Companion.state.value.snapshot?.get("keepresso")?.toString()?.contains("\"manual\"")==true}
+        val commandMs=(System.nanoTime()-startNanos)/1_000_000
+        java.io.File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,"local-report.json").writeText(buildJsonObject{put("commandMs",commandMs);put("transport",Companion.state.value.transport)}.toString())
         ui.onNodeWithText("Stop manual session").assertIsEnabled()
         val notifications=InstrumentationRegistry.getInstrumentation().targetContext.getSystemService(NotificationManager::class.java)
         fun reminders()=notifications.activeNotifications.filter{it.notification.extras.getString("android.title")=="Keepresso test reminder"}

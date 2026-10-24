@@ -28,6 +28,7 @@ class VirtualMacPeerTest {
     private val peers=mutableMapOf<String,Peer>();private val keys=mutableMapOf<String,ByteArray>()
     private var active=false;private var paused=true;private var end:Instant?=null;private var checked:Instant?=null;private var startCount=0;private var sleepCount=0
     private var interval=3600;private var delay=300;private var routine=true;private var snoozed:Instant?=null
+    private var warningSent=false
     private fun snapshot()=buildJsonObject{
         put("capturedAt",Instant.now().toString());put("macName","Emulated Mac")
         put("fixtureStartCount",startCount)
@@ -66,6 +67,11 @@ class VirtualMacPeerTest {
             val response=buildJsonObject{put("type","response");put("id",message.string("id"));put("status","ok");put("snapshot",snapshot())}
             if(action=="status" && InstrumentationRegistry.getArguments().getString("mode")=="slow")main.postDelayed({if(peers[peer.device.address]===peer)send(peer,response,true)},1500)
             else send(peer,response,true)
+            if(action=="status" && !warningSent && InstrumentationRegistry.getArguments().getString("mode")=="warning"){
+                warningSent=true
+                val event=buildJsonObject{put("type","event");put("event",buildJsonObject{put("id","44444444-4444-4444-8444-444444444444");put("kind","lid_awake");put("createdAt",Instant.now().toString());put("title","Mac awake with lid closed");put("body","Synthetic warning")})}
+                send(peer,event,true);send(peer,event,true)
+            }
             if(action=="start_manual"){
                 val event=buildJsonObject{put("type","event");put("event",buildJsonObject{put("id",java.util.UUID.randomUUID().toString());put("kind","hourly");put("createdAt",Instant.now().toString());put("title","Keepresso test reminder");put("body","Synthetic virtual Mac reminder")})}
                 send(peer,event,true);send(peer,event,true)

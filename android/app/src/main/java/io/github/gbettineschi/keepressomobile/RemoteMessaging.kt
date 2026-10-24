@@ -140,7 +140,7 @@ private object RelayEventDelivery {
 
 object ReminderDelivery {
     private val lock = Any()
-    fun snapshot(c: Context, value: JsonObject) = synchronized(lock) { CredentialStore(c).writePrivate("latestSnapshot", value.toString()) }
+    fun snapshot(c: Context, value: JsonObject) = synchronized(lock) { val store = CredentialStore(c); store.writePrivate("latestSnapshot", value.toString()); store.load()?.let { Notifications.cancelResolved(c, it.macId, value) } }
     fun reset(c: Context) = synchronized(lock) { CredentialStore(c).clear() }
     fun replace(c: Context, credential: Credential) = synchronized(lock) { val store = CredentialStore(c); store.clearPrivateState(); store.save(credential) }
     fun post(c: Context, credential: Credential, event: JsonObject, now: Instant) = synchronized(lock) {
@@ -155,7 +155,7 @@ object ReminderDelivery {
         if (PhoneReminders.filter(c).suppressed(macId, kind, now)) return@synchronized
         val title = event.string("title").take(120); val body = event.string("body").take(1000)
         Notifications.channels(c)
-        Notifications.reminder(c, event.string("id").hashCode(), title, body, kind == "hourly", macId)
+        Notifications.reminder(c, event.string("id").hashCode(), title, body, kind, macId, Instant.parse(event.string("createdAt")))
         Companion.activity(title)
     }
 }

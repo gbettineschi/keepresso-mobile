@@ -9,6 +9,7 @@ import KeepressoCore
     private let refreshOwner=TriggerRefreshOwner()
     private var relayTask: Task<Void, Never>?
     private var relayTaskID: UUID?
+    private var lidProbe:Task<Void,Never>?;private var lidProbeID:UUID?;private var lastLid:Bool?
     @Published var invitation:PairInvitation?;@Published var pendingName:String?;@Published var devices:[AuthorizedDevice]=[]
     @Published var message="Unofficial Keepresso companion. Enable Nearby when you are ready to connect.";@Published var bluetoothState="Off";@Published var connectionCount=0
     @Published var reminders=ReminderMachine();@Published var nearbyEnabled=false
@@ -50,6 +51,7 @@ import KeepressoCore
     }
     private func resume() {
         nativeRunning=true; reminders.resumedAfterUnknownInterval(); lastSignature=nil
+        resolveEvents(["lid_awake","session_ended_awake","sleep_failed"])
         let generation=lifecycle.generation
         sleepToken=NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.willSleepNotification,object:nil,queue:.main){[weak self] _ in Task{@MainActor in guard let self,self.lifecycle.accepts(generation:generation) else{return};self.observedSleep()}}
         wakeToken=NSWorkspace.shared.notificationCenter.addObserver(forName:NSWorkspace.didWakeNotification,object:nil,queue:.main){[weak self] _ in Task{@MainActor in guard let self,self.lifecycle.accepts(generation:generation) else{return};self.relay?.wake();self.runRelayTick()}}
@@ -60,6 +62,7 @@ import KeepressoCore
     }
     private func suspend() {
         nativeRunning=false;timer?.invalidate();timer=nil
+        cancelLidProbe();lastLid=nil;reminders.resumedAfterUnknownInterval()
         relay?.stop();relay=nil;relayTask?.cancel();relayTask=nil;relayTaskID=nil
         refreshOwner.cancel();observer.invalidate()
         bluetooth.stop();pairing.deny();pairingChanged()
@@ -163,13 +166,17 @@ import KeepressoCore
             }catch{reminders=previous;result=CommandResponse(id:request.id,status:"error",message:"Reminder settings could not be saved.")}
         default:
             result=await commands.execute(request,authorized:authorized);observer.markStale()
+            if request.action=="sleep_now",authorized(){
+                if let event=reminders.observeSafety(kind:"sleep_failed",active:result.status != "ok",now:Date()){deliver([event])}
+                else{try? persistReminders()}
+            }
         }
         return result
     }
     private var ticks=0
     private func tick(){
         guard nativeRunning else{return}
-        bluetooth.tick();pairingChanged();runRelayTick();ticks+=1;guard ticks % 10==0 else{return}
+        bluetooth.tick();pairingChanged();checkLid();runRelayTick();ticks+=1;guard ticks % 10==0 else{return}
         let status=native.native()
         let settings=UserDefaults(suiteName:"sh.gyorgy.keepresso")?.data(forKey:UserDefaultsSettingsStore.defaultKey)?.base64EncodedString() ?? "unknown"
         let signature="\(status?.isActive.description ?? "unknown")/\(status?.triggersPaused.description ?? "unknown")/\(status?.triggersEnabled.description ?? "unknown")/\(status?.endsAt?.timeIntervalSince1970.description ?? "unknown")/\(settings)"
@@ -178,13 +185,49 @@ import KeepressoCore
         let hot:Bool?
         switch ProcessInfo.processInfo.thermalState{case .nominal,.fair:hot=false;case .serious,.critical:hot=true;@unknown default:hot=nil}
         if let hot,let warning=reminders.observeSafety(kind:"thermal",active:hot,now:Date()){events.append(warning)}
+        if hot==false{resolveEvents(["thermal"])}
+        if status?.isActive==true{resolveEvents(["session_ended_awake"])}
+        deliver(events)
+    }
+    private func deliver(_ events:[CompanionEvent]){
         do{
             guard let eventOutbox else{throw CompanionError.unavailable}
             for event in events{try eventOutbox.enqueue(event,devices:authorizedDevices,macId:macId,epoch:relay?.epoch ?? localEventEpoch,now:Date())}
             try persistReminders();events.forEach{bluetooth.broadcast($0)}
         }catch{message="Reminder state cannot be saved. Delivery is suspended until storage is available."}
     }
-    private func observedSleep(){relay?.wake();reminders.observedSleep();try? persistReminders();observer.markStale()}
+    private func resolveEvents(_ kinds:Set<String>){
+        do{try eventOutbox?.resolve(kinds:kinds,now:Date())}catch{message="Resolved warnings could not be cleared from delivery storage."}
+    }
+    private func cancelLidProbe(){lidProbe?.cancel();lidProbe=nil;lidProbeID=nil}
+    private func checkLid(){
+        let closed=IORegistryLidState().isClosed()
+        if closed==false{
+            cancelLidProbe()
+            if lastLid != false{resolveEvents(["lid_awake"])}
+        }
+        lastLid=closed
+        _=reminders.observeLid(closed:closed,sleepDisabled:nil,now:Date())
+        guard closed==true,reminders.needsLidCheck(now:Date()),lidProbe==nil else{return}
+        let id=UUID(),generation=lifecycle.generation;lidProbeID=id
+        lidProbe=Task{[weak self] in
+            defer{if self?.lidProbeID==id{self?.lidProbe=nil;self?.lidProbeID=nil}}
+            for _ in 0..<4{
+                guard !Task.isCancelled else{return}
+                let disabled=await SystemSleepSettings.readDisabled()
+                guard let self,!Task.isCancelled,self.lifecycle.accepts(generation:generation),self.lidProbeID==id,IORegistryLidState().isClosed()==true,self.reminders.needsLidCheck(now:Date()) else{return}
+                if let event=self.reminders.observeLid(closed:true,sleepDisabled:disabled,now:Date()){
+                    self.deliver([event])
+                    // Trackpad feedback is best effort; macOS may suppress it without touch.
+                    NSSound(named:NSSound.Name("Glass"))?.play()
+                    NSHapticFeedbackManager.defaultPerformer.perform(.generic,performanceTime:.now)
+                    return
+                }
+                try? await Task.sleep(for:.milliseconds(500))
+            }
+        }
+    }
+    private func observedSleep(){cancelLidProbe();lastLid=nil;relay?.wake();reminders.observedSleep();resolveEvents(["hourly","lid_awake","session_ended_awake","sleep_failed"]);try? persistReminders();observer.markStale()}
     private func persistReminders()throws{
         try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
         let data=try WireJSON.encoder.encode(reminders);guard data != persistedReminderData else{return}

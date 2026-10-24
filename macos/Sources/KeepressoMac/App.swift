@@ -165,6 +165,7 @@ struct CompanionView:View{
             Divider()
             Text("Native Keepresso manages sessions and safeguards. Sleep ends the session and pauses triggers first. Manually latched closed-lid mode must be turned off on the Mac; Only while brewing releases it automatically. Temperature uses the hottest readable CPU sensor.").font(.caption).foregroundStyle(.secondary)
             Text("Reminders: \(model.reminders.settings.enabled ? "enabled":"routine off"), every \(model.reminders.settings.intervalSeconds/3600) hour(s). Phone Settings can change the interval and still-awake delay.").font(.caption)
+            Text("Closing the lid while sleep is disabled plays one sound and requests trackpad feedback, plus an urgent phone warning. Trackpad feedback and phone sound depend on device settings; test phone alerts in Android Settings.").font(.caption).foregroundStyle(.secondary)
             Button("Quit Keepresso Mobile"){NSApp.terminate(nil)}
         }.padding(20)}.frame(minWidth:410,minHeight:480).tint(copper)
     }

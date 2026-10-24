@@ -144,7 +144,7 @@ extension RelayRoutingTests {
         api.commands=[try RelayEnvelope.seal(WireJSON.encoder.encode(request),key:paired.key,macId:mac,deviceId:device,id:request.id,epoch:coordinator.epoch,direction:"c2s",kind:"command",now:clock.wall,lifetime:30)]
         clock.advance(5);await coordinator.tick();api.commands=[]
         clock.advance(1);await coordinator.tick();#expect(api.batches.last!.states.count==1)
-        for _ in 0..<3{clock.advance(5);await coordinator.tick();#expect(api.batches.last!.states.count==1)}
+        for _ in 0..<12{clock.advance(5);await coordinator.tick();#expect(api.batches.last!.states.count==1)}
         clock.advance(5);await coordinator.tick();#expect(api.batches.last!.states.isEmpty)
         clock.advance(5);await coordinator.tick();#expect(api.batches.last!.states.count==1)
     }

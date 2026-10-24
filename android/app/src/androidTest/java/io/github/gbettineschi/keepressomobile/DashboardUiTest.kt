@@ -16,9 +16,9 @@ class DashboardUiTest {
     private val ui=createAndroidComposeRule<MainActivity>()
     @get:Rule val rules=RuleChain.outerRule(EmulatorOnlyRule()).around(GrantPermissionRule.grant(Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.POST_NOTIFICATIONS)).around(ui)
     @Before fun state(){show()}
-    private fun show(error:Boolean=false){
+    private fun show(error:Boolean=false,battery:Int=83,thermal:String="normal"){
         val now=Instant.now()
-        val json="""{"capturedAt":"$now","macName":"Test Mac","mac":{"lock":"locked","display":"off","lid":"closed","batteryPercent":83,"powerSource":"ac","isCharging":true,"temperatureC":58.4,"temperatureSensor":"CPU test","thermal":"normal"},"keepresso":{"appRunning":true,"version":"1.27.0","isActive":false,"endsAt":null,"triggersEnabled":true,"triggersPaused":true,"sessionKind":"unknown","safetyPause":"none"},"capabilities":{"startManual":true,"stopManual":false,"pauseTriggers":true,"resumeTriggers":true,"sleepNow":true,"refreshTriggers":true},"triggers":{"state":"${if(error)"error" else "unknown"}","checkedAt":"$now","combined":null,"rules":[{"id":"0","label":"AI agent working (+180s)","satisfied":true,"inGrace":false,"graceRemaining":null,"details":[{"label":"Private agent session","active":true,"agent":"Codex"}]},{"id":"1","label":"Microphone in use","satisfied":null,"inGrace":false,"graceRemaining":null,"details":[]}],"message":"Trigger refresh exceeded its five-second budget or its input/output was unavailable. Worker stopped; previous assessment time preserved."},"reminders":{"enabled":true,"intervalSeconds":3600,"endedAwakeDelaySeconds":300,"snoozedUntil":null}}"""
+        val json="""{"capturedAt":"$now","macName":"Test Mac","mac":{"lock":"locked","display":"off","lid":"closed","batteryPercent":$battery,"powerSource":"ac","isCharging":true,"temperatureC":58.4,"temperatureSensor":"CPU test","thermal":"$thermal"},"keepresso":{"appRunning":true,"version":"1.27.0","isActive":false,"endsAt":null,"triggersEnabled":true,"triggersPaused":true,"sessionKind":"unknown","safetyPause":"none"},"capabilities":{"startManual":true,"stopManual":false,"pauseTriggers":true,"resumeTriggers":true,"sleepNow":true,"refreshTriggers":true},"triggers":{"state":"${if(error)"error" else "unknown"}","checkedAt":"$now","combined":null,"rules":[{"id":"0","label":"AI agent working (+180s)","satisfied":true,"inGrace":false,"graceRemaining":null,"details":[{"label":"Private agent session","active":true,"agent":"Codex"}]},{"id":"1","label":"Microphone in use","satisfied":null,"inGrace":false,"graceRemaining":null,"details":[]}],"message":"Trigger refresh exceeded its five-second budget or its input/output was unavailable. Worker stopped; previous assessment time preserved."},"reminders":{"enabled":true,"intervalSeconds":3600,"endedAwakeDelaySeconds":300,"snoozedUntil":null}}"""
         ui.runOnIdle{Companion.mutable.value=UiState(connection="Connected nearby",authenticated=true,snapshot=obj(json),receivedAt=now,lastContact=now,pairedName="Test Mac",macId="11111111-1111-4111-8111-111111111111")}
     }
     @Test fun dashboardUsesCompactFactsAndNativeStyleTriggerRows(){
@@ -55,9 +55,13 @@ class DashboardUiTest {
         ui.onNodeWithText("Warning alerts").performScrollTo().assertIsDisplayed()
         ui.onNodeWithText("Android alert settings").assertExists()
         ui.onAllNodesWithText("Thermal warnings are not snoozed.",substring=true).assertCountEquals(0)
+        ui.onNodeWithText("Test alert").performScrollTo().assertIsDisplayed()
+        capture("settings-polish.png")
     }
-    @Test fun captureDashboard(){
+    @Test fun captureWarmLowBattery(){show(battery=15,thermal="warm");capture("dashboard-warm.png")}
+    @Test fun captureDashboard(){capture("dashboard-polish.png")}
+    private fun capture(name:String){
         val context=InstrumentationRegistry.getInstrumentation().targetContext
-        java.io.File(context.cacheDir,"dashboard-polish.png").outputStream().use{ui.onRoot().captureToImage().asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)}
+        java.io.File(context.cacheDir,name).outputStream().use{ui.onRoot().captureToImage().asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)}
     }
 }

@@ -6,7 +6,7 @@ plugins {
 android {
     namespace = "io.github.gbettineschi.keepressomobile"
     compileSdk = 35
-    defaultConfig { applicationId = namespace; minSdk = 28; targetSdk = 35; versionCode = 4; versionName = "0.3.1" }
+    defaultConfig { applicationId = namespace; minSdk = 28; targetSdk = 35; versionCode = 5; versionName = "0.4.0" }
     defaultConfig { testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
     buildFeatures { compose = true; buildConfig = true }
     defaultConfig {

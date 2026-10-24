@@ -80,7 +80,7 @@ import Foundation
                     let request=try WireJSON.decoder.decode(CommandRequest.self,from:body)
                     guard request.id==envelope.id else{throw CompanionError.mismatch};try request.validate(now:now())
                     if try outbox.response(id:request.id,deviceId:device.deviceId,epoch:sentEpoch,body:body,now:now()) != nil{continue}
-                    if request.action=="status"{foregroundUntil[device.deviceId]=monotonic()+20}
+                    if request.action=="status"{foregroundUntil[device.deviceId]=monotonic()+65}
                     let rejection=request.isMutation && !freshDevices.contains(device.deviceId) ? "Refresh status through the internet connection before issuing controls.":nil
                     let response=await execute(request,device.deviceId,body,rejection)
                     guard active,epoch==sentEpoch,authorized(device.deviceId) != nil,!contactGap() else{continue}

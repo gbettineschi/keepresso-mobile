@@ -35,7 +35,7 @@ class RequestRoute {
 class EventClaims(private val load: () -> String?, private val save: (String) -> Unit) {
     @Synchronized fun claim(macId: String, event: JsonObject, now: Instant, snapshot: JsonObject?): Boolean {
         canonicalId(macId); val id = canonicalId(event.string("id")); val kind = event.string("kind")
-        require(kind in setOf("hourly", "session_ended_awake", "battery", "thermal", "sleep_failed"))
+        require(kind in setOf("hourly", "session_ended_awake", "battery", "thermal", "sleep_failed", "lid_awake"))
         val created = Instant.parse(event.string("createdAt")); require(created <= now.plusSeconds(10))
         require(event.string("title").toByteArray().size <= 480 && event.string("body").toByteArray().size <= 4096)
         val key = "$macId/$id"
@@ -49,6 +49,7 @@ class EventClaims(private val load: () -> String?, private val save: (String) ->
             if (kind == "hourly" && k?.boolOrNull("isActive") == false) return false
             if (kind in setOf("session_ended_awake", "sleep_failed") && k?.boolOrNull("isActive") == true) return false
             if (kind == "thermal" && m?.stringOrNull("thermal") == "normal") return false
+            if (kind == "lid_awake" && m?.stringOrNull("lid") == "open") return false
             if (kind == "battery" && m?.get("batteryPercent")?.jsonPrimitive?.doubleOrNull?.let { it >= 30 } == true && k?.stringOrNull("safetyPause") == "none") return false
         }
         return true
