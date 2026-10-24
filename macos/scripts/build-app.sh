@@ -49,6 +49,6 @@ for SIZE in 16 32 128 256 512; do
   sips -z "$DOUBLE" "$DOUBLE" "$REPO_ROOT/shared/assets/keepresso-mobile-mac-icon.png" --out "$ICONSET/icon_${SIZE}x${SIZE}@2x.png" >/dev/null
 done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
-codesign --force --deep --sign - "$APP"
+bash "$MACOS_ROOT/scripts/sign-app.sh" "$APP"
 "$APP/Contents/MacOS/KeepressoMac" --self-check
 printf '%s\n' "$APP"

@@ -16,7 +16,7 @@ bash macos/scripts/build-app.sh
 macos/artifacts/KeepressoMobile.app/Contents/MacOS/KeepressoMac --self-check
 ```
 
-The script uses Command Line Tools, builds a release executable, bundles original artwork/localizations, and ad-hoc signs `macos/artifacts/KeepressoMobile.app`. It does not install or launch the normal helper. Self-check branches before AppKit initialization, credentials, Bluetooth, the observer, status readers or power adapters. No real power commands run in tests.
+The script uses Command Line Tools, builds a release executable, bundles original artwork/localizations, and signs `macos/artifacts/KeepressoMobile.app`. With no configured identity it makes an ad-hoc development fixture and warns that updates can repeat Keychain approvals. Owner builds can require an exact Apple-issued signing certificate with `KEEPRESSO_CODESIGN_IDENTITY` and `KEEPRESSO_REQUIRE_STABLE_SIGNING=1`; see [stable Mac signing](../docs/MAC_SIGNING.md). It does not install or launch the normal helper. Self-check branches before AppKit initialization, credentials, Bluetooth, the observer, status readers or power adapters. No real power commands run in tests.
 
 Swift 6.4 Command Line Tools currently require an explicit Swift Testing macro plugin path; Package.swift applies this only when that compiler/plugin is present. The default Swift build/test tool interface remains supported. Local CLT linker warnings about absent Developer framework search directories are environmental; production source compiles without concurrency warnings.
 

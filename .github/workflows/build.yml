@@ -103,6 +103,8 @@ jobs:
           xcrun --show-sdk-path
           swift --version | grep 'Swift version 6.4'
       - run: swift test --package-path macos
+      - name: Check signing policy without Keychain access
+        run: python3 macos/scripts/test-sign-app.py
       - name: Package helper
         run: bash macos/scripts/build-app.sh
       - name: Safe packaged self-check
