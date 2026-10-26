@@ -56,6 +56,8 @@ BLE server sends encrypted `{type:"relay_config",url:<HTTPS base URL>,authTicket
 
 Mac sends ordinary snapshots/events over BLE when that device is authenticated nearby. On disconnect it publishes state to relay immediately and continues state every10s. Relay command poll every5s while Mac is naturally awake; no keep-awake lease. Android polls every5s only while foreground, not authenticated on BLE; after explicit command it may poll outcome at1s for at most30s. Background uses FCM. BLE permission denial does not disable internet; notifications denial does not disable foreground status.
 
+While the phone is open over internet, a successful status round trip requests a 65-second foreground publication window (snapshots every5s). Android renews after30s from the successful response, leaving room for network delay or another pending operation. A renewal blocked behind a pending request remains due; it is never postponed as if sent. Delayed messages cannot backdate newer authenticated capture evidence within the same epoch. Transient polling failures retain only already-fresh proof; they do not extend its15s expiry. Rejected authorization or invalid payloads invalidate immediately.
+
 Mac persists reminder outbox entries before transmission; one eventID survives handoffs. Android persists claimed event IDs before posting through BLE or FCM, bounded by expiry/time. Reject expired events and obsolete incidents when a newer authenticated snapshot proves them resolved. Outbox retries apply to immutable notifications/status only, never power commands. A local revoked-device tombstone gates every incoming and outgoing transport even if Keychain/remote deletion fails.
 
 ## Free tier model (one Mac, one phone)

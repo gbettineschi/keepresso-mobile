@@ -44,9 +44,18 @@ class LiveRelayTest {
         remote.call("send",envelope)
         Thread.sleep(7000)
         Assert.assertEquals(1,Companion.state.value.snapshot?.get("fixtureStartCount")?.jsonPrimitive?.int)
+        val observationSeconds=(InstrumentationRegistry.getArguments().getString("observeSeconds")?.toIntOrNull() ?: 0).also{require(it in 0..180)}
+        var maxSnapshotAgeMs=0L
+        val observeUntil=System.nanoTime()+observationSeconds*1_000_000_000L
+        while(System.nanoTime()<observeUntil){
+            Thread.sleep(500)
+            val state=Companion.state.value;val now=Instant.now()
+            Assert.assertTrue("Internet reachability lost during sustained observation: ${state.connection}",state.reachable(now))
+            maxSnapshotAgeMs=maxOf(maxSnapshotAgeMs,java.time.Duration.between(requireNotNull(state.receivedAt),now).toMillis())
+        }
         ui.onNodeWithText("Stop manual session").performScrollTo().assertIsEnabled().performClick()
         ui.waitUntil(30000){Companion.state.value.snapshot?.get("keepresso")?.jsonObject?.get("isActive")?.jsonPrimitive?.boolean==false && !Companion.state.value.busy}
         Assert.assertEquals(1,Companion.state.value.snapshot?.get("fixtureStartCount")?.jsonPrimitive?.int)
-        File(c.cacheDir,"live-report.json").writeText(buildJsonObject{put("statusMs",statusMs);put("commandMs",commandMs);put("transport",Companion.state.value.transport)}.toString())
+        File(c.cacheDir,"live-report.json").writeText(buildJsonObject{put("statusMs",statusMs);put("commandMs",commandMs);put("transport",Companion.state.value.transport);put("observedSeconds",observationSeconds);put("maxSnapshotAgeMs",maxSnapshotAgeMs)}.toString())
     }
 }

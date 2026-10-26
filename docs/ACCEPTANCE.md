@@ -13,6 +13,8 @@ Automated tests and successful packages do not establish physical Bluetooth deli
 - Revoke the phone on Mac while connected. It must disconnect immediately and fail to authenticate again until explicitly paired afresh.
 - Deny Bluetooth/Nearby Devices/notification permissions individually, then grant through the normal OS UI. Confirm a usable recovery path and no misleading live state.
 - Leave Bluetooth range and return. Status becomes Unreachable, controls disable, last-known readings remain distinguishable, and reconnection never executes a previously pending mutation.
+- Leave the dashboard open over nearby and then over internet for several minutes, including multiple status renewals. No Awake/Unreachable flicker should occur while fresh verified updates keep arriving. Test an isolated network failure and then a genuine >15-second outage; the latter must disable controls.
+- Owner closes the lid and checks whether macOS actually slept. Unreachable is correct after real sleep. On wake, verify a fresh nearby service/handshake, retained pairing and no continuation of a command issued before sleep. Test closed-lid awake operation only using the owner's existing native Keepresso setup; the companion never changes that setting or holds the Mac awake for monitoring.
 
 ## Status and trigger assessment
 

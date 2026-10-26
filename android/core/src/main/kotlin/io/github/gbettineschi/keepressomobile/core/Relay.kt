@@ -112,8 +112,8 @@ class RelayFreshness {
         val capture = Instant.parse(snapshot.string("capturedAt")); require(capture <= now.plusSeconds(10))
         if (latestCreated?.let { created < it } == true || (e == epoch && rev <= revision)) return false
         val maintain = e == epoch && reachable(now)
-        if (e != epoch) { authenticatedAt = null; expected = null; revision = -1 }
-        epoch = e; revision = rev; latestCreated = created; captured = capture
+        if (e != epoch) { authenticatedAt = null; expected = null; revision = -1; captured = null }
+        epoch = e; revision = rev; latestCreated = created; captured = captured?.let { maxOf(it,capture) } ?: capture
         if (maintain) authenticatedAt = now
         else if (authenticatedAt?.let { now > it.plusSeconds(15) } == true) authenticatedAt = null
         return true
@@ -124,8 +124,9 @@ class RelayFreshness {
         if (pending.first != id || e != epoch || now < pending.second || now > pending.second.plusSeconds(30)) return false
         validateSnapshot(snapshot); val capture = Instant.parse(snapshot.string("capturedAt"))
         if (capture < pending.second.minusSeconds(1) || capture > now.plusSeconds(10) || now > capture.plusSeconds(15)) return false
-        captured = capture; authenticatedAt = now; expected = null; return true
+        captured = captured?.let { maxOf(it,capture) } ?: capture; authenticatedAt = now; expected = null; return true
     }
     fun reachable(now: Instant): Boolean = authenticatedAt?.let { now >= it && now <= it.plusSeconds(15) } == true && captured?.let { now >= it.minusSeconds(10) && now <= it.plusSeconds(15) } == true
+    fun diagnostic(now:Instant):String="revision=$revision proofAgeSeconds=${authenticatedAt?.let{now.epochSecond-it.epochSecond}} captureAgeSeconds=${captured?.let{now.epochSecond-it.epochSecond}} awaitingStatus=${expected!=null}"
     fun disconnect() { authenticatedAt = null; expected = null }
 }

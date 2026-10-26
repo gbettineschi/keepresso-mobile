@@ -55,6 +55,29 @@ class RelayTest {
         tracker.state(epoch, 2, now.plusSeconds(30), snapshot(now.plusSeconds(30)), now.plusSeconds(31))
         assertFalse(tracker.reachable(now.plusSeconds(31)))
     }
+    @Test fun delayedStateCannotRegressTheNewerStatusResponseCapture(){
+        val tracker=RelayFreshness()
+        fun snapshot(seconds:Long)=obj("""{"capturedAt":"${now.plusSeconds(seconds)}"}""")
+        tracker.state(epoch,0,now,snapshot(0),now)
+        tracker.expectStatus(id,now.plusSeconds(1))
+        assertTrue(tracker.status(id,epoch,snapshot(10),now.plusSeconds(11)))
+        // Produced before the response, delivered later, still inside its 15s envelope lifetime.
+        assertTrue(tracker.state(epoch,1,now.plusSeconds(5),snapshot(5),now.plusSeconds(18)))
+        assertTrue(tracker.reachable(now.plusSeconds(21)),"A delayed state must not replace newer authenticated evidence with older data")
+        assertFalse(tracker.reachable(now.plusSeconds(26)),"Do not extend the newer snapshot's original freshness")
+    }
+    @Test fun delayedStatusResponseCannotRegressANewerStateCapture(){
+        val tracker=RelayFreshness()
+        fun snapshot(seconds:Long)=obj("""{"capturedAt":"${now.plusSeconds(seconds)}"}""")
+        tracker.state(epoch,0,now,snapshot(0),now)
+        tracker.expectStatus(id,now.plusSeconds(1))
+        assertTrue(tracker.status(id,epoch,snapshot(10),now.plusSeconds(11)))
+        tracker.expectStatus(id,now.plusSeconds(19))
+        tracker.state(epoch,1,now.plusSeconds(20),snapshot(20),now.plusSeconds(21))
+        assertTrue(tracker.status(id,epoch,snapshot(19),now.plusSeconds(22)))
+        assertTrue(tracker.reachable(now.plusSeconds(35)))
+        assertFalse(tracker.reachable(now.plusSeconds(36)))
+    }
     @Test fun mutationIntentSurvivesRestartAsUncertainAndKeepsExactBody() {
         var stored: String? = null
         val raw = Requests.create("sleep_now", now)

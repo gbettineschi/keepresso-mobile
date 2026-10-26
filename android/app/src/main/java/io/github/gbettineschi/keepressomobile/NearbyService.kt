@@ -23,7 +23,11 @@ object Companion {
     internal val mutable = MutableStateFlow(UiState())
     val state = mutable.asStateFlow()
     var service: NearbyService? = null; internal set
-    fun update(block: (UiState) -> UiState) { mutable.value = block(mutable.value) }
+    fun update(block: (UiState) -> UiState) {
+        val previous=mutable.value;val next=block(previous);mutable.value=next
+        if(previous.authenticated!=next.authenticated || previous.transport!=next.transport || previous.connection!=next.connection)
+            android.util.Log.i("KeepressoTransport","state authenticated=${next.authenticated} route=${next.transport} connection=${next.connection}")
+    }
     fun activity(text: String) { update { it.copy(activity = (listOf(ActivityEntry(Instant.now(), text.take(240))) + it.activity).take(100)) } }
 }
 class NearbyService : Service() {
@@ -63,7 +67,7 @@ class NearbyService : Service() {
         pending?.takeIf {
             val timeout=if(it.mutation || it.operationId!=null)30L else if(it.action=="refresh_triggers")12L else if(it.route=="nearby")5L else 15L
             now>it.sent.plusSeconds(timeout)
-        }?.let { val nearby=it.route=="nearby";deliveryLost();if(nearby)ble.close("Unreachable") }
+        }?.let { android.util.Log.w("KeepressoTransport","request timed out route=${it.route} action=${it.action}");val nearby=it.route=="nearby";deliveryLost();if(nearby)ble.close("Unreachable") }
         if (session?.ready == true && now.epochSecond >= nextNearbyPoll) { nextNearbyPoll = now.epochSecond + if(foregroundActivity)2 else 10; send("status", quiet = true) }
         if (foregroundActivity && (credential?.relayUrl != null && credential?.relayAuthTicket != null) && (session?.ready != true || pending?.route == "relay")) {
             if (now.epochSecond >= nextRemotePoll) {
@@ -71,7 +75,7 @@ class NearbyService : Service() {
                 pollRelay()
             }
             if (session?.ready != true && !relayFresh.reachable(now.plus(serverOffset))) Companion.update { it.copy(authenticated = false, connection = "Internet status is stale or unavailable") }
-            if(session?.ready!=true && relayFresh.epoch!=null && now.epochSecond>=nextRemoteStatus){nextRemoteStatus=now.epochSecond+60;send("status",quiet=true)}
+            if(session?.ready!=true && relayFresh.epoch!=null && now.epochSecond>=nextRemoteStatus && pending==null)send("status",quiet=true)
         }
         main.postDelayed(this, 1000)
     } }
@@ -195,33 +199,50 @@ class NearbyService : Service() {
             main.post {
                 remoteBusy = false
                 if (!enabled || credential !== c || !foregroundActivity) return@post
-                result.onSuccess { poll ->
-                    runCatching {
-                        val now = Instant.now().plus(serverOffset); val codec = RelayCodec(c.macId, c.deviceId, c.key)
-                        poll["state"]?.takeUnless { it == JsonNull }?.let { value ->
-                            val opened = codec.open(value.toString(), now, "s2c", setOf("state"))
-                            val state = obj(opened.plaintext); require(state.string("type") == "relay_state" && state.string("epoch") == opened.epoch)
-                            val rev = state.getValue("revision").jsonPrimitive; require(!rev.isString)
-                            val snapshot = state.getValue("snapshot").jsonObject
-                            if (relayFresh.state(opened.epoch, requireNotNull(rev.longOrNull), opened.createdAt, snapshot, now) && session?.ready != true) updateSnapshot(snapshot)
-                        }
-                        val messages = poll.getValue("messages").jsonArray; require(messages.size <= 32)
-                        messages.forEach { value ->
-                            // Events from a new authenticated epoch can notify without enabling controls.
-                            val opened = codec.open(value.toString(), now, "s2c", setOf("response", "event"))
-                            val r = obj(opened.plaintext)
-                            if (opened.kind == "event") { require(r.string("type") == "event" && r.getValue("event").jsonObject.string("id") == opened.id); ReminderDelivery.post(this, c, r.getValue("event").jsonObject, now) }
-                            else if (opened.epoch == relayFresh.epoch) { require(r.string("id") == opened.id); response(r, "relay", opened.epoch) }
-                        }
-                        if (session?.ready != true) {
-                            val fresh = relayFresh.reachable(now)
-                            Companion.update { it.copy(authenticated = fresh, connection = if (fresh) "Connected over internet" else "Verifying internet connection", transport = "Internet", serverOffsetSeconds = serverOffset.seconds) }
-                            if (pending == null && relayFresh.epoch != null && !fresh) send("status", quiet = true)
-                        }
-                    }.onFailure { relayFresh.disconnect(); if (session?.ready != true) Companion.update { it.copy(authenticated = false, connection = "Internet response could not be authenticated") } }
-                }.onFailure { relayFresh.disconnect(); if (session?.ready != true) Companion.update { it.copy(authenticated = false, connection = "Internet unavailable; last-known readings") } }
+                result.onSuccess { acceptRelayPoll(c,it) }.onFailure(::relayPollFailed)
             }
         }
+    }
+    private fun acceptRelayPoll(c:Credential,poll:JsonObject){
+        runCatching {
+            val now = Instant.now().plus(serverOffset); val codec = RelayCodec(c.macId, c.deviceId, c.key)
+            poll["state"]?.takeUnless { it == JsonNull }?.let { value ->
+                val opened = codec.open(value.toString(), now, "s2c", setOf("state"))
+                val state = obj(opened.plaintext); require(state.string("type") == "relay_state" && state.string("epoch") == opened.epoch)
+                val rev = state.getValue("revision").jsonPrimitive; require(!rev.isString)
+                val snapshot = state.getValue("snapshot").jsonObject
+                val changedEpoch=relayFresh.epoch!=opened.epoch
+                val accepted=relayFresh.state(opened.epoch, requireNotNull(rev.longOrNull), opened.createdAt, snapshot, now)
+                android.util.Log.d("KeepressoTransport","relay state accepted=$accepted changedEpoch=$changedEpoch ${relayFresh.diagnostic(now)}")
+                if (accepted && session?.ready != true) updateSnapshot(snapshot)
+            }
+            val messages = poll.getValue("messages").jsonArray; require(messages.size <= 32)
+            messages.forEach { value ->
+                // Events from a new authenticated epoch can notify without enabling controls.
+                val opened = codec.open(value.toString(), now, "s2c", setOf("response", "event"))
+                val r = obj(opened.plaintext)
+                if (opened.kind == "event") { require(r.string("type") == "event" && r.getValue("event").jsonObject.string("id") == opened.id); ReminderDelivery.post(this, c, r.getValue("event").jsonObject, now) }
+                else if (opened.epoch == relayFresh.epoch) { require(r.string("id") == opened.id); response(r, "relay", opened.epoch) }
+            }
+            if (session?.ready != true) {
+                // response() records its proof while processing this batch. The
+                // earlier envelope-validation time predates that proof by milliseconds.
+                val checkedNow=Instant.now().plus(serverOffset)
+                val fresh = relayFresh.reachable(checkedNow)
+                android.util.Log.d("KeepressoTransport","relay poll fresh=$fresh ${relayFresh.diagnostic(checkedNow)}")
+                Companion.update { it.copy(authenticated = fresh, connection = if (fresh) "Connected over internet" else "Verifying internet connection", transport = "Internet", serverOffsetSeconds = serverOffset.seconds) }
+                if (pending == null && relayFresh.epoch != null && !fresh) send("status", quiet = true)
+            }
+        }.onFailure { android.util.Log.w("KeepressoTransport","relay payload validation failed");relayFresh.disconnect(); if (session?.ready != true) Companion.update { it.copy(authenticated = false, connection = "Internet response could not be authenticated") } }
+    }
+    private fun relayPollFailed(error:Throwable){
+        val transient=if(error is RelayHttpException)error.statusCode==429 || error.statusCode in 500..599 else error is java.io.IOException
+        // A failed read provides no new evidence. Keep only the already proven
+        // interval; never advance its timestamps or retain rejected authorization.
+        if(!transient)relayFresh.disconnect()
+        val fresh=relayFresh.reachable(Instant.now().plus(serverOffset))
+        android.util.Log.w("KeepressoTransport","relay poll failed transient=$transient status=${(error as? RelayHttpException)?.statusCode ?: 0} evidenceFresh=$fresh")
+        if(session?.ready!=true)Companion.update{it.copy(authenticated=fresh,connection=if(fresh)"Internet retrying" else "Internet unavailable; last-known readings")}
     }
     fun send(action: String, duration: Int? = null, settings: ReminderSettings? = null, quiet: Boolean = false) {
         val now = Instant.now(); val serverNow = now.plus(serverOffset)
@@ -272,7 +293,11 @@ class NearbyService : Service() {
             if (parsed.status == "ok") { require(message.string("operationId") == original); journal.reconcile(original, message.string("operationStatus")) }
             reconciledThisConnection.add(original)
         }
-        if (route == "relay" && p.action == "status" && parsed.status == "ok") parsed.snapshot?.let { relayFresh.status(p.id, requireNotNull(epoch), it, now.plus(serverOffset)) }
+        if (route == "relay" && p.action == "status" && parsed.status == "ok") parsed.snapshot?.let {
+            val accepted=relayFresh.status(p.id, requireNotNull(epoch), it, now.plus(serverOffset))
+            android.util.Log.d("KeepressoTransport","relay status accepted=$accepted ${relayFresh.diagnostic(now.plus(serverOffset))}")
+            if(accepted)nextRemoteStatus=now.epochSecond+30
+        }
         parsed.snapshot?.let { updateSnapshot(it) }
         PhoneReminders.filter(this).acknowledge(credential?.macId ?: return, p.action, parsed.status)
         pending = null

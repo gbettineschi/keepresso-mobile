@@ -35,7 +35,7 @@ struct LiveRelayFixtureTests {
         let ticket=try RelayEnvelope.accessTicket(macBearer:bearer,deviceKey:key,macId:mac,deviceId:device)
         var phone=config;phone.removeValue(forKey:"bearerPath");phone["authTicket"]=ticket
         try WireJSON.data(phone).write(to:url.deletingLastPathComponent().appendingPathComponent("phone.json"),options:.atomic)
-        let end=Date()+150
+        let end=Date()+330
         repeat{
             let start=Date();await coordinator.tick();samples.append(Date().timeIntervalSince(start))
             if FileManager.default.fileExists(atPath:url.deletingLastPathComponent().appendingPathComponent("done").path){break}

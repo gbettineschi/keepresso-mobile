@@ -38,6 +38,30 @@ The camera activity result is supplied by the test. Optical QR decoding, actual
 macOS approval/control adapters, real sleep, locked-phone/Doze delivery and FCM
 are separate physical-device checks in [ACCEPTANCE.md](ACCEPTANCE.md).
 
+## Sustained internet status
+
+`TransportStateTest` exercises encrypted relay-batch processing directly in the
+actual service, including immediate successful proof, transient read failure,
+authorization rejection, expired evidence and a keepalive blocked behind a read.
+It uses fixture keys and refused loopback connections, with no native adapter.
+
+For an opt-in deployed-relay check, build both debug/test APKs and run:
+
+```sh
+python3 scripts/test-live-relay-emulator.py \
+  --adb "$ANDROID_HOME/platform-tools/adb" --client emulator-5580 \
+  --url https://your-relay.vercel.app \
+  --mac-bearer /private/path/mac-bearer.txt \
+  --private-dir /private/path/new-fixture-run --observe-seconds 120
+```
+
+This also clears only a validated disposable `Keepresso_` AVD. A synthetic Swift
+Mac enrolls a temporary device, serves encrypted status and fake controls, and
+revokes that device at the end. The observation checks reachability every500ms
+through multiple foreground renewals, records maximum snapshot age and asserts
+that a duplicate mutation executes once. It does not establish physical radio,
+closed-lid, Keychain or completed-sleep behavior. Keep fixture reports private.
+
 ## Stale Android Bluetooth service caches
 
 Some phones cache a Mac's GATT services across app restarts and omit the

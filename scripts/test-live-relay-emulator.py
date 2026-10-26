@@ -7,6 +7,7 @@ import argparse,base64,json,os,re,subprocess,time,uuid
 from pathlib import Path
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('--adb',required=True);p.add_argument('--client',required=True);p.add_argument('--url',required=True);p.add_argument('--mac-bearer',required=True);p.add_argument('--private-dir',required=True)
+p.add_argument('--observe-seconds',type=int,default=0,choices=range(181),metavar='0..180',help='Check continuous foreground freshness after the synthetic duplicate command')
 a=p.parse_args();root=Path(__file__).resolve().parent.parent;package='io.github.gbettineschi.keepressomobile'
 def adb(*args,**kwargs):return subprocess.run([a.adb,'-s',a.client,*args],check=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,**kwargs)
 assert re.fullmatch(r'emulator-\d+',a.client),'Physical phones are forbidden'
@@ -28,7 +29,7 @@ with (directory/'swift.log').open('w') as log:
         adb('shell','am','force-stop',package);adb('shell','pm','clear',package)
         adb('shell','run-as',package,'mkdir','-p','files')
         adb('shell','run-as',package,'sh','-c',"'cat > files/live-phone.json'",input=(directory/'phone.json').read_bytes())
-        result=adb('shell','am','instrument','-w','-r','-e','class',package+'.LiveRelayTest','-e','liveRelay','true',package+'.test/androidx.test.runner.AndroidJUnitRunner',text=True).stdout
+        result=adb('shell','am','instrument','-w','-r','-e','class',package+'.LiveRelayTest','-e','liveRelay','true','-e','observeSeconds',str(a.observe_seconds),package+'.test/androidx.test.runner.AndroidJUnitRunner',text=True).stdout
         (directory/'android.log').write_text(result)
         assert re.search(r'OK \(1 test\)',result),'Android live flow failed; inspect android.log'
         report=adb('exec-out','run-as',package,'cat','cache/live-report.json',text=True).stdout

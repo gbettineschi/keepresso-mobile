@@ -52,6 +52,7 @@ class BleCentral(private val context: Context, private val state: (String) -> Un
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) { handler.post {
             if (g !== gatt) return@post
+            android.util.Log.i("KeepressoTransport","Bluetooth state=$newState status=$status")
             if (status != BluetoothGatt.GATT_SUCCESS || newState == BluetoothProfile.STATE_DISCONNECTED) { close("Unreachable"); return@post }
             if (newState == BluetoothProfile.STATE_CONNECTED && initialization==Initialization.IDLE) {
                 handler.post(frameExpiry);initialization=Initialization.DISCOVERING
@@ -142,6 +143,7 @@ class BleCentral(private val context: Context, private val state: (String) -> Un
     }
     fun authenticated() { peerAuthenticated = true; handshakeTimer?.let(handler::removeCallbacks); handshakeTimer = null }
     fun close(reason: String?) {
+        if(reason!=null)android.util.Log.i("KeepressoTransport","Bluetooth closed: $reason")
         generation++; writeToken++; subscriptionReady = false; initialization=Initialization.IDLE;discoveryRecovery=ServiceDiscoveryRecovery();handler.removeCallbacks(frameExpiry); stopScan(); handshakeTimer?.let(handler::removeCallbacks); handshakeTimer = null
         val old = gatt; if (old != null && !peerAuthenticated) candidate?.let { candidates.failed(it, android.os.SystemClock.elapsedRealtime()) }; candidate = null; peerAuthenticated = false; gatt = null; input = null; output = null; queue.clear(); framer = Framer(); chunkSize = 20
         try { old?.disconnect(); old?.close() } catch (_: SecurityException) { }

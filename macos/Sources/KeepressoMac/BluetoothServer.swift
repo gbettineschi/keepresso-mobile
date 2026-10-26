@@ -1,6 +1,9 @@
 import Foundation
 import CoreBluetooth
 import CompanionCore
+import OSLog
+
+private let bluetoothLog=Logger(subsystem:"local.keespresso.companion",category:"bluetooth")
 
 @MainActor final class BluetoothServer: NSObject, @preconcurrency CBPeripheralManagerDelegate {
     static let service=CBUUID(string:"73f8d1c0-823f-4c2f-9e0a-4454129f3001")
@@ -21,6 +24,7 @@ import CompanionCore
     func peripheralManagerDidUpdateState(_ peripheral:CBPeripheralManager){
         guard peripheral === manager,model.nativeRunning else{return}
         model.bluetoothState=String(describing:peripheral.state)
+        bluetoothLog.info("Peripheral state \(peripheral.state.rawValue,privacy:.public)")
         guard peripheral.state == .poweredOn else { peers.removeAll();return }
         let input=CBMutableCharacteristic(type:Self.input,properties:[.write],value:nil,permissions:[.writeable])
         let output=CBMutableCharacteristic(type:Self.output,properties:[.notify],value:nil,permissions:[])
@@ -31,6 +35,7 @@ import CompanionCore
         guard peripheral === manager,model.nativeRunning else{return}
         guard characteristic.uuid==Self.output,peers.count<8,banned[central.identifier].map({$0>Date()}) != true else{return}
         peers[central.identifier]=Peer(central);model.connectionCount=peers.count
+        bluetoothLog.info("Nearby subscription established")
     }
     func peripheralManager(_ peripheral:CBPeripheralManager,central:CBCentral,didUnsubscribeFrom characteristic:CBCharacteristic){guard peripheral === manager else{return};drop(central.identifier,ban:false)}
     func peripheralManager(_ peripheral:CBPeripheralManager,didReceiveWrite requests:[CBATTRequest]){
@@ -83,6 +88,7 @@ import CompanionCore
         case "authenticate":
             guard let handshake=peer.handshake,let proof=object["proof"] as? String,model.isAuthorized(handshake.deviceId) else{throw CompanionError.unauthorized}
             peer.channel=try handshake.authenticate(proof:proof,now:Date());peer.handshake=nil;peer.authenticatedAt=Date()
+            bluetoothLog.info("Nearby authentication completed")
             try sendPrivate(["type":"ready","macId":model.macId,"deviceId":handshake.deviceId,"serverTime":WireJSON.iso(Date())],peer:peer)
             model.deviceBecameNearby(handshake.deviceId)
         default:throw CompanionError.unauthorized

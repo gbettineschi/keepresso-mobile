@@ -40,6 +40,72 @@ class TransportStateTest {
     @Test fun staleInternetProofCannotKeepControlsEnabledAfterNearbyLoss(){
         scanFailure(30);Assert.assertFalse(Companion.state.value.authenticated);Assert.assertFalse(Companion.state.value.reachable(Instant.now()))
     }
+    @Test fun isolatedInternetPollFailurePreservesOnlyStillFreshEvidence(){
+        scanFailure(2)
+        ui.runOnIdle{
+            val service=requireNotNull(Companion.service)
+            fun field(name:String)=NearbyService::class.java.getDeclaredField(name).apply{isAccessible=true}
+            // Refused loopback connection: real HTTP failure, no external endpoint or native adapter.
+            field("credential").set(service,Credential("11111111-1111-4111-8111-111111111111","22222222-2222-4222-8222-222222222222","Fixture",ByteArray(32),"https://127.0.0.1:1",encode64(ByteArray(32))))
+            field("foregroundActivity").setBoolean(service,true)
+            NearbyService::class.java.getDeclaredMethod("pollRelay").apply{isAccessible=true}.invoke(service)
+        }
+        ui.waitUntil(5000){
+            val service=requireNotNull(Companion.service)
+            !NearbyService::class.java.getDeclaredField("remoteBusy").apply{isAccessible=true}.getBoolean(service)
+        }
+        Assert.assertTrue("An isolated failed read must not discard a still-fresh verified connection",Companion.state.value.reachable(Instant.now()))
+        Assert.assertFalse("Freshness must still expire after 15 seconds",Companion.state.value.reachable(Instant.now().plusSeconds(16)))
+    }
+    @Test fun rejectedAuthorizationImmediatelyDiscardsFreshInternetProof(){
+        scanFailure(2)
+        ui.runOnIdle{
+            NearbyService::class.java.getDeclaredMethod("relayPollFailed",Throwable::class.java).apply{isAccessible=true}.invoke(requireNotNull(Companion.service),RelayHttpException(401))
+        }
+        Assert.assertFalse(Companion.state.value.authenticated)
+    }
+    @Test fun networkFailureCannotReviveExpiredInternetProof(){
+        scanFailure(30)
+        ui.runOnIdle{
+            NearbyService::class.java.getDeclaredMethod("relayPollFailed",Throwable::class.java).apply{isAccessible=true}.invoke(requireNotNull(Companion.service),java.io.IOException("fixture"))
+        }
+        Assert.assertFalse(Companion.state.value.authenticated)
+    }
+    @Test fun busyReadDoesNotPostponeUnsentInternetKeepalive(){
+        scanFailure(0)
+        ui.runOnIdle{
+            val service=requireNotNull(Companion.service)
+            fun field(name:String)=NearbyService::class.java.getDeclaredField(name).apply{isAccessible=true}
+            field("credential").set(service,Credential("11111111-1111-4111-8111-111111111111","22222222-2222-4222-8222-222222222222","Fixture",ByteArray(32),"https://127.0.0.1:1",encode64(ByteArray(32))))
+            field("foregroundActivity").setBoolean(service,true);field("nextRemotePoll").setLong(service,Long.MAX_VALUE);field("nextRemoteStatus").setLong(service,0)
+            val type=NearbyService::class.java.declaredClasses.single{it.simpleName=="Pending"}
+            val constructor=type.declaredConstructors.single{it.parameterCount==8}.apply{isAccessible=true}
+            field("pending").set(service,constructor.newInstance("33333333-3333-4333-8333-333333333333","refresh_triggers",false,"relay","11111111-1111-4111-8111-111111111111",Instant.now(),null,false))
+            (field("poll").get(service) as Runnable).run()
+            Assert.assertEquals("An unsent keepalive must remain due",0L,field("nextRemoteStatus").getLong(service))
+        }
+    }
+    @Test fun successfulStatusReplyIsReachableInTheSamePollBatch(){
+        scanFailure(30)
+        ui.runOnIdle{
+            val service=requireNotNull(Companion.service)
+            fun field(name:String)=NearbyService::class.java.getDeclaredField(name).apply{isAccessible=true}
+            val mac="11111111-1111-4111-8111-111111111111";val device="22222222-2222-4222-8222-222222222222"
+            val epoch="11111111-1111-4111-8111-111111111111";val id="33333333-3333-4333-8333-333333333333"
+            val c=Credential(mac,device,"Fixture",ByteArray(32),"https://127.0.0.1:1",encode64(ByteArray(32)))
+            field("credential").set(service,c)
+            val now=Instant.now();val snapshot=obj("""{"capturedAt":"$now","capabilities":{"startManual":true}}""")
+            val freshness=field("relayFresh").get(service) as RelayFreshness
+            freshness.expectStatus(id,now)
+            val type=NearbyService::class.java.declaredClasses.single{it.simpleName=="Pending"}
+            field("pending").set(service,type.declaredConstructors.single{it.parameterCount==8}.apply{isAccessible=true}.newInstance(id,"status",false,"relay",epoch,now,null,false))
+            val response=buildJsonObject{put("type","response");put("id",id);put("status","ok");put("snapshot",snapshot)}
+            val envelope=RelayCodec(mac,device,c.key).seal(response.toString(),id,epoch,"s2c","response",now,now.plusSeconds(120))
+            val poll=buildJsonObject{put("state",JsonNull);put("messages",JsonArray(listOf(obj(envelope))))}
+            NearbyService::class.java.getDeclaredMethod("acceptRelayPoll",Credential::class.java,JsonObject::class.java).apply{isAccessible=true}.invoke(service,c,poll)
+            Assert.assertTrue("A successful proof must enable the connection in this batch, not on a later poll",Companion.state.value.reachable(Instant.now()))
+        }
+    }
     @Test fun aReadResponseCannotReviveAnUnsentCommandAfterStatusWentStale(){
         val c=InstrumentationRegistry.getInstrumentation().targetContext
         Assert.assertNull(CredentialStore(c).load())
