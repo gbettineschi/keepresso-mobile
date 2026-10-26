@@ -75,6 +75,7 @@ import Darwin
     private var runningObservation:NSKeyValueObservation?
     private var handingOff=false
     private var terminating=false
+    private lazy var connectionEvents=SavedConnectionEvents{[weak self] in guard let self,!self.terminating else{return};self.model.retrySavedAuthorization()}
     init(background:Bool){self.background=background;follow=BackgroundControl(managed:background);super.init()}
     func applicationDidFinishLaunching(_ notification:Notification){
         follow.onManagedHandoff={ [weak self] in
@@ -93,7 +94,7 @@ import Darwin
         let reopen=UserDefaults.standard.bool(forKey:BackgroundLoginSession.reopenKey)
         UserDefaults.standard.removeObject(forKey:BackgroundLoginSession.reopenKey)
         if !background || reopen{showSettings()}
-        model.loadSavedAuthorization()
+        connectionEvents.start();model.loadSavedAuthorization()
         follow.refresh()
     }
     private func reconcileNativeApp(){
@@ -114,7 +115,7 @@ import Darwin
         window?.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true)
     }
     func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool{showSettings();return true}
-    func applicationDidBecomeActive(_ notification:Notification){follow.refresh()}
+    func applicationDidBecomeActive(_ notification:Notification){follow.refresh();model.retrySavedAuthorization()}
     func applicationShouldTerminateAfterLastWindowClosed(_ sender:NSApplication)->Bool{false}
     func windowShouldClose(_ sender:NSWindow)->Bool{sender.orderOut(nil);NSApp.setActivationPolicy(.accessory);return false}
     func applicationShouldTerminate(_ sender:NSApplication)->NSApplication.TerminateReply{
@@ -122,7 +123,7 @@ import Darwin
         if !handingOff{BackgroundLoginSession.markExplicitQuit();UserDefaults.standard.synchronize()}
         return .terminateNow
     }
-    func applicationWillTerminate(_ notification:Notification){runningObservation?.invalidate();runningObservation=nil;follow.stop();model.shutdown()}
+    func applicationWillTerminate(_ notification:Notification){connectionEvents.stop();runningObservation?.invalidate();runningObservation=nil;follow.stop();model.shutdown()}
     @objc private func quit(){NSApp.terminate(nil)}
     private func installMenus(){
         let bar=NSMenu();let appItem=NSMenuItem();bar.addItem(appItem)
@@ -158,14 +159,14 @@ struct CompanionView:View{
             GroupBox("Pairing"){
                 VStack(alignment:.leading,spacing:10){
                     if !model.authorizationReady {
-                        Text(authorization.state == .loading ? "Reading saved pairing…":"Unlock your saved pairing in macOS Keychain to reconnect.").font(.callout).foregroundStyle(.secondary)
+                        Text(authorization.state == .loading ? "Reading saved connection…":authorization.failure?.message ?? "Checking the saved connection…").font(.callout).foregroundStyle(.secondary)
                     }else if model.devices.isEmpty{Text("No paired phone").foregroundStyle(.secondary)}
                     else{ForEach(model.devices){device in Label(device.name,systemImage:"checkmark.shield").font(.callout)}}
                     HStack(spacing:12){
-                        Button(pairingControls.primary == .unlock ? "Unlock saved pairing…":"Show pairing QR code"){
+                        Button(pairingControls.primary == .unlock ? "Allow saved connection…":"Show pairing QR code"){
                             if pairingControls.primary == .unlock{model.loadSavedAuthorization(allowInteraction:true)}else{model.armPairing()}
                         }.disabled(!pairingControls.primaryEnabled)
-                        Button("Delete pairing",role:.destructive){model.deletingPairing=true}.disabled(!pairingControls.deleteEnabled)
+                        Button("Remove paired device",role:.destructive){model.deletingPairing=true}.disabled(!pairingControls.deleteEnabled)
                     }
                     if let invite=model.invitation{
                         if let image=qr(invite.url.absoluteString){Image(nsImage:image).interpolation(.none).resizable().frame(width:230,height:230).padding(8).background(.white).frame(maxWidth:.infinity)}
@@ -176,9 +177,9 @@ struct CompanionView:View{
                     Toggle("Nearby Bluetooth",isOn:Binding(get:{model.nearbyEnabled},set:{if $0{model.enableNearby()}else{model.disableNearby()}})).disabled(!model.authorizationReady)
                     HStack{Text(model.bluetoothState);Spacer();Text("\(model.connectionCount) connected")}.font(.caption).foregroundStyle(.secondary)
                 }.frame(maxWidth:.infinity,alignment:.leading)
-            }.alert("Delete pairing?",isPresented:$model.deletingPairing){
+            }.alert("Remove paired device?",isPresented:$model.deletingPairing){
                 Button("Cancel",role:.cancel){}
-                Button("Delete pairing",role:.destructive){model.deletePairing()}
+                Button("Remove paired device",role:.destructive){model.deletePairing()}
             }message:{Text(model.devices.count>1 ? "All \(model.devices.count) paired phones will lose access. Remove their old authorization in Android Settings before scanning a new QR code.":"Your phone will lose nearby and internet access. Remove its old authorization in the phone app's Settings before scanning a new QR code.")}
             Divider()
             Text("Internet fallback").font(.headline)
