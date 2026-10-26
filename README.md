@@ -8,7 +8,7 @@ Bluetooth is the nearby connection. Optional internet access and background push
 
 ## Status
 
-**Development builds only.** The app is on [`feat/native-companion`](https://github.com/gbettineschi/keepresso-mobile/tree/feat/native-companion), in [draft PR #1](https://github.com/gbettineschi/keepresso-mobile/pull/1). `main` currently holds the original plans. Mac development previews are published to [releases](https://github.com/gbettineschi/keepresso-mobile/releases) and the shared Homebrew tap. Android still uses the development artifacts below; this is not a stable release.
+**Development builds only.** The app is on [`feat/native-companion`](https://github.com/gbettineschi/keepresso-mobile/tree/feat/native-companion), in [draft PR #1](https://github.com/gbettineschi/keepresso-mobile/pull/1). `main` currently holds the original plans. Mac development previews are published to [releases](https://github.com/gbettineschi/keepresso-mobile/releases) and the shared Homebrew tap. The existing `v0.4.3` release is Mac-only. The combined Android/Mac release workflow is ready for the next reviewed version; until then Android uses the development artifacts below. This is not a stable release.
 
 Real-device pairing, background delivery, sleep/wake and native controls still need the [acceptance checks](https://github.com/gbettineschi/keepresso-mobile/blob/feat/native-companion/docs/ACCEPTANCE.md). Unavailable or stale readings stay unknown; a successful build is not proof that every phone/Mac combination works.
 
@@ -54,7 +54,7 @@ Output: `android/app/build/outputs/apk/debug/app-debug.apk` relative to the repo
 
 ## Releases
 
-Mac preview releases and tap updates are automatic when a version tag is pushed from the implementation branch. See [release instructions](docs/releasing.md). Existing Android signing and development workflows are unchanged.
+A new version tag on the implementation branch automatically builds a signed Android APK and Mac preview, publishes both to GitHub, and updates the Mac tap. For Android updates, add this repository in Obtainium and enable prereleases once its first combined release is available. See [release instructions](docs/releasing.md). The existing owner Android signing identity and development workflow are retained.
 
 ## Credits and license
 
