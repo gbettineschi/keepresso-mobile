@@ -1,7 +1,7 @@
 # Keepresso Mobile
 
-- This repository is private. Do not change visibility or publish releases without the owner's request.
-- Android app label: Keespresso. Repository: keepresso-mobile. This is an unofficial companion.
+- This repository is public. The owner requested a documentation and installation review on 2026-10-26. Do not publish releases or change visibility without the owner's approval.
+- App label: Keepresso Mobile. Repository: keepresso-mobile. This is an unofficial companion. The implementation is on feat/native-companion (draft PR #1); main currently contains the original plans.
 - Read docs/requirements.md and docs/protocol.md before changing shared behaviour.
 - Keep the official Keepresso app unmodified. Vendored upstream source files must remain byte-identical to the pinned revision; put companion adapters outside its Sources directory.
 - Never start keep-awake leases, alter the user's Keepresso settings, grant permissions, enable login items or execute sleep/power commands while developing or testing. Real power tests require the user's explicit action. Use dependency-injected fakes for mutation tests.
