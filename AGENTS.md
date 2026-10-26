@@ -12,6 +12,12 @@
 - Keep credentials, device records, real activity logs and local environment files out of git. Test vectors contain public deterministic fixture keys only.
 - Use tests for security, framing, command freshness/deduplication, reminder behaviour and state interpretation. Do not make tests change real power state.
 
+## Release channel
+
+- Current application source is on main. The owner approved reviewing and publishing the latest local changes on 26 October 2026. Future version tags build signed Android APKs and Mac previews together, then update the public tap.
+- Android release secrets belong only in the android-release environment; ordinary CI must not receive the owner signing key. Preserve the existing certificate/package and do not replace published assets.
+- Use standard hosted runners only; temporary artifacts expire after one day and successful releases remove intermediates. Do not raise the account's $0 Actions spending limit.
+
 ## Owner trial installations and updates
 
 - Canonical installed companion: `/Applications/Keepresso Mobile.app`. Keep official `/Applications/Keepresso.app` separate and unchanged. Do not install or run duplicate loose companion bundles in Downloads, outputs or work folders.

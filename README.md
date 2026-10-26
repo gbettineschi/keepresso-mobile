@@ -6,29 +6,38 @@ An unofficial Android companion for [Keepresso](https://github.com/gyorgysh/keep
 
 Bluetooth is the nearby connection. Optional internet access and background push use your own relay and Firebase project; there is no shared service to sign up for. The official Keepresso app stays separate and unmodified.
 
-## Status
+## Install the preview
 
-**Development builds only.** The app is on [`feat/native-companion`](https://github.com/gbettineschi/keepresso-mobile/tree/feat/native-companion), in [draft PR #1](https://github.com/gbettineschi/keepresso-mobile/pull/1). `main` currently holds the original plans. Mac development previews are published to [releases](https://github.com/gbettineschi/keepresso-mobile/releases) and the shared Homebrew tap. The existing `v0.4.3` release is Mac-only. The combined Android/Mac release workflow is ready for the next reviewed version; until then Android uses the development artifacts below. This is not a stable release.
+Requires **Android 9+**, **macOS 14+**, Apple silicon, and the original Keepresso app. This is a personal development preview; real-device acceptance checks and limits are recorded in [ACCEPTANCE.md](docs/ACCEPTANCE.md). Unknown or stale readings stay unknown.
 
-Real-device pairing, background delivery, sleep/wake and native controls still need the [acceptance checks](https://github.com/gbettineschi/keepresso-mobile/blob/feat/native-companion/docs/ACCEPTANCE.md). Unavailable or stale readings stay unknown; a successful build is not proof that every phone/Mac combination works.
+**Android / Obtainium:** add `https://github.com/gbettineschi/keepresso-mobile` in Obtainium and enable **Include prereleases**. Each new combined release contains one signed APK. Or download `keepresso-mobile-v<version>.apk` from [releases](https://github.com/gbettineschi/keepresso-mobile/releases). The retained signing key matches the owner's existing 0.4.2 installation, so updates preserve data and pairing. Do not uninstall first or clear data on a signing mismatch.
 
-## Install a development build
+**Mac / Homebrew:**
 
-Requires **macOS 14+**, the original Keepresso app, and **Android 9+**. The current Mac development download is for **Apple silicon**; source builds target the Mac they are built on.
+```sh
+brew tap gbettineschi/tap
+brew install --cask gbettineschi/tap/keepresso-mobile
+```
 
-1. Install the Mac helper with `brew install --cask gbettineschi/tap/keepresso-mobile`, or download `KeepressoMobile.zip` from this repository's releases and put it in Applications as **Keepresso Mobile.app**. Quit the old helper first. The app is ad-hoc signed and not notarized; macOS may require **Open Anyway** in Privacy & Security.
-2. Sign in to GitHub and open a successful run of [Native companion builds](https://github.com/gbettineschi/keepresso-mobile/actions). Download **Keepresso-Android-development**. These development artifacts expire after 14 days.
-3. Install `app-debug.apk` on your phone using Android's normal APK-install confirmation. Open the original Keepresso app and the companion on the Mac.
-4. Show a pairing invitation in the Mac helper, scan it with the Android app, and approve the named phone on the Mac. Grant Bluetooth and notification access when requested. Confirm the displayed Mac name and status before trying controls.
+Or download `KeepressoMobile.zip` from this repository's releases and put the helper in Applications as **Keepresso Mobile.app**. When first switching a manual installation to Homebrew, quit the helper and move its old app bundle to Trash before installing the cask. Keep preferences, Keychain entries and pairing data.
 
-Use one Mac helper at `/Applications/Keepresso Mobile.app`. When first switching from a manually installed copy to Homebrew, quit the helper and move its old app bundle to Trash before installing the cask. Keep preferences, Keychain entries and pairing data. To update a Homebrew installation, quit the helper, run `brew update`, then `brew upgrade --cask gbettineschi/tap/keepresso-mobile`. For a manual installation, replace the same bundle. Keep its preferences and Keychain entries. Android updates must use the same package/signing key and a compatible version code to preserve pairing; stop on a signing mismatch instead of uninstalling or clearing data.
+The Mac preview is ad-hoc signed and not notarized. macOS may require **Open Anyway** and permission to read the saved connection again after an update. Pairing has not been removed; use **Allow saved connection…** when needed. A persistent Apple signing certificate remains an optional owner setup, not something this CI release claims to provide. See [Mac signing details](docs/MAC_SIGNING.md).
+
+To update the Mac, quit the helper and run:
+
+```sh
+brew update
+brew upgrade --cask gbettineschi/tap/keepresso-mobile
+```
+
+Use one helper at `/Applications/Keepresso Mobile.app`; the official `/Applications/Keepresso.app` stays separate. Open both apps, show a pairing invitation in the helper, scan it on Android and approve the phone on the Mac. Grant permissions through the normal OS prompts. [Build and pairing instructions](docs/BUILDING.md) cover the remaining setup.
 
 ## Build from source
 
-Clone the app branch, rather than `main`:
+The current application source is on `main`:
 
 ```sh
-git clone --branch feat/native-companion https://github.com/gbettineschi/keepresso-mobile.git
+git clone https://github.com/gbettineschi/keepresso-mobile.git
 cd keepresso-mobile
 ```
 
@@ -50,11 +59,13 @@ cd android
 
 Output: `android/app/build/outputs/apk/debug/app-debug.apk` relative to the repository root. Your local debug signing key may differ from the existing development builds.
 
-[Build and pairing details](https://github.com/gbettineschi/keepresso-mobile/blob/feat/native-companion/docs/BUILDING.md) · [Implemented features and limits](https://github.com/gbettineschi/keepresso-mobile/blob/feat/native-companion/docs/IMPLEMENTATION.md) · [Optional relay setup](https://github.com/gbettineschi/keepresso-mobile/blob/feat/native-companion/docs/SELF_HOSTING.md)
+[Build and pairing details](docs/BUILDING.md) · [Implemented features and limits](docs/IMPLEMENTATION.md) · [Optional relay setup](docs/SELF_HOSTING.md)
 
 ## Releases
 
-A new version tag on the implementation branch automatically builds a signed Android APK and Mac preview, publishes both to GitHub, and updates the Mac tap. For Android updates, add this repository in Obtainium and enable prereleases once its first combined release is available. See [release instructions](docs/releasing.md). The existing owner Android signing identity and development workflow are retained.
+Push a reviewed `vX.Y.Z` tag from `main`. Actions tests and packages the signed Android APK and Mac preview, publishes both together, and updates the shared Mac tap automatically. Android's retained key is held in an encrypted signing environment limited to version tags and manual checks on `main`. Ordinary pull-request builds do not use it.
+
+Permanent downloads live in GitHub Releases. Temporary CI packages expire after one day, and successful releases remove their intermediate artifacts. Standard public-repository runners are used. See [release instructions](docs/releasing.md) for signing, versions and safe retries.
 
 ## Credits and license
 

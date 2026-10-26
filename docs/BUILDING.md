@@ -9,7 +9,7 @@ The public repository's **Actions → Native companion builds** workflow produce
 - **Keepresso-Android-development** contains `app-debug.apk`.
 - **Keepresso-Mac-development** contains `KeepressoMobile.zip`.
 
-These are test builds, not Play Store or notarized releases. Downloading an artifact requires signing in to GitHub. Artifacts expire after 14 days; manually run the workflow to produce fresh ones.
+These are test builds, not Play Store or notarized releases. Downloading an artifact requires signing in to GitHub. Artifacts expire after one day; manually run the workflow to produce fresh ones.
 
 Automatic builds run for pull requests and pushes to `main`. Feature-branch pushes are not built a second time. A small Linux job selects the affected platform checks: relay changes do not start a Mac build, and ordinary documentation changes start no app builds. Shared inputs and workflow changes run every affected check. Pull requests use their complete diff to keep earlier changes covered; an unrelated later commit does not erase required checks. **Run workflow** explicitly runs all checks and packages both apps. Standard GitHub-hosted Linux and Mac runner execution is free for this public repository; artifact/cache storage has separate allowances.
 
@@ -28,7 +28,7 @@ macos/artifacts/KeepressoMobile.app/Contents/MacOS/KeepressoMac --self-check
 
 The self-check does not start Bluetooth or run power operations. Normal launch opens the Keepresso Mobile settings window. Closing the window hides it; Finder or the launcher reopens it. There is no menu bar icon. Nearby Bluetooth is enabled separately by the owner and may request Bluetooth access. It does not grant that access itself. Accessibility access is a separate, optional permission for native controls that lack a public Keepresso interface; unavailable controls must stay unavailable until their adapter is supported and authorized.
 
-**Follow Keepresso** is optional: click **Enable Follow Keepresso** once, then approve it in macOS Login Items if requested. Move the app to its intended Applications location first. The same app starts hidden at login, waits quietly for native Keepresso, and resumes saved connections when it opens. It restarts after abnormal exits; explicit **Quit Keepresso Mobile** stops it until a manual reopen or the next login. Initial managed startup can briefly disconnect the phone while ownership transfers to macOS. No background item is registered by the build or self-check. See [macOS lifecycle details](../macos/README.md).
+When the canonical installed helper opens, it registers its bundled background agent automatically and can repair a positively identified stale registration once. macOS may still require approval in **System Settings → General → Login Items**; the helper never overrides that choice. It starts hidden at login, waits for native Keepresso and resumes saved connections when it opens. Explicit **Quit Keepresso Mobile** stops it until a manual reopen or the next login. Building and the self-check register nothing. See [macOS lifecycle details](../macos/README.md).
 
 The development bundle is not notarized. Use a locally built copy or inspect the source and artifact before explicitly approving a downloaded development app in macOS. Future signed distribution is separate work.
 
@@ -41,7 +41,7 @@ cd android
 ./gradlew :core:test :app:lintDebug :app:assembleDebug
 ```
 
-The APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`. Install it on the phone with Android's normal explicit APK-install confirmation. Owner CI builds use the retained development signing identity when its repository secrets are available. Forks without those secrets use their own debug identity. Updating the old 0.1.0 APK may require one reinstall and pairing again; subsequent builds with the same retained identity can update in place. For development using an already authorized USB debugging connection:
+The APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`. Install it on the phone with Android's normal explicit APK-install confirmation. Ordinary CI debug builds use a disposable debug identity and are not an update channel for the owner's installed app. Tagged releases use the retained owner key from the protected signing environment; use their APKs through Obtainium. Local builds that update that installation must use the same retained key. Stop on a signing mismatch; do not uninstall or clear data to force an update. For development using an already authorized USB debugging connection:
 
 ```sh
 adb install -r app/build/outputs/apk/debug/app-debug.apk
@@ -81,4 +81,4 @@ Official Keepresso can update independently. The observer's pinned library does 
 
 Keep one installed Mac companion at **`/Applications/Keepresso Mobile.app`**. Quit that companion gracefully, replace the verified bundle at that same path, then reopen it. Preserve its bundle identifier and credential/storage identities. Do not run an extra loose copy from Downloads or build folders. Keep unpacked staging bundles hidden and clean them up afterward; distribute compressed ZIPs. Existing Keychain entries and phone pairing are retained. Ad-hoc build changes can still require macOS permission/background approval; do not grant or enable those automatically.
 
-On Android, retain this owner's development signing key, keep the same package, increase `versionCode`, and use `adb -s PHONE_SERIAL install -r /absolute/path/app.apk`. Verify the installed version afterward. Do not uninstall or clear data as an update procedure. Stop on a signing mismatch instead of losing pairing. An automatic online updater is not implemented.
+On Android, retain this owner's development signing key, keep the same package, increase `versionCode`, and use `adb -s PHONE_SERIAL install -r /absolute/path/app.apk`. Verify the installed version afterward. Do not uninstall or clear data as an update procedure. Stop on a signing mismatch instead of losing pairing. Obtainium tracks the signed APKs in GitHub preview releases; enable prereleases. See [release instructions](releasing.md).
