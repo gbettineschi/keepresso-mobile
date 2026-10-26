@@ -1,0 +1,39 @@
+warning: 'macos': found 1 file(s) which are unhandled; explicitly declare them as resources or exclude from the target
+    /Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/ThirdParty/KeepressoCore/LICENSE
+Building for debugging...
+[Computing dependencies]
+[Planning deferred tasks]
+[4 / 31] CompanionCore
+[6 / 33] CompanionCore
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCore: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[12 / 35] KeepressoCore
+[23 / 45] KeepressoCore
+[27 / 46] KeepressoCore
+[29 / 48] KeespressoMac-product
+[31 / 48] KeepressoCore
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeepressoCore: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[37 / 49] CompanionCoreTests-product
+[38 / 54] KeespressoMac-product
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeespressoMac-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/usr/lib' not found
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeespressoMac-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[40 / 55]
+[44 / 55] CompanionCoreTests-product
+[51 / 55] CompanionCoreTests-product
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCoreTests-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/usr/lib' not found
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCoreTests-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+Build complete! (5,66 secs)
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite CryptoTests started.
+◇ Test testIndependentNodeDeviceKeyVector() started.
+✘ Test testIndependentNodeDeviceKeyVector() recorded an issue at CryptoTests.swift:9:9: Expectation failed: actual.base64EncodedString() == v["deviceKey"] as? String
+↳ actual.base64EncodedString() == v["deviceKey"] as? String → false
+↳   actual.base64EncodedString() → ""
+↳   v["deviceKey"] as? String → "8YgPMk2KQwYwY6D3x4oUQ6ASbxTczJC5+EJ2NCHSOIY="
+↳     some → "8YgPMk2KQwYwY6D3x4oUQ6ASbxTczJC5+EJ2NCHSOIY="
+✘ Test testIndependentNodeDeviceKeyVector() failed after 0.001 seconds with 1 issue.
+✘ Suite CryptoTests failed after 0.001 seconds with 1 issue.
+✘ Test run with 1 test in 1 suite failed after 0.001 seconds with 1 issue.
+Note: Some test targets reported failures:
+  - CompanionCoreTests (Swift Testing)

@@ -1,0 +1,74 @@
+Building for debugging...
+Build complete! (0,32 secs)
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite MutationTests started.
+◇ Suite ObserverTests started.
+◇ Suite CryptoTests started.
+◇ Suite SafetyTests started.
+◇ Suite WorkerTests started.
+◇ Suite StatusEvidenceTests started.
+◇ Suite InputEvidenceTests started.
+◇ Test hookReaderPrunesOnlyDisposableCopiesAndRemovesScratch() started.
+◇ Test duplicateMutationNeverInvokesAdapterTwiceAndCrashReservationNeverExecutes() started.
+◇ Test testNodeProofsKeysAndAESVector() started.
+◇ Test unknownAndMissingRulesCannotSilentlyBecomeAnEmptyDefault() started.
+◇ Test testTamperWrongKeyAndOutOfOrderCloseSession() started.
+◇ Test handshakeWrongProofExpiresAndCannotReuseAndReconnectKeysDiffer() started.
+◇ Test revokedOrExpiredRequestCannotReachPowerAdapter() started.
+◇ Test testDurableJournalReturnsUncertainAfterCrashAndRejectsOwnerOrBodyMismatch() started.
+◇ Test testPairProofRequiresLocalApprovalAndInvitationIsSingleUse() started.
+◇ Test quittingKeepressoAfterKnownActiveSessionSchedulesAwakeWarning() started.
+◇ Test notificationBackpressureNeverConsumesUnacceptedChunkAndBoundsQueue() started.
+◇ Test restartPreservesOriginalHourlyCadence() started.
+◇ Test testIndependentNodeDeviceKeyVector() started.
+◇ Test testReminderOKKeepsCadenceSnoozeOnlyRoutineAndNewSessionCancelsWarning() started.
+◇ Test parentOwnedScratchIsRemovedAfterTimeout() started.
+◇ Test exitedAppIsKnownInactiveButRunningUnreadableSourceStaysUnknown() started.
+◇ Test workerCapturesOutputAndRejectsTimeoutAndOutputFlood() started.
+◇ Test sleepBeforeInactiveSampleCannotRearmEndedWarning() started.
+◇ Test testObservedSleepCancelsEndedWarningAcrossRestart() started.
+◇ Test staleReusedPIDCannotIdentifyCurrentLaunch() started.
+◇ Test sameSecondNativeWriteUsesPreciseModificationTimeAndRejectsOldFile() started.
+◇ Test testFramingEverySplitAndOversizeAndPartialTimeout() started.
+◇ Test collapsedMonitorFailureCannotBecomeAnInactiveRule() started.
+◇ Test journalSaveFailureDoesNotConvertUncertainMemoryToOK() started.
+◇ Test safetyIncidentBypassesSnoozeButDoesNotDuplicateAcrossRestart() started.
+◇ Test testFreshnessAndDurationBounds() started.
+◇ Test helperGapCannotCreateEndedWarningFromLastActiveState() started.
+✔ Test testTamperWrongKeyAndOutOfOrderCloseSession() passed after 0.001 seconds.
+✔ Test notificationBackpressureNeverConsumesUnacceptedChunkAndBoundsQueue() passed after 0.001 seconds.
+✔ Test testPairProofRequiresLocalApprovalAndInvitationIsSingleUse() passed after 0.001 seconds.
+✔ Test testIndependentNodeDeviceKeyVector() passed after 0.001 seconds.
+✔ Test exitedAppIsKnownInactiveButRunningUnreadableSourceStaysUnknown() passed after 0.001 seconds.
+✔ Test sleepBeforeInactiveSampleCannotRearmEndedWarning() passed after 0.001 seconds.
+✔ Test quittingKeepressoAfterKnownActiveSessionSchedulesAwakeWarning() passed after 0.001 seconds.
+✔ Test staleReusedPIDCannotIdentifyCurrentLaunch() passed after 0.001 seconds.
+✔ Test testNodeProofsKeysAndAESVector() passed after 0.001 seconds.
+✔ Test handshakeWrongProofExpiresAndCannotReuseAndReconnectKeysDiffer() passed after 0.001 seconds.
+✔ Test testReminderOKKeepsCadenceSnoozeOnlyRoutineAndNewSessionCancelsWarning() passed after 0.001 seconds.
+✔ Test sameSecondNativeWriteUsesPreciseModificationTimeAndRejectsOldFile() passed after 0.001 seconds.
+✔ Test collapsedMonitorFailureCannotBecomeAnInactiveRule() passed after 0.001 seconds.
+✔ Test testFreshnessAndDurationBounds() passed after 0.001 seconds.
+✔ Test helperGapCannotCreateEndedWarningFromLastActiveState() passed after 0.001 seconds.
+✔ Test testObservedSleepCancelsEndedWarningAcrossRestart() passed after 0.001 seconds.
+✔ Test restartPreservesOriginalHourlyCadence() passed after 0.001 seconds.
+✔ Test safetyIncidentBypassesSnoozeButDoesNotDuplicateAcrossRestart() passed after 0.001 seconds.
+✔ Test testFramingEverySplitAndOversizeAndPartialTimeout() passed after 0.001 seconds.
+✔ Suite CryptoTests passed after 0.001 seconds.
+✔ Suite InputEvidenceTests passed after 0.001 seconds.
+✔ Suite StatusEvidenceTests passed after 0.001 seconds.
+✔ Test unknownAndMissingRulesCannotSilentlyBecomeAnEmptyDefault() passed after 0.002 seconds.
+✔ Test hookReaderPrunesOnlyDisposableCopiesAndRemovesScratch() passed after 0.005 seconds.
+✔ Suite ObserverTests passed after 0.005 seconds.
+✔ Test journalSaveFailureDoesNotConvertUncertainMemoryToOK() passed after 0.029 seconds.
+✔ Test testDurableJournalReturnsUncertainAfterCrashAndRejectsOwnerOrBodyMismatch() passed after 0.037 seconds.
+✔ Suite SafetyTests passed after 0.037 seconds.
+✔ Test duplicateMutationNeverInvokesAdapterTwiceAndCrashReservationNeverExecutes() passed after 0.049 seconds.
+✔ Test revokedOrExpiredRequestCannotReachPowerAdapter() passed after 0.049 seconds.
+✔ Suite MutationTests passed after 0.049 seconds.
+✔ Test parentOwnedScratchIsRemovedAfterTimeout() passed after 0.109 seconds.
+✔ Test workerCapturesOutputAndRejectsTimeoutAndOutputFlood() passed after 0.310 seconds.
+✔ Suite WorkerTests passed after 0.311 seconds.
+✔ Test run with 27 tests in 7 suites passed after 0.311 seconds.

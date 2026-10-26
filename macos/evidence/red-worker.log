@@ -1,0 +1,46 @@
+Building for debugging...
+[Pre-planning 1 / 153]
+[Planning deferred tasks]
+[9 / 36] CompanionCore
+[19 / 47] CompanionCore
+[29 / 56] KeepressoCore
+[34 / 56] KeepressoCore
+[35 / 56] KeepressoCore
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCore: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[38 / 57] KeepressoCore
+[42 / 58] KeepressoCore
+[42 / 58] KeespressoMac-product
+[49 / 65] KeespressoMac-product
+[50 / 65] KeepressoCore
+[50 / 65] KeespressoMac-product
+[51 / 65] KeepressoCore
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeepressoCore: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[56 / 67] CompanionCoreTests-product
+[66 / 77] CompanionCoreTests-product
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeespressoMac-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/usr/lib' not found
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeespressoMac-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[70 / 76] CompanionCoreTests-product
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCoreTests-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/usr/lib' not found
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCoreTests-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[72 / 76] CompanionCoreTests-product
+Build complete! (6,17 secs)
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite WorkerTests started.
+◇ Test workerCapturesOutputAndRejectsTimeoutAndOutputFlood() started.
+✘ Test workerCapturesOutputAndRejectsTimeoutAndOutputFlood() recorded an issue at Assertions.swift:2:138: Expectation failed: lhs == rhs
+↳ lhs == rhs → false
+↳   lhs → ""
+↳     some → ""
+↳   rhs → "bounded worker"
+↳     some → "bounded worker"
+✘ Test workerCapturesOutputAndRejectsTimeoutAndOutputFlood() recorded an issue at WorkerTests.swift:9:128: Issue recorded
+↳ Timeout must be rejected
+✘ Test workerCapturesOutputAndRejectsTimeoutAndOutputFlood() recorded an issue at WorkerTests.swift:11:142: Issue recorded
+↳ Output flood must be rejected
+✘ Test workerCapturesOutputAndRejectsTimeoutAndOutputFlood() failed after 0.003 seconds with 3 issues.
+✘ Suite WorkerTests failed after 0.003 seconds with 3 issues.
+✘ Test run with 1 test in 1 suite failed after 0.003 seconds with 3 issues.
+Note: Some test targets reported failures:
+  - CompanionCoreTests (Swift Testing)

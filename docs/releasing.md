@@ -1,17 +1,29 @@
 # Android and Mac preview releases
 
-The application source remains on `feat/native-companion` (draft PR #1). Do not tag `main`, which holds plans rather than the app. Review and push the implementation source, then push a new numeric `vX.Y.Z` tag from that branch.
+Current app source is on `main`. Review and test changes, commit and push them, then push a new numeric `vX.Y.Z` tag. The release workflow packages a signed Android APK and Apple silicon Mac helper, verifies their identities and checksums, publishes both as a GitHub prerelease, and updates the shared Homebrew tap automatically. The older v0.4.3 release was Mac-only; v0.4.7 starts the combined channel.
 
-**Release development preview** tests/packages the Apple silicon Mac helper and a signed Android release APK. It publishes both archives, `SHA256SUMS` and `release.json` together as a GitHub prerelease. Its dependent job updates the shared Homebrew tap from the exact published Mac ZIP. No manual tap editing is needed.
+## Android signing and updates
 
-Android uses the same retained owner signing key already used by CI development builds. The existing encrypted `ANDROID_SIGNING_STORE_BASE64` and `ANDROID_SIGNING_PASSWORD` secrets are reused; neither key nor password is committed or included in artifacts. Release builds fail without this identity. The APK's package, version and certificate are verified against the key before publication. Temporary key files are private and removed afterward.
+The retained owner Android signing certificate is SHA-256 `166dd4da449dcccaa1e4e1b881bf77455c38f6633809aeba53480034a0b2395d`. It matches the existing phone installation. APK package, version and certificate are checked before publication; a different configured key is rejected. Keep a private backup of the signing key and password.
 
-The version tag supplies both platform display versions. Android's `versionCode` is `major * 1000000 + minor * 1000 + patch`; minor/patch are limited to999, and the Android maximum is enforced. For example, `v0.4.3` maps to4003. Future tags must increase the version. This scheme supersedes early development codes5/7. To update a tagged installation with a local trial build, use the same release-version properties instead of the old debug defaults; never uninstall or clear pairing to bypass a version or signature mismatch.
+The existing key/password are encrypted secrets in the **android-release** Actions environment, permitted only on version tags and manual verification on `main`. No signing key is committed, passed to ordinary PR builds or uploaded in artifacts. Temporary decoded key files are private and removed after use. A person able to change trusted workflows could still misuse signing access; this setup does not claim to require an additional GitHub approval for every change.
 
-For Obtainium, add `https://github.com/gbettineschi/keepresso-mobile` and enable **Include prereleases**. Each combined release contains one APK. The existing `v0.4.3` release is Mac-only; Android release downloads start with the next deliberately published combined tag. The active local Android workspace has newer work than the original GitHub snapshot, so do not create a newer APK release from stale source just to test packaging. Review/push the desired app source first.
+The version tag supplies both platform display versions. Android versionCode and the Mac bundle build number use `major * 1000000 + minor * 1000 + patch`. Minor/patch must be at most 999 and the Android maximum is enforced. For example, v0.4.7 maps to 4007, above the early development codes 5/7. For local trial updates, use the release packaging path/properties and retained key. Never uninstall or clear pairing to bypass a version/signature mismatch.
 
-For verification without publishing, run **Release development preview** manually on `feat/native-companion` and supply the version tag to check. Both packages are built and checked, including cross-job artifact assembly, but no GitHub release or tap change is made. Verification artifacts expire after one day. No app or device is installed, launched normally or changed. The existing development workflow remains available separately.
+Add `https://github.com/gbettineschi/keepresso-mobile` to Obtainium and enable **Include prereleases**. Each combined release contains one APK. No login, token or APK filter is needed.
 
-The preview requires Android9+, macOS14+, Apple silicon and the original Keepresso app. Mac builds are ad-hoc signed, not notarized. Passing checks does not replace the real-device acceptance tests. Source and third-party licences are included in the Mac bundle, with matching source at the release tag.
+## Mac packaging
 
-The tap-only `TAP_DEPLOY_KEY` is separate from Android signing. To retry just the catalog, run **Update Homebrew tap** with the existing published tag. Do not replace an existing release asset.
+The release requires macOS 14+ and Apple silicon. It is ad-hoc signed, not notarized. It preserves bundle ID, Keychain service and pairing protocol, but macOS can request saved-connection approval after an ad-hoc update. Stable Apple certificate setup is documented separately in MAC_SIGNING.md and has not been provisioned by this release.
+
+`macos/scripts/package-release.sh v0.4.7` builds without installation or normal app startup. It sets the release version, includes licences, signs the final bundle and checks its safe crypto/framing self-test. An explicitly supplied signing certificate is preserved and verified, with no silent fallback to ad-hoc.
+
+## Verification and retries
+
+Run **Release development preview** manually on `main` with the version to verify without publishing. Both packages and the combined checksum manifest are checked; no GitHub release or tap change is created. Tests do not change installed apps, permissions, power settings or pairing. Passing checks does not replace the physical-device acceptance checklist.
+
+For tap-only retry, run **Update Homebrew tap** with the existing published tag. Use a new version rather than replacing an asset. If release assembly fails before publication, rerun the failed job while its temporary packages are available.
+
+## Free Actions use
+
+Only standard public-repository runners are used: ubuntu-24.04 and macos-26. Their execution is free and does not use the private-repository minutes allowance ([GitHub billing documentation](https://docs.github.com/en/billing/concepts/product-billing/github-actions)). Caches stay within the normal 10 GiB/repository limit. All temporary package/report artifacts expire after one day; tagged releases delete their own intermediates after successful publication. Permanent downloads are release assets, not Actions artifacts. Storage has a separate plan allowance shared with Packages; the owner's account has a $0 Actions spending block. Do not select paid larger runners, extend retention or raise spending limits casually.

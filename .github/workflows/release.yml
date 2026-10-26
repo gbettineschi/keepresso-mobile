@@ -7,7 +7,7 @@ on:
       tag:
         description: Version to verify without publishing (vX.Y.Z)
         required: true
-        default: v0.4.3
+        default: v0.4.7
         type: string
 permissions:
   contents: read
@@ -43,6 +43,7 @@ jobs:
     if: github.repository == 'gbettineschi/keepresso-mobile'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    environment: android-release
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
@@ -163,3 +164,21 @@ jobs:
       tag: ${{ github.ref_name }}
     secrets:
       TAP_DEPLOY_KEY: ${{ secrets.TAP_DEPLOY_KEY }}
+  cleanup:
+    needs: [publish, tap]
+    if: always() && github.event_name == 'push' && needs.publish.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Remove transient packages after release publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GH_REPO/actions/runs/$GITHUB_RUN_ID/artifacts" --jq '.artifacts[].id' |
+          while read -r id; do
+            gh api --method DELETE "repos/$GH_REPO/actions/artifacts/$id"
+          done

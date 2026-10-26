@@ -1,4 +1,4 @@
-# Keespresso companion design
+# Keepresso companion design
 
 The owner approved the evolving Android mock and requested implementation on 23 October 2026. The binding product requirements are in ../../requirements.md. Routine implementation choices below are builder decisions, not new user preferences.
 
@@ -8,7 +8,7 @@ Let an authorized Android phone inspect and control a nearby awake Mac running t
 
 ## Approach chosen
 
-Native Kotlin/Compose Android app and Swift macOS menu-bar helper. Bluetooth LE is the first transport: Mac peripheral, Android central, no OS bonding requested. QR-based application authorization is mandatory. A bounded shared-engine observer handles the missing per-trigger export. Ordinary status and reminders do not depend on that observer.
+Native Kotlin/Compose Android app and Swift macOS background companion with a settings window (see the later approved background design). Bluetooth LE is the first transport: Mac peripheral, Android central, no OS bonding requested. QR-based application authorization is mandatory. A bounded shared-engine observer handles the missing per-trigger export. Ordinary status and reminders do not depend on that observer.
 
 Alternatives considered: a full Keepresso fork provides native private state but creates update/signing work; an upstream status export is cleaner but unavailable today; a separate detector implementation duplicates logic. Reusing pinned KeepressoCore with explicit preview freshness was selected by the owner. Internet relay is optional later work; it is not a dependency for nearby operation.
 
@@ -38,7 +38,7 @@ Native public URL commands implement manual start and stop, with observed status
 
 ## UX
 
-Match the approved v8 mock. App name Keespresso; original icon/cups and copper palette. Status rows Lock/Display/Lid, separator, Battery/Temperature. Brewing time means remaining time only. Active triggers has a small Triggers checked at… · Refresh row directly below its title; no Independent preview/sample-data line in the product. Refresh is a snapshot in both manual and auto mode. All controls disable when unreachable. A real result updates its own timestamp; failed reads do not.
+Match the approved v8 mock. App name Keepresso; original icon/cups and copper palette. Status rows Lock/Display/Lid, separator, Battery/Temperature. Brewing time means remaining time only. Active triggers has a small Triggers checked at… · Refresh row directly below its title; no Independent preview/sample-data line in the product. Refresh is a snapshot in both manual and auto mode. All controls disable when unreachable. A real result updates its own timestamp; failed reads do not.
 
 Manual duration uses 15-minute +/- steps and inline Start, or Stop manual session. Resume warns about immediate handover. Sleep confirms consequences. No wake feature or Live badge.
 

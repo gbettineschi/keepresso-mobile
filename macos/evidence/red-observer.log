@@ -1,0 +1,40 @@
+Another instance of SwiftPM (PID: 97202) is already running using '/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/.build', waiting until that process has finished execution...warning: 'macos': found 1 file(s) which are unhandled; explicitly declare them as resources or exclude from the target
+    /Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/ThirdParty/KeepressoCore/LICENSE
+Building for debugging...
+[Pre-planning 1 / 182]
+[Planning deferred tasks]
+[4 / 19] CompanionCore
+[12 / 27] CompanionCore
+[22 / 40] KeepressoCore
+[25 / 40] KeepressoCore
+[26 / 40] KeepressoCore
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCore: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[28 / 40] CompanionCore
+[29 / 40] KeepressoCore
+[33 / 43] KeepressoCore
+[37 / 47] KeespressoMac-product
+[37 / 47] KeepressoCore
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeepressoCore: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[43 / 49] CompanionCoreTests-product
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeespressoMac-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/usr/lib' not found
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: KeespressoMac-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[50 / 56] CompanionCoreTests-product
+[53 / 57] CompanionCoreTests-product
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCoreTests-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/usr/lib' not found
+/Users/gb/Documents/Codex/2026-10-22/what-can-you-do-with-this/keepresso-mobile/macos/Package.swift: CompanionCoreTests-product: ld: warning: search path '/Library/Developer/CommandLineTools/Developer/Library/Frameworks' not found
+[55 / 57] CompanionCoreTests-product
+Build complete! (5,60 secs)
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite ObserverTests started.
+◇ Test unknownAndMissingRulesCannotSilentlyBecomeAnEmptyDefault() started.
+✘ Test unknownAndMissingRulesCannotSilentlyBecomeAnEmptyDefault() recorded an issue at Assertions.swift:7:94: Issue recorded
+↳ Expected rejection
+✘ Test unknownAndMissingRulesCannotSilentlyBecomeAnEmptyDefault() recorded an issue at Assertions.swift:7:94: Issue recorded
+↳ Expected rejection
+✘ Test unknownAndMissingRulesCannotSilentlyBecomeAnEmptyDefault() failed after 0.001 seconds with 2 issues.
+✘ Suite ObserverTests failed after 0.001 seconds with 2 issues.
+✘ Test run with 1 test in 1 suite failed after 0.001 seconds with 2 issues.
+Note: Some test targets reported failures:
+  - CompanionCoreTests (Swift Testing)

@@ -1,0 +1,46 @@
+Android JVM implementation evidence — 23 October 2026
+
+Toolchain: Eclipse Temurin JDK 17.0.21+9 (SHA256 verified by parent),
+Gradle 8.11.1 wrapper. No Android SDK or physical Android device used locally.
+
+Command for every core cycle:
+  cd android
+  JAVA_HOME=<JDK17_HOME> ./gradlew -PcoreOnly :core:test --console=plain
+
+Observed RED, before implementing the corresponding core behavior:
+- ProtocolTest: 14 tests completed, 14 failed (NotImplementedError or
+  assertion wrapping NotImplementedError), BUILD FAILED in 1s.
+- SessionTest: 18 tests completed, 4 failed (new handshake/ready tests),
+  BUILD FAILED in 7s.
+- DeliveryTest: 21 tests completed, 3 failed (new delivery/write queue tests),
+  BUILD FAILED in 1s.
+- ValidationTest: 25 tests completed, 3 failed (old snapshot freshness,
+  malformed sensor/rule types and small phone-clock drift), BUILD FAILED in 1s.
+- Delivery overlap regression: 26 tests completed, 1 failed, because the
+  implementation wrongly allowed a poll during an outstanding refresh.
+- LocalSnoozeTest: 30 tests completed, 4 failed, before per-Mac local snooze
+  and acknowledged-resume reconciliation were implemented.
+- ResponseTest: 32 tests completed, 2 failed, before full snapshot validation
+  ahead of acknowledgement was implemented.
+- CandidateRotationTest: 34 tests completed, 2 failed, before bounded
+  failed-peer discovery cooldowns were implemented.
+
+Observed GREEN after implementation of each cycle:
+14, 18, 21, 25, 26, 30, 32 and 34 tests respectively; BUILD SUCCESSFUL.
+Latest 34-test run executed all affected tasks (not a skipped suite).
+
+Configuration verification:
+  JAVA_HOME=<JDK17_HOME> ./gradlew :app:tasks --console=plain
+  BUILD SUCCESSFUL; Android build, lint and test tasks configured.
+
+Core coverage includes independent Node HMAC/HKDF/AES-GCM fixtures,
+tampered tag, wrong nonce/key/peer, exact sequence/replay rejection,
+UTF-8 record framing and partial/oversized frames, request expiry and
+bounds, QR validation, server-clock compensation, null/unknown/stale state,
+one request/response at a time, uncertain mutations on disconnect,
+no reconnect replay, local routine-only snooze, and bounded peer rotation.
+
+Android APK compilation/lint are performed separately on GitHub Actions
+with SDK 35. A successful compilation is not evidence of physical BLE,
+QR approval, background/Doze delivery or actual Mac control success.
+No permission was granted and no live Bluetooth or power mutation was run.
