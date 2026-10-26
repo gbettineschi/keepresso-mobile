@@ -21,7 +21,7 @@ Requires **macOS 14+**, the original Keepresso app, and **Android 9+**. The curr
 3. Install `app-debug.apk` on your phone using Android's normal APK-install confirmation. Open the original Keepresso app and the companion on the Mac.
 4. Show a pairing invitation in the Mac helper, scan it with the Android app, and approve the named phone on the Mac. Grant Bluetooth and notification access when requested. Confirm the displayed Mac name and status before trying controls.
 
-Use one Mac helper at `/Applications/Keepresso Mobile.app`. To update a Homebrew installation, quit the helper, run `brew update`, then `brew upgrade --cask gbettineschi/tap/keepresso-mobile`. For a manual installation, replace the same bundle. Keep its preferences and Keychain entries. Android updates must use the same package/signing key and a compatible version code to preserve pairing; stop on a signing mismatch instead of uninstalling or clearing data.
+Use one Mac helper at `/Applications/Keepresso Mobile.app`. When first switching from a manually installed copy to Homebrew, quit the helper and move its old app bundle to Trash before installing the cask. Keep preferences, Keychain entries and pairing data. To update a Homebrew installation, quit the helper, run `brew update`, then `brew upgrade --cask gbettineschi/tap/keepresso-mobile`. For a manual installation, replace the same bundle. Keep its preferences and Keychain entries. Android updates must use the same package/signing key and a compatible version code to preserve pairing; stop on a signing mismatch instead of uninstalling or clearing data.
 
 ## Build from source
 
