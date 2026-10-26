@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Packaging contract tests. Fake signer; never read or mutate real Keychains."""
 import os
+import plistlib
+import shutil
 from pathlib import Path
 import subprocess
 import tempfile
@@ -67,5 +69,38 @@ if '--display' in sys.argv:
     def test_valid_certificate_requirement_is_not_confused_by_a_cdhash_directory_name(self):
         result=self.run_sign(KEEPRESSO_CODESIGN_IDENTITY=IDENTITY,SIGN_TEST_PATH='/tmp/cdhash-check/Companion.app')
         self.assertEqual(result.returncode,0,result.stderr)
+    @unittest.skipUnless(Path('/usr/libexec/PlistBuddy').exists(),'requires Mac packaging tools')
+    def test_release_archive_preserves_the_explicit_signing_identity(self):
+        repo=self.root/'repo';scripts=repo/'macos/scripts';scripts.mkdir(parents=True)
+        (repo/'scripts').mkdir();(repo/'macos/ThirdParty/KeepressoCore').mkdir(parents=True)
+        for name in ['LICENSE','THIRD_PARTY_NOTICES.md','macos/ThirdParty/KeepressoCore/LICENSE']:
+            (repo/name).write_text('Fixture licence')
+        (repo/'scripts/verify-upstream.py').write_text('')
+        source=SCRIPT.parents[2]
+        shutil.copyfile(source/'scripts/release-version.py',repo/'scripts/release-version.py')
+        shutil.copyfile(SCRIPT,scripts/'sign-app.sh')
+        shutil.copyfile(SCRIPT.with_name('package-release.sh'),scripts/'package-release.sh')
+        (scripts/'build-app.sh').write_text('''#!/bin/bash
+set -euo pipefail
+mkdir -p "$KEEPRESSO_APP_DESTINATION/Contents/MacOS" "$KEEPRESSO_APP_DESTINATION/Contents/Resources"
+python3 - <<'PY'
+import os,plistlib
+from pathlib import Path
+app=Path(os.environ['KEEPRESSO_APP_DESTINATION'])
+(app/'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleShortVersionString':'0.0.0','CFBundleVersion':'1'}))
+p=app/'Contents/MacOS/KeepressoMac';p.write_text('#!/bin/sh\\nexit 0\\n');p.chmod(0o700)
+PY
+bash "$(dirname "$0")/sign-app.sh" "$KEEPRESSO_APP_DESTINATION"
+''')
+        for name,body in [('uname','echo arm64'),('lipo','exit 0'),('ditto','touch "${@: -1}"')]:
+            p=self.root/name;p.write_text('#!/bin/bash\n'+body+'\n');p.chmod(0o700)
+        result=subprocess.run(['bash',str(scripts/'package-release.sh'),'v0.4.7'],cwd=repo,
+                              env=self.env|{'KEEPRESSO_CODESIGN_IDENTITY':IDENTITY,'KEEPRESSO_REQUIRE_STABLE_SIGNING':'1'},text=True,capture_output=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        signatures=[call for call in self.calls() if '--sign' in call]
+        self.assertEqual(len(signatures),2)
+        self.assertTrue(all(call[call.index('--sign')+1]==IDENTITY for call in signatures))
+        info=plistlib.loads((repo/'macos/artifacts/KeepressoMobile.app/Contents/Info.plist').read_bytes())
+        self.assertEqual(info['CFBundleShortVersionString'],'0.4.7');self.assertEqual(info['CFBundleVersion'],'4007')
 
 if __name__=='__main__':unittest.main()

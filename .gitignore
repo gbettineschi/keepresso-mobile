@@ -17,3 +17,7 @@ node_modules/
 .vercel/
 *-adminsdk-*.json
 remote-config*.json
+
+__pycache__/
+
+*.p12

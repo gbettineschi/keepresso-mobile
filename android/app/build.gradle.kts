@@ -6,7 +6,11 @@ plugins {
 android {
     namespace = "io.github.gbettineschi.keepressomobile"
     compileSdk = 35
-    defaultConfig { applicationId = namespace; minSdk = 28; targetSdk = 35; versionCode = 7; versionName = "0.4.2" }
+    defaultConfig {
+        applicationId = namespace; minSdk = 28; targetSdk = 35
+        versionCode = providers.gradleProperty("keepresso.releaseVersionCode").orElse("4007").get().toInt()
+        versionName = providers.gradleProperty("keepresso.releaseVersion").orElse("0.4.7").get()
+    }
     defaultConfig { testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
     buildFeatures { compose = true; buildConfig = true }
     defaultConfig {
@@ -27,6 +31,7 @@ android {
             keyPassword = signingInputs.getValue("KEEPRESSO_SIGNING_KEY_PASSWORD")!!
         }
         buildTypes.getByName("debug").signingConfig = persistentDebug
+        buildTypes.getByName("release").signingConfig = persistentDebug
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
