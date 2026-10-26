@@ -8,7 +8,7 @@ Bluetooth is the nearby connection. Optional internet access and background push
 
 ## Status
 
-**Development builds only.** The app is on [`feat/native-companion`](https://github.com/gbettineschi/keepresso-mobile/tree/feat/native-companion), in [draft PR #1](https://github.com/gbettineschi/keepresso-mobile/pull/1). `main` currently holds the original plans. There is no public release, Homebrew cask or automatic updater for this companion yet.
+**Development builds only.** The app is on [`feat/native-companion`](https://github.com/gbettineschi/keepresso-mobile/tree/feat/native-companion), in [draft PR #1](https://github.com/gbettineschi/keepresso-mobile/pull/1). `main` currently holds the original plans. Mac development previews are published to [releases](https://github.com/gbettineschi/keepresso-mobile/releases) and the shared Homebrew tap. Android still uses the development artifacts below; this is not a stable release.
 
 Real-device pairing, background delivery, sleep/wake and native controls still need the [acceptance checks](https://github.com/gbettineschi/keepresso-mobile/blob/feat/native-companion/docs/ACCEPTANCE.md). Unavailable or stale readings stay unknown; a successful build is not proof that every phone/Mac combination works.
 
@@ -16,12 +16,12 @@ Real-device pairing, background delivery, sleep/wake and native controls still n
 
 Requires **macOS 14+**, the original Keepresso app, and **Android 9+**. The current Mac development download is for **Apple silicon**; source builds target the Mac they are built on.
 
-1. Sign in to GitHub and open a successful run of [Native companion builds](https://github.com/gbettineschi/keepresso-mobile/actions). Download **Keepresso-Mac-development** and **Keepresso-Android-development**. These artifacts expire after 14 days.
-2. Unzip the Mac artifact, then its `KeepressoMobile.zip`. Put the helper in Applications as **Keepresso Mobile.app** before opening it. The app is ad-hoc signed and not notarized; macOS may require **Open Anyway** in Privacy & Security.
+1. Install the Mac helper with `brew install --cask gbettineschi/tap/keepresso-mobile`, or download `KeepressoMobile.zip` from this repository's releases and put it in Applications as **Keepresso Mobile.app**. Quit the old helper first. The app is ad-hoc signed and not notarized; macOS may require **Open Anyway** in Privacy & Security.
+2. Sign in to GitHub and open a successful run of [Native companion builds](https://github.com/gbettineschi/keepresso-mobile/actions). Download **Keepresso-Android-development**. These development artifacts expire after 14 days.
 3. Install `app-debug.apk` on your phone using Android's normal APK-install confirmation. Open the original Keepresso app and the companion on the Mac.
 4. Show a pairing invitation in the Mac helper, scan it with the Android app, and approve the named phone on the Mac. Grant Bluetooth and notification access when requested. Confirm the displayed Mac name and status before trying controls.
 
-Use one Mac helper at `/Applications/Keepresso Mobile.app`. To update, quit it and replace that same bundle. Keep its preferences and Keychain entries. Android updates must use the same package/signing key and a compatible version code to preserve pairing; stop on a signing mismatch instead of uninstalling or clearing data.
+Use one Mac helper at `/Applications/Keepresso Mobile.app`. To update a Homebrew installation, quit the helper, run `brew update`, then `brew upgrade --cask gbettineschi/tap/keepresso-mobile`. For a manual installation, replace the same bundle. Keep its preferences and Keychain entries. Android updates must use the same package/signing key and a compatible version code to preserve pairing; stop on a signing mismatch instead of uninstalling or clearing data.
 
 ## Build from source
 
@@ -51,6 +51,10 @@ cd android
 Output: `android/app/build/outputs/apk/debug/app-debug.apk` relative to the repository root. Your local debug signing key may differ from the existing development builds.
 
 [Build and pairing details](https://github.com/gbettineschi/keepresso-mobile/blob/feat/native-companion/docs/BUILDING.md) · [Implemented features and limits](https://github.com/gbettineschi/keepresso-mobile/blob/feat/native-companion/docs/IMPLEMENTATION.md) · [Optional relay setup](https://github.com/gbettineschi/keepresso-mobile/blob/feat/native-companion/docs/SELF_HOSTING.md)
+
+## Releases
+
+Mac preview releases and tap updates are automatic when a version tag is pushed from the implementation branch. See [release instructions](docs/releasing.md). Existing Android signing and development workflows are unchanged.
 
 ## Credits and license
 
