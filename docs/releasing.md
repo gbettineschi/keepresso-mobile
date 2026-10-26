@@ -1,17 +1,17 @@
-# Mac preview releases
+# Android and Mac preview releases
 
-The application source remains on `feat/native-companion` (draft PR #1). Do not tag `main`, which still holds plans rather than the app. Use a clean checkout of the implementation branch, review the source, commit and push, then tag that commit `vX.Y.Z` and push the tag to this repository.
+The application source remains on `feat/native-companion` (draft PR #1). Do not tag `main`, which holds plans rather than the app. Review and push the implementation source, then push a new numeric `vX.Y.Z` tag from that branch.
 
-**Release Mac development preview** runs the Mac tests, verifies the unchanged pinned upstream files, builds the Apple silicon helper with Swift 6.4, runs its safe packaged self-check and publishes `KeepressoMobile.zip` plus `SHA256SUMS` as a GitHub prerelease. No power commands, app installation, device changes or Android release are part of this job.
+**Release development preview** tests/packages the Apple silicon Mac helper and a signed Android release APK. It publishes both archives, `SHA256SUMS` and `release.json` together as a GitHub prerelease. Its dependent job updates the shared Homebrew tap from the exact published Mac ZIP. No manual tap editing is needed.
 
-The dependent tap job updates `keepresso-mobile` in [gbettineschi/homebrew-tap](https://github.com/gbettineschi/homebrew-tap) from the exact uploaded ZIP. Its `TAP_DEPLOY_KEY` can write only to that tap; no personal token or Apple signing secrets are needed. If catalog publication fails, run **Update Homebrew tap** with the existing tag or re-run the failed job. Never replace an already published ZIP to retry the catalog.
+Android uses the same retained owner signing key already used by CI development builds. The existing encrypted `ANDROID_SIGNING_STORE_BASE64` and `ANDROID_SIGNING_PASSWORD` secrets are reused; neither key nor password is committed or included in artifacts. Release builds fail without this identity. The APK's package, version and certificate are verified against the key before publication. Temporary key files are private and removed afterward.
 
-The preview requires macOS 14+, Apple silicon and the original Keepresso app. Builds are ad-hoc signed, not notarized. Passing tests does not replace the real-device checks in `docs/ACCEPTANCE.md`. Android continues using the existing development artifacts and retained signing identity.
+The version tag supplies both platform display versions. Android's `versionCode` is `major * 1000000 + minor * 1000 + patch`; minor/patch are limited to999, and the Android maximum is enforced. For example, `v0.4.3` maps to4003. Future tags must increase the version. This scheme supersedes early development codes5/7. To update a tagged installation with a local trial build, use the same release-version properties instead of the old debug defaults; never uninstall or clear pairing to bypass a version or signature mismatch.
 
-To check packaging locally without installing or publishing:
+For Obtainium, add `https://github.com/gbettineschi/keepresso-mobile` and enable **Include prereleases**. Each combined release contains one APK. The existing `v0.4.3` release is Mac-only; Android release downloads start with the next deliberately published combined tag. The active local Android workspace has newer work than the original GitHub snapshot, so do not create a newer APK release from stale source just to test packaging. Review/push the desired app source first.
 
-```sh
-bash macos/scripts/package-release.sh v0.4.3
-```
+For verification without publishing, run **Release development preview** manually on `feat/native-companion` and supply the version tag to check. Both packages are built and checked, including cross-job artifact assembly, but no GitHub release or tap change is made. Verification artifacts expire after one day. No app or device is installed, launched normally or changed. The existing development workflow remains available separately.
 
-The tag supplies the packaged app version. Source and third-party licences are included in the bundle; matching source is available at the release tag. Future releases use a new numeric `vX.Y.Z` tag.
+The preview requires Android9+, macOS14+, Apple silicon and the original Keepresso app. Mac builds are ad-hoc signed, not notarized. Passing checks does not replace the real-device acceptance tests. Source and third-party licences are included in the Mac bundle, with matching source at the release tag.
+
+The tap-only `TAP_DEPLOY_KEY` is separate from Android signing. To retry just the catalog, run **Update Homebrew tap** with the existing published tag. Do not replace an existing release asset.
