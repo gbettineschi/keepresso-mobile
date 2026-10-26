@@ -1,0 +1,47 @@
+name: Release Mac development preview
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  package:
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Library/Developer/CommandLineTools
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify Swift toolchain and tagged implementation
+        run: |
+          test -f macos/scripts/package-release.sh
+          swift --version | grep 'Swift version 6.4'
+          python3 scripts/verify-upstream.py
+      - name: Mac helper tests
+        run: swift test --package-path macos
+      - name: Package Apple silicon helper
+        env:
+          TAG: ${{ github.ref_name }}
+        run: bash macos/scripts/package-release.sh "$TAG"
+      - name: Publish tagged preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" macos/artifacts/KeepressoMobile.zip macos/artifacts/SHA256SUMS \
+            --verify-tag --prerelease --title "Keepresso Mobile ${TAG#v} (Mac preview)" \
+            --notes 'Development preview of the unofficial Mac helper. 100% vibe-coded for personal use, provided as is. Requires macOS 14+, Apple silicon and the original Keepresso app. Ad-hoc signed, not notarized. Real-device acceptance checks remain incomplete. This release contains no Android APK; use the existing Android development build channel.'
+  tap:
+    needs: package
+    permissions:
+      contents: read
+    uses: gbettineschi/homebrew-tap/.github/workflows/publish.yml@main
+    with:
+      package: keepresso-mobile
+      tag: ${{ github.ref_name }}
+    secrets:
+      TAP_DEPLOY_KEY: ${{ secrets.TAP_DEPLOY_KEY }}

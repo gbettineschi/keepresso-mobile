@@ -1,0 +1,18 @@
+name: Update Homebrew tap
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing published release tag (vX.Y.Z)
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  tap:
+    uses: gbettineschi/homebrew-tap/.github/workflows/publish.yml@main
+    with:
+      package: keepresso-mobile
+      tag: ${{ inputs.tag }}
+    secrets:
+      TAP_DEPLOY_KEY: ${{ secrets.TAP_DEPLOY_KEY }}
