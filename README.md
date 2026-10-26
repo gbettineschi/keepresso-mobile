@@ -65,7 +65,7 @@ Output: `android/app/build/outputs/apk/debug/app-debug.apk` relative to the repo
 
 Push a reviewed `vX.Y.Z` tag from `main`. Actions tests and packages the signed Android APK and Mac preview, publishes both together, and updates the shared Mac tap automatically. Android's retained key is held in an encrypted signing environment limited to version tags and manual checks on `main`. Ordinary pull-request builds do not use it.
 
-Permanent downloads live in GitHub Releases. Temporary CI packages expire after one day, and successful releases remove their intermediate artifacts. Standard public-repository runners are used. See [release instructions](docs/releasing.md) for signing, versions and safe retries.
+Permanent downloads live in GitHub Releases. Routine CI does not upload installers; failure reports expire after one day. Successful releases remove the temporary packages used between release jobs. Standard public-repository runners are used. See [release instructions](docs/releasing.md) for signing, versions and safe retries.
 
 ## Credits and license
 

@@ -2,16 +2,11 @@
 
 This is an unofficial companion. Keep the official Keepresso installation; the helper does not replace it. No server, internet relay, login item or keep-awake lease is installed by building the project.
 
-## Build artifacts
+## CI and downloads
 
-The public repository's **Actions → Native companion builds** workflow produces development artifacts after the corresponding checks pass:
+The public repository's **Actions → Native companion builds** workflow tests and builds the apps without uploading installers. Use the APK and Mac ZIP in [GitHub Releases](https://github.com/gbettineschi/keepresso-mobile/releases) for installation and updates. Failed Android checks can save small test/lint reports for one day; workflow logs remain available.
 
-- **Keepresso-Android-development** contains `app-debug.apk`.
-- **Keepresso-Mac-development** contains `KeepressoMobile.zip`.
-
-These are test builds, not Play Store or notarized releases. Downloading an artifact requires signing in to GitHub. Artifacts expire after one day; manually run the workflow to produce fresh ones.
-
-Automatic builds run for pull requests and pushes to `main`. Feature-branch pushes are not built a second time. A small Linux job selects the affected platform checks: relay changes do not start a Mac build, and ordinary documentation changes start no app builds. Shared inputs and workflow changes run every affected check. Pull requests use their complete diff to keep earlier changes covered; an unrelated later commit does not erase required checks. **Run workflow** explicitly runs all checks and packages both apps. Standard GitHub-hosted Linux and Mac runner execution is free for this public repository; artifact/cache storage has separate allowances.
+Automatic checks run for pull requests and pushes to `main`. A small Linux job selects the affected platforms, so ordinary documentation changes start no app builds. Pull requests use their complete diff to keep earlier changes covered. **Run workflow** explicitly runs all checks but does not publish downloads. Standard public-repository runners are used.
 
 ## macOS
 

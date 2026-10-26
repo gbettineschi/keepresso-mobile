@@ -109,14 +109,6 @@ jobs:
         run: bash macos/scripts/build-app.sh
       - name: Safe packaged self-check
         run: macos/artifacts/KeepressoMobile.app/Contents/MacOS/KeepressoMac --self-check
-      - name: Archive helper
-        run: ditto -c -k --sequesterRsrc --keepParent macos/artifacts/KeepressoMobile.app macos/artifacts/KeepressoMobile.zip
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: Keepresso-Mac-development
-          path: macos/artifacts/KeepressoMobile.zip
-          if-no-files-found: error
-          retention-days: 1
 
   android:
     name: Android tests, lint and APK
@@ -152,17 +144,11 @@ jobs:
           "-Pkeepresso.firebase.senderId=$FIREBASE_SENDER_ID"
           :core:test :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
+        if: failure()
         with:
           name: Android-check-reports
           path: |
             android/core/build/reports/tests/
             android/app/build/reports/lint-results-debug.*
           if-no-files-found: ignore
-          retention-days: 1
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: Keepresso-Android-development
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
           retention-days: 1
