@@ -100,7 +100,8 @@ jobs:
           swift --version
           xcrun --show-sdk-path
           swift --version | grep 'Swift version 6.4'
-      - run: swift test --package-path macos
+      # Process cancellation and Keychain mocks compete for deadlines on the shared runner.
+      - run: swift test --package-path macos --no-parallel
       - name: Check signing policy without Keychain access
         run: python3 macos/scripts/test-sign-app.py
       - name: Package helper
