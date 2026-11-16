@@ -2,6 +2,24 @@ import Foundation
 import Testing
 import KeepressoCore
 struct ObserverTests {
+    @Test func cpuFallbackPolicyIsPerRuleAndPartOfTheObserverSettings() throws {
+        let data = Data("""
+        {"triggersEnabled":true,"ruleSet":{"combine":"any","rules":[
+          {"agentActivity":{"_0":{"grace":0,"countWaitingAsWorking":false}}},
+          {"agentActivity":{"_0":{"grace":0,"countWaitingAsWorking":false,"allowCPUFallback":false}}},
+          {"agentActivity":{"_0":{"grace":0,"countWaitingAsWorking":false,"allowCPUFallback":true}}}
+        ]}}
+        """.utf8)
+        let settings = try CompanionObserverSettings.decode(data)
+        #expect(settings.ruleSet.rules.count == 3)
+        #expect(settings.evidenceOnlyAgentRuleIndices == [1])
+
+        let changed = try CompanionObserverSettings.decode(Data(String(decoding: data, as: UTF8.self)
+            .replacingOccurrences(of: "\"allowCPUFallback\":false", with: "\"allowCPUFallback\":true").utf8))
+        #expect(settings.ruleSet == changed.ruleSet)
+        #expect(settings != changed)
+    }
+
     @Test func unknownAndMissingRulesCannotSilentlyBecomeAnEmptyDefault() throws {
         XCTAssertThrowsError(try CompanionObserverSettings.decode(Data("{}".utf8)))
         XCTAssertThrowsError(try CompanionObserverSettings.decode(Data("{\"triggersEnabled\":true,\"ruleSet\":{\"combine\":\"any\",\"rules\":[{\"futureUnknownRule\":{}}]}}".utf8)))

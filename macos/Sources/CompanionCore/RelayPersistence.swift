@@ -26,7 +26,9 @@ public enum PrivateDurableFile {
     public static func save(_ data:Data,to url:URL)throws {
         let directory=url.deletingLastPathComponent()
         if !FileManager.default.fileExists(atPath:directory.path){try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])}
-        try data.write(to:url,options:[.atomic,.completeFileProtectionUnlessOpen])
+        // Background records must reopen while the Mac is locked after login.
+        // Keep OS data protection, owner-only modes and durable atomic writes.
+        try data.write(to:url,options:[.atomic,.completeFileProtectionUntilFirstUserAuthentication])
         try FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:url.path)
         let handle=try FileHandle(forWritingTo:url);defer{try? handle.close()};try handle.synchronize()
         guard fcntl(handle.fileDescriptor,F_FULLFSYNC)==0 else{throw CompanionError.unavailable}
@@ -55,7 +57,7 @@ public final class RelayOutbox {
     }
     private func pruned(now:Date)->State {
         var next=state
-        next.events.removeAll{now.timeIntervalSince($0.createdAt)>=300 || $0.createdAt.timeIntervalSince(now)>10}
+        next.events.removeAll{now.timeIntervalSince($0.createdAt)>=Double($0.deliveryLifetimeSeconds) || $0.createdAt.timeIntervalSince(now)>10}
         next.records.removeAll{Double($0.envelope.expiresAt)<=now.timeIntervalSince1970}
         return next
     }
@@ -67,7 +69,7 @@ public final class RelayOutbox {
         }
         let payload=try WireJSON.data(["type":"event","event":WireJSON.object(WireJSON.encoder.encode(event))])
         for device in devices {
-            let envelope=try RelayEnvelope.seal(payload,key:device.key,macId:macId,deviceId:device.deviceId,id:event.id,epoch:epoch,direction:"s2c",kind:"event",now:event.createdAt,lifetime:300)
+            let envelope=try RelayEnvelope.seal(payload,key:device.key,macId:macId,deviceId:device.deviceId,id:event.id,epoch:epoch,direction:"s2c",kind:"event",now:event.createdAt,lifetime:event.deliveryLifetimeSeconds)
             next.records.append(Record(envelope:envelope,uploaded:false))
         }
         next.events.append(event);try persist(next)
@@ -94,7 +96,7 @@ public final class RelayOutbox {
     }
     public func resolve(kinds:Set<String>,now:Date)throws{
         var next=pruned(now:now)
-        let ids=Set(next.events.filter{kinds.contains($0.kind)}.map(\.id))
+        let ids=Set(next.events.filter{kinds.contains($0.deliveryKind)}.map(\.id))
         guard !ids.isEmpty else{return}
         next.events.removeAll{ids.contains($0.id)}
         next.records.removeAll{$0.envelope.kind=="event" && ids.contains($0.envelope.id)}

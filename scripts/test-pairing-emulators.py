@@ -10,7 +10,7 @@ parser.add_argument('--adb',default='adb')
 parser.add_argument('--client',required=True)
 parser.add_argument('--peer',required=True)
 parser.add_argument('--netsim',help='Emulator radio-control executable (default: sibling SDK emulator/netsim)')
-parser.add_argument('--case',choices=['all','approve','deny','slow','sleep','warning'],default='all',help='Run the full suite or one focused Bluetooth flow')
+parser.add_argument('--case',choices=['all','approve','deny','slow','sleep','warning','stable','startup-recovery','phone-radio-recovery','trigger-history'],default='all',help='Run the full suite or one focused Bluetooth flow')
 args=parser.parse_args()
 if args.client==args.peer:parser.error('Client and peer must be different emulators')
 package='io.github.gbettineschi.keepressomobile'
@@ -37,6 +37,27 @@ if not Path(netsim).is_file():parser.error('Locate emulator/netsim with --netsim
 def radio(status):
     # Only the separately validated synthetic peer's BLE radio is affected.
     subprocess.run([netsim,'radio','ble',status,avds[args.peer]],check=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+
+def client_adapter(enabled):
+    # Both serial and AVD name were checked above. Never controls an owner phone.
+    adb(args.client,'shell','svc','bluetooth','enable' if enabled else 'disable')
+    expected='state: ON' if enabled else 'state: OFF'
+    for _ in range(40):
+        if expected in adb(args.client,'shell','dumpsys','bluetooth_manager'):return
+        time.sleep(.25)
+    raise RuntimeError('Synthetic phone Bluetooth adapter did not become '+expected)
+
+def client_radio_outage(stop,startup=False):
+    marker='STARTUP_RADIO_OFF' if startup else 'PHONE_RADIO_OFF_READY'
+    deadline=time.monotonic()+60
+    while not stop.wait(.3):
+        if marker in adb(args.client,'logcat','-d','-s','KeepressoRecoveryTest'):
+            try:
+                if not startup:client_adapter(False)
+                stop.wait(25)  # Beyond the former single 15-second reconnect attempt.
+            finally:client_adapter(True)
+            return
+        if time.monotonic()>deadline:raise RuntimeError('Missing synthetic phone recovery marker '+marker)
 
 def link_loss(stop):
     while not stop.wait(0.3):
@@ -73,12 +94,17 @@ if args.case=='all':
     test('permission-recreation','PairingPermissionTest#scannedInvitationSurvivesActivityRecreation')
     test('screen','PairingScreenTest')
     test('dashboard','DashboardUiTest')
+    test('stable-dashboard','StableDashboardUiTest')
     clear_client()
     test('transport-state','TransportStateTest')
     test('warning-channel','WarningChannelTest')
+    clear_client()
+    test('advertising-denied','PeripheralPermissionTest')
+    test('shared-gatt-connections','SharedGattConnectionTest')
 
 def peer_case(mode,method):
     clear_client();adb(args.peer,'shell','am','force-stop',package);adb(args.peer,'logcat','-c')
+    adb(args.client,'logcat','-c')
     log=(results/('peer-'+mode+'.log')).open('w')
     command=[args.adb,'-s',args.peer,'shell','am','instrument','-w','-r','-e','class',package+'.VirtualMacPeerTest','-e','virtualPeer','true','-e','mode',mode,package+'.test/androidx.test.runner.AndroidJUnitRunner']
     process=subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT)
@@ -88,10 +114,18 @@ def peer_case(mode,method):
             if 'READY' in adb(args.peer,'logcat','-d','-s','KeepressoVirtualPeer'):break
             if process.poll() is not None:raise RuntimeError('Virtual peer exited; inspect '+str(results/('peer-'+mode+'.log')))
             time.sleep(1)
-        else:raise RuntimeError('Virtual Bluetooth advertiser did not become ready')
+        else:raise RuntimeError('Virtual Mac Bluetooth central did not become ready')
         if mode=='approve':outage=executor.submit(link_loss,stop)
+        if mode=='startup-recovery':
+            test('prepare-startup-recovery','PairingFlowTest#prepareSavedPairingForBackgroundStartup','true')
+            client_adapter(False)
+            outage=executor.submit(client_radio_outage,stop,True)
+        if mode=='phone-radio-recovery':outage=executor.submit(client_radio_outage,stop)
         test('flow-'+mode,method,'deny' if mode=='deny' else 'true')
         if outage is not None:outage.result(timeout=15)
+        if mode=='stable':
+            report=subprocess.check_output([args.adb,'-s',args.client,'exec-out','run-as',package,'cat','cache/nearby-stability.json'])
+            (results/'nearby-stability.json').write_bytes(report)
         if mode=='approve':
             report=subprocess.check_output([args.adb,'-s',args.client,'exec-out','run-as',package,'cat','cache/local-report.json'])
             (results/'local-report.json').write_bytes(report)
@@ -99,6 +133,7 @@ def peer_case(mode,method):
             (results/'pairing-flow.png').write_bytes(screenshot)
     finally:
         stop.set();executor.shutdown(wait=True)
+        if mode in ['startup-recovery','phone-radio-recovery']:client_adapter(True)
         adb(args.peer,'shell','am','force-stop',package,check=False)
         try:process.wait(timeout=5)
         except subprocess.TimeoutExpired:process.terminate();process.wait(timeout=5)
@@ -109,4 +144,8 @@ if args.case in ['all','deny']:peer_case('deny','PairingFlowTest#localDenialDoes
 if args.case in ['all','slow']:peer_case('slow','PairingFlowTest#quietPollKeepsControlsEnabledAndTapWaitsBehindReadWithoutDuplicates')
 if args.case in ['all','sleep']:peer_case('sleep','PairingFlowTest#sleepNeedsConfirmationAndAcceptedRequestDoesNotClaimCompletedSleep')
 if args.case in ['all','warning']:peer_case('warning','PairingFlowTest#lidWarningUsesUrgentChannelAndDuplicateRoutesCannotPostAgain')
+if args.case in ['all','stable']:peer_case('stable','PairingFlowTest#nearbyStatusStaysFreshAcrossBackgroundAndForeground')
+if args.case in ['all','startup-recovery']:peer_case('startup-recovery','PeripheralStartupRecoveryTest#savedPairedPhoneRecoversWhenRadioReturnsWithoutForegrounding')
+if args.case in ['all','phone-radio-recovery']:peer_case('phone-radio-recovery','PairingFlowTest#phoneRadioOffBeyondReconnectWindowRecoversInBackground')
+if args.case in ['all','trigger-history']:peer_case('trigger-history','TriggerHistoryFlowTest#explicitChecksRetainTheirAnswerAcrossPollsAndFailures')
 print('PASS: '+args.case+' pairing emulator checks. Results: '+str(results),flush=True)

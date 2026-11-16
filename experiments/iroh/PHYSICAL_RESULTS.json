@@ -1,0 +1,90 @@
+{
+  "date": "2026-10-30",
+  "bindingVersion": "1.2.0",
+  "syntheticFixturesOnly": true,
+  "reports": [
+    {
+      "deviceType": "physical",
+      "startedAt": "2026-10-30T09:44:39.402405+00:00",
+      "status": "passed",
+      "model": "SM-S911B",
+      "profiles": [
+        {
+          "mode": "auto",
+          "tests": 9,
+          "roundTrips": 30,
+          "medianMs": 49,
+          "maxMs": 1300,
+          "selectedPath": "ip",
+          "phoneNetwork": "wifi",
+          "elapsedSeconds": 98.446
+        },
+        {
+          "mode": "relay",
+          "tests": 9,
+          "roundTrips": 30,
+          "medianMs": 55,
+          "maxMs": 157,
+          "selectedPath": "relay",
+          "phoneNetwork": "wifi",
+          "elapsedSeconds": 53.372
+        }
+      ]
+    },
+    {
+      "deviceType": "emulator",
+      "startedAt": "2026-10-30T09:48:11.770463+00:00",
+      "status": "passed",
+      "profiles": [
+        {
+          "mode": "direct",
+          "tests": 9,
+          "roundTrips": 30,
+          "medianMs": 11,
+          "maxMs": 5017,
+          "selectedPath": "ip",
+          "phoneNetwork": "wifi",
+          "elapsedSeconds": 32.841
+        },
+        {
+          "mode": "relay",
+          "tests": 9,
+          "roundTrips": 30,
+          "medianMs": 43,
+          "maxMs": 184,
+          "selectedPath": "relay",
+          "phoneNetwork": "wifi",
+          "elapsedSeconds": 51.638
+        }
+      ]
+    },
+    {
+      "deviceType": "physical",
+      "startedAt": "2026-10-30T10:03:54.274149+00:00",
+      "status": "passed",
+      "model": "SM-S911B",
+      "profiles": [
+        {
+          "mode": "auto",
+          "tests": 9,
+          "roundTrips": 30,
+          "medianMs": 45,
+          "maxMs": 298,
+          "selectedPath": "ip",
+          "phoneNetwork": "cellular",
+          "elapsedSeconds": 83.398
+        },
+        {
+          "mode": "relay",
+          "tests": 9,
+          "roundTrips": 30,
+          "medianMs": 78,
+          "maxMs": 167,
+          "selectedPath": "relay",
+          "phoneNetwork": "cellular",
+          "elapsedSeconds": 49.348
+        }
+      ]
+    }
+  ]
+}

@@ -4,6 +4,7 @@ import java.time.Instant
 class LocalSnooze(private val read: (String) -> Long?, private val write: (String, Long?) -> Unit) {
     fun snooze(macId: String, now: Instant) { write(macId, now.plusSeconds(21600).epochSecond) }
     fun acknowledge(macId: String, action: String, status: String) { if (action == "resume_reminders" && status == "ok") reset(macId) }
-    fun suppressed(macId: String, kind: String, now: Instant): Boolean = kind == "hourly" && (read(macId) ?: 0) > now.epochSecond
+    fun suppressed(macId: String, kind: String, now: Instant): Boolean =
+        (kind == "hourly" || kind == "unattended_brew") && (read(macId) ?: 0) > now.epochSecond
     fun reset(macId: String) { write(macId, null) }
 }

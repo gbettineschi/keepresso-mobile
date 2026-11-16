@@ -14,7 +14,7 @@ import java.time.Instant
 /** Real Compose dashboard, synthetic Mac telemetry, emulator only. */
 class InternetDashboardTest {
     private val ui=createAndroidComposeRule<MainActivity>()
-    @get:Rule val rules=RuleChain.outerRule(EmulatorOnlyRule()).around(GrantPermissionRule.grant(Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.POST_NOTIFICATIONS)).around(ui)
+    @get:Rule val rules=RuleChain.outerRule(EmulatorOnlyRule()).around(GrantPermissionRule.grant(Manifest.permission.BLUETOOTH_ADVERTISE,Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.POST_NOTIFICATIONS)).around(ui)
     @Before fun isolated(){Assert.assertNull("Clear this disposable emulator's prior pairing fixture before UI tests",CredentialStore(InstrumentationRegistry.getInstrumentation().targetContext).load())}
     private fun show(internet:String="online",network:String="wifi",name:String?="Home Wi-Fi",age:Long=0,unreachable:Boolean=false,legacy:Boolean=false,checkedAt:String?=null){
         val now=Instant.now()
@@ -70,6 +70,7 @@ class InternetDashboardTest {
     }
     @Test fun unreachableMacKeepsExplicitLastKnownContext(){
         show(unreachable=true)
+        ui.waitUntil(10_000) { ui.onAllNodesWithText("Unreachable").fetchSemanticsNodes().isNotEmpty() }
         ui.onNodeWithText("Unreachable").assertIsDisplayed()
         ui.onNodeWithText("Readings below are last known",substring=true).assertIsDisplayed()
         ui.onNodeWithText("Start").performScrollTo().assertIsNotEnabled()

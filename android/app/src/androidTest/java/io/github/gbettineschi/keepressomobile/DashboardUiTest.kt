@@ -14,18 +14,18 @@ import java.time.Instant
 /** Render the actual screen using synthetic readings, never native controls. */
 class DashboardUiTest {
     private val ui=createAndroidComposeRule<MainActivity>()
-    @get:Rule val rules=RuleChain.outerRule(EmulatorOnlyRule()).around(GrantPermissionRule.grant(Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.POST_NOTIFICATIONS)).around(ui)
+    @get:Rule val rules=RuleChain.outerRule(EmulatorOnlyRule()).around(GrantPermissionRule.grant(Manifest.permission.BLUETOOTH_ADVERTISE,Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.POST_NOTIFICATIONS)).around(ui)
     @Before fun state(){show()}
-    private fun show(error:Boolean=false,battery:Int=83,thermal:String="normal"){
+    private fun show(error:Boolean=false,battery:Int=83,thermal:String="nominal"){
         val now=Instant.now()
-        val json="""{"capturedAt":"$now","macName":"Test Mac","mac":{"lock":"locked","display":"off","lid":"closed","batteryPercent":$battery,"powerSource":"ac","isCharging":true,"temperatureC":58.4,"temperatureSensor":"CPU test","thermal":"$thermal"},"keepresso":{"appRunning":true,"version":"1.27.0","isActive":false,"endsAt":null,"triggersEnabled":true,"triggersPaused":true,"sessionKind":"unknown","safetyPause":"none"},"capabilities":{"startManual":true,"stopManual":false,"pauseTriggers":true,"resumeTriggers":true,"sleepNow":true,"refreshTriggers":true},"triggers":{"state":"${if(error)"error" else "unknown"}","checkedAt":"$now","combined":null,"rules":[{"id":"0","label":"AI agent working (+180s)","satisfied":true,"inGrace":false,"graceRemaining":null,"details":[{"label":"Private agent session","active":true,"agent":"Codex"}]},{"id":"1","label":"Microphone in use","satisfied":null,"inGrace":false,"graceRemaining":null,"details":[]}],"message":"Trigger refresh exceeded its five-second budget or its input/output was unavailable. Worker stopped; previous assessment time preserved."},"reminders":{"enabled":true,"intervalSeconds":3600,"endedAwakeDelaySeconds":300,"snoozedUntil":null}}"""
+        val json="""{"capturedAt":"$now","macName":"Test Mac","mac":{"lock":"locked","display":"off","lid":"closed","batteryPercent":$battery,"powerSource":"ac","isCharging":true,"thermalSeverity":"$thermal"},"keepresso":{"appRunning":true,"version":"1.27.0","isActive":false,"endsAt":null,"triggersEnabled":true,"triggersPaused":true,"sessionKind":"unknown","safetyPause":"none"},"capabilities":{"startManual":true,"stopManual":false,"pauseTriggers":true,"resumeTriggers":true,"sleepNow":true,"refreshTriggers":true},"triggers":{"state":"${if(error)"error" else "unknown"}","checkedAt":"$now","combined":null,"rules":[{"id":"0","label":"AI agent working (+180s)","satisfied":true,"inGrace":false,"graceRemaining":null,"details":[{"label":"Private agent session","active":true,"agent":"Codex"}]},{"id":"1","label":"Microphone in use","satisfied":null,"inGrace":false,"graceRemaining":null,"details":[]}],"message":"Trigger refresh exceeded its five-second budget or its input/output was unavailable. Worker stopped; previous assessment time preserved."},"reminders":{"enabled":true,"intervalSeconds":3600,"endedAwakeDelaySeconds":300,"snoozedUntil":null}}"""
         ui.runOnIdle{Companion.mutable.value=UiState(connection="Connected nearby",authenticated=true,snapshot=obj(json),receivedAt=now,lastContact=now,pairedName="Test Mac",macId="11111111-1111-4111-8111-111111111111")}
     }
     @Test fun dashboardUsesCompactFactsAndNativeStyleTriggerRows(){
         ui.onNodeWithText("Keepresso Mobile").assertIsDisplayed()
         ui.onNodeWithText("83%").assertIsDisplayed()
         ui.onNodeWithContentDescription("Charging").assertIsDisplayed()
-        ui.onNodeWithText("58 °C").assertIsDisplayed()
+        ui.onNode(hasText("Thermal state") and hasText("Nominal")).assertIsDisplayed()
         ui.onAllNodesWithText("Normal",substring=true,ignoreCase=true).assertCountEquals(0)
         ui.onAllNodesWithText("Connected to power").assertCountEquals(0)
         ui.onNodeWithText("AI agent working (+180s)").performScrollTo().assertIsDisplayed()
@@ -58,7 +58,7 @@ class DashboardUiTest {
         ui.onNodeWithText("Test alert").performScrollTo().assertIsDisplayed()
         capture("settings-polish.png")
     }
-    @Test fun captureWarmLowBattery(){show(battery=15,thermal="warm");capture("dashboard-warm.png")}
+    @Test fun captureWarmLowBattery(){show(battery=15,thermal="fair");capture("dashboard-warm.png")}
     @Test fun captureDashboard(){capture("dashboard-polish.png")}
     private fun capture(name:String){
         val context=InstrumentationRegistry.getInstrumentation().targetContext

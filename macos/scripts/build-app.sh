@@ -2,11 +2,16 @@
 set -euo pipefail
 MACOS_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REPO_ROOT="$(cd "$MACOS_ROOT/.." && pwd)"
+if [[ "$(uname -m)" != arm64 ]]; then
+  echo 'This iroh integration package currently supports Apple silicon only.' >&2
+  exit 2
+fi
 # Native SwiftPM produces a statically linked executable using Command Line
 # Tools. No Xcode project, installation, permissions or power test is needed.
 swift build --package-path "$MACOS_ROOT" --build-system native -c release --product KeepressoMac
 BIN_DIR="$(swift build --package-path "$MACOS_ROOT" --build-system native -c release --show-bin-path)"
-APP="${KEEPRESSO_APP_DESTINATION:-$MACOS_ROOT/artifacts/KeepressoMobile.app}"
+# Keep unpacked development bundles out of Spotlight/launcher discovery.
+APP="${KEEPRESSO_APP_DESTINATION:-$MACOS_ROOT/.build/app-staging/KeepressoMobile.app}"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 mkdir -p "$APP/Contents/Library/LaunchAgents"
@@ -28,12 +33,18 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundleDisplayName</key><string>Keepresso Mobile</string>
 <key>CFBundleExecutable</key><string>KeepressoMac</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.4.7</string>
-<key>CFBundleVersion</key><string>4007</string>
-<key>LSMinimumSystemVersion</key><string>14.0</string>
+<key>CFBundleShortVersionString</key><string>0.6.9</string>
+<key>CFBundleVersion</key><string>6009</string>
+<key>LSMinimumSystemVersion</key><string>14.5</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>
 <key>CFBundleIconFile</key><string>AppIcon.icns</string>
+<key>NSCalendarsFullAccessUsageDescription</key><string>Read event times for your configured calendar trigger. Event titles are not sent to your phone.</string>
+<key>NSDocumentsFolderUsageDescription</key><string>Read activity metadata for configured folder and Steam download triggers. Downloaded file contents are not read.</string>
+<key>NSDesktopFolderUsageDescription</key><string>Read activity metadata for configured folder and Steam download triggers. Downloaded file contents are not read.</string>
+<key>NSRemovableVolumesUsageDescription</key><string>Read Steam activity metadata in your configured libraries. Downloaded file contents are not read.</string>
+<key>NSNetworkVolumesUsageDescription</key><string>Read Steam activity metadata in your configured libraries. Downloaded file contents are not read.</string>
+<key>NSDownloadsFolderUsageDescription</key><string>Check whether downloads are still being written for your configured trigger. File contents are not read.</string>
 <key>NSBluetoothAlwaysUsageDescription</key><string>Connect to your authorized Keepresso phone nearby using encrypted Bluetooth messages.</string>
 <key>NSBluetoothPeripheralUsageDescription</key><string>Share status and controls only with phones you explicitly authorize on this Mac.</string>
 <key>NSLocationUsageDescription</key><string>Show your Mac's current Wi-Fi name on your paired phone. No coordinates are collected.</string>

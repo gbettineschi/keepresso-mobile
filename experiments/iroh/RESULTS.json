@@ -1,0 +1,79 @@
+{
+  "bindingVersion": "1.2.0",
+  "syntheticFixturesOnly": true,
+  "startedAt": "2026-10-30T09:22:04.457155+00:00",
+  "status": "passed",
+  "runs": [
+    {
+      "mode": "direct",
+      "tests": 9,
+      "roundTrips": 30,
+      "medianMs": 10,
+      "maxMs": 147,
+      "elapsedSeconds": 15.962,
+      "macIdleSamples": [
+        {
+          "rssKiB": 16240,
+          "cpuTime": "0:00.02"
+        },
+        {
+          "rssKiB": 16336,
+          "cpuTime": "0:00.03"
+        },
+        {
+          "rssKiB": 16336,
+          "cpuTime": "0:00.03"
+        },
+        {
+          "rssKiB": 13312,
+          "cpuTime": "0:00.03"
+        },
+        {
+          "rssKiB": 13312,
+          "cpuTime": "0:00.03"
+        }
+      ]
+    },
+    {
+      "mode": "relay",
+      "tests": 9,
+      "roundTrips": 30,
+      "medianMs": 60,
+      "maxMs": 147,
+      "elapsedSeconds": 55.649,
+      "macIdleSamples": [
+        {
+          "rssKiB": 21728,
+          "cpuTime": "0:00.08"
+        },
+        {
+          "rssKiB": 21776,
+          "cpuTime": "0:00.08"
+        },
+        {
+          "rssKiB": 21776,
+          "cpuTime": "0:00.08"
+        },
+        {
+          "rssKiB": 21776,
+          "cpuTime": "0:00.08"
+        },
+        {
+          "rssKiB": 21776,
+          "cpuTime": "0:00.08"
+        }
+      ]
+    }
+  ],
+  "apkBytes": 25072718,
+  "nativeLibraries": [
+    {
+      "name": "lib/arm64-v8a/libiroh_ffi.so",
+      "bytes": 12831624
+    },
+    {
+      "name": "lib/arm64-v8a/libjnidispatch.so",
+      "bytes": 168280
+    }
+  ]
+}

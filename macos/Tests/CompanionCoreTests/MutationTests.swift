@@ -43,4 +43,44 @@ struct MutationTests {
         let r=await executor.execute(request,device:"device",body:body,now:now,authorized:{false}){effects+=1;return CommandResponse(id:request.id,status:"ok")}
         XCTAssertEqual(r.status,"error");XCTAssertEqual(effects,0)
     }
+    @MainActor @Test func observedSleepSurvivesTransportLossAndIsReturnedOnlyToAnAuthorizedLookup() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let now = Date()
+        let request = CommandRequest(id: UUID().uuidString.lowercased(), action: "sleep_now", issuedAt: now,
+                                     expiresAt: now.addingTimeInterval(30))
+        let body = try WireJSON.encoder.encode(request)
+        let executor = MutationExecutor(journal: try MutationJournal(url: url))
+        var authorized = true
+        var effects = 0
+        let interrupted = await executor.execute(request, device: "device", body: body, now: now, authorized: { authorized }) {
+            effects += 1
+            authorized = false
+            return CommandResponse(id: request.id, status: "ok", message: "Going to sleep", sleepOutcome: .goingToSleep)
+        }
+        #expect(interrupted.status == "uncertain")
+        #expect(interrupted.sleepOutcome != .goingToSleep)
+        let reopened = MutationExecutor(journal: try MutationJournal(url: url))
+        let lookup = CommandRequest(id: UUID().uuidString.lowercased(), action: "operation_status", issuedAt: now,
+                                    expiresAt: now.addingTimeInterval(30), operationId: request.id,
+                                    bodyDigest: Data(SHA256.hash(data: body)).base64EncodedString())
+        let lookupBody = try WireJSON.encoder.encode(lookup)
+        func unexpectedAction() async -> CommandResponse {
+            effects += 1
+            return CommandResponse(id: lookup.id, status: "error")
+        }
+        let wrongDevice = await reopened.execute(lookup, device: "other", body: lookupBody, now: now,
+                                                  authorized: { true }, operation: unexpectedAction)
+        #expect(wrongDevice.status == "error")
+        #expect(wrongDevice.sleepOutcome == nil)
+        let receipt = await reopened.execute(lookup, device: "device", body: lookupBody, now: now,
+                                              authorized: { true }, operation: unexpectedAction)
+        #expect(receipt.operationId == request.id)
+        #expect(receipt.operationStatus == "ok")
+        #expect(receipt.sleepOutcome == .goingToSleep)
+        let duplicate = await reopened.execute(request, device: "device", body: body, now: now,
+                                                authorized: { true }, operation: unexpectedAction)
+        #expect(duplicate.sleepOutcome == .goingToSleep)
+        #expect(effects == 1)
+    }
 }

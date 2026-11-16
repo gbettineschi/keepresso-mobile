@@ -2,6 +2,8 @@
 
 The existing owner-approved BLE pairing is also the internet identity. After the Mac enrolls this phone with its relay, its next encrypted nearby session supplies the HTTPS URL and authentication ticket. Re-pairing is not required. A disabled or missing relay preserves the phone key.
 
+Nearby v2 (0.5.0+) advertises from Android; the Mac is the BLE central. Android 12+ needs CONNECT and ADVERTISE permissions, without SCAN or Location. Earlier supported Android versions use the manifest Bluetooth permissions. The app retains its existing logical client authentication and encrypted framing. Update both apps together; no new QR pairing is needed for an existing authorized phone.
+
 ## Optional Firebase configuration
 
 Register an Android app with package `io.github.gbettineschi.keepressomobile` in the chosen Firebase project. Keep provider settings in local Gradle properties (for example `~/.gradle/gradle.properties`) or private CI inputs. These optional property names populate `FirebaseOptions` programmatically:
@@ -26,3 +28,7 @@ CI may provide a persistent private signing identity through `KEEPRESSO_SIGNING_
 ## Verification
 
 `./gradlew -PcoreOnly :core:test` runs the JVM protocol/security suite with JDK 17 and no Android SDK. `./gradlew :core:test :app:lintDebug :app:assembleDebug` additionally requires Android SDK 35. Tests use fixture keys, fake power behavior, and local HTTPS servers. Physical BLE handoff, Android permission behavior, closed-lid delivery and locked-phone FCM notifications still require real-device acceptance.
+
+## Upgrading an existing nearby pairing to0.5
+
+The reversed transport adds ADVERTISE permission to the existing CONNECT grant. Open app Settings → Connection → Permissions and approve Nearby devices. On the physical Samsung trial, Android retained a partial group grant: CONNECT allowed, ADVERTISE denied. Toggling **only this app's** Android Permissions → Nearby devices from Don't allow to Allow granted the new permission. It did not require a new QR, clearing data, resetting global Bluetooth or stopping other apps. Let the owner handle OS permission choices. An app update retains the same package/signing key and saved authorization.

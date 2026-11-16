@@ -47,32 +47,16 @@ public final class OsascriptSleepWatchdog: SleepWatchdogLaunching {
     }
 
     public static var defaultFlagURL: URL {
-        let base = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-        return base.appendingPathComponent("Keepresso/sleep-watchdog.flag", isDirectory: false)
+        AppSupportFlagFile.defaultURL(named: "sleep-watchdog.flag")
     }
 
-    public func isFlagPresent() -> Bool {
-        FileManager.default.fileExists(atPath: flagURL.path)
-    }
+    private var flag: AppSupportFlagFile { AppSupportFlagFile(url: flagURL) }
 
-    public func createFlag() -> Bool {
-        do {
-            try FileManager.default.createDirectory(
-                at: flagURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try Data().write(to: flagURL)
-            return true
-        } catch {
-            return false
-        }
-    }
+    public func isFlagPresent() -> Bool { flag.isPresent }
 
-    public func removeFlag() {
-        try? FileManager.default.removeItem(at: flagURL)
-    }
+    public func createFlag() -> Bool { flag.create() }
+
+    public func removeFlag() { flag.remove() }
 
     public func startHelper(appPID: Int32) -> SleepSettingResult {
         let command = Self.watchdogCommand(flagPath: flagURL.path, appPID: appPID)

@@ -12,9 +12,11 @@ The version tag supplies both platform display versions. Android versionCode and
 
 Add `https://github.com/gbettineschi/keepresso-mobile` to Obtainium and enable **Include prereleases**. Each combined release contains one APK. No login, token or APK filter is needed.
 
+GitHub builds leave Firebase client values blank. Users import their own Firebase configuration on the Mac, which sends the public Android settings over the paired connection.
+
 ## Mac packaging
 
-The release requires macOS 14+ and Apple silicon. It is ad-hoc signed, not notarized. It preserves bundle ID, Keychain service and pairing protocol, but macOS can request saved-connection approval after an ad-hoc update. Stable Apple certificate setup is documented separately in MAC_SIGNING.md and has not been provisioned by this release.
+The release requires macOS 14.5+ and Apple silicon. It is ad-hoc signed, not notarized. It preserves bundle ID, Keychain service and pairing protocol, but macOS can request saved-connection approval after an ad-hoc update. Stable Apple certificate setup is documented separately in MAC_SIGNING.md and has not been provisioned by this release.
 
 `macos/scripts/package-release.sh v0.4.7` builds without installation or normal app startup. It sets the release version, includes licences, signs the final bundle and checks its safe crypto/framing self-test. An explicitly supplied signing certificate is preserved and verified, with no silent fallback to ad-hoc.
 
@@ -26,4 +28,4 @@ For tap-only retry, run **Update Homebrew tap** with the existing published tag.
 
 ## Free Actions use
 
-Only standard public-repository runners are used: ubuntu-24.04 and macos-26. Their execution is free and does not use the private-repository minutes allowance ([GitHub billing documentation](https://docs.github.com/en/billing/concepts/product-billing/github-actions)). Caches stay within the normal 10 GiB/repository limit. Routine CI never uploads installers and saves Android reports only on failure for one day. Manual release checks keep no installer artifacts. Tagged releases transfer packages between jobs with one-day expiry, then delete their own intermediates after successful publication. Permanent downloads are release assets, not Actions artifacts. Storage has a separate plan allowance shared with Packages; the owner's account has a $0 Actions spending block. Do not select paid larger runners, extend retention or raise spending limits casually.
+Only standard public-repository runners are used: ubuntu-24.04 and xcode-27. Their execution is free and does not use the private-repository minutes allowance ([GitHub billing documentation](https://docs.github.com/en/billing/concepts/product-billing/github-actions)). Caches stay within the normal 10 GiB/repository limit. Routine CI never uploads installers and saves Android reports only on failure for one day. Manual release checks keep no installer artifacts. Tagged releases transfer packages between jobs with one-day expiry, then delete their own intermediates after successful publication. Permanent downloads are release assets, not Actions artifacts. Storage has a separate plan allowance shared with Packages; the owner's account has a $0 Actions spending block. Do not select paid larger runners, extend retention or raise spending limits casually.

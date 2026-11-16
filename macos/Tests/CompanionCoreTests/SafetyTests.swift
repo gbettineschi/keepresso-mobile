@@ -50,59 +50,64 @@ struct SafetyTests {
         try restarted.finish(id: "command", result: CommandResponse(id: "command", status: "ok"))
         XCTAssertEqual(try MutationJournal(url: url).reserve(id: "command", device: "a", body: Data("stop".utf8))?.status, "ok")
     }
-    @Test func testReminderOKKeepsCadenceSnoozeOnlyRoutineAndNewSessionCancelsWarning() throws {
-        var r = ReminderMachine(); let start = Date(timeIntervalSince1970: 0)
-        XCTAssertTrue(r.observe(active: true, now: start).isEmpty)
-        XCTAssertEqual(r.observe(active: true, now: start.addingTimeInterval(3600)).map(\.kind), ["hourly"])
-        r.acknowledge() // no schedule reset
-        r.snooze(now: start.addingTimeInterval(3610))
-        XCTAssertTrue(r.observe(active: true, now: start.addingTimeInterval(7200)).isEmpty)
-        XCTAssertEqual(r.warning(kind: "thermal", now: start).kind, "thermal")
-        _ = r.observe(active: false, now: start.addingTimeInterval(7300))
-        _ = r.observe(active: true, now: start.addingTimeInterval(7400))
-        XCTAssertFalse(r.observe(active: true, now: start.addingTimeInterval(7700)).contains { $0.kind == "session_ended_awake" })
-    }
-    @Test func testObservedSleepCancelsEndedWarningAcrossRestart() throws {
-        var r = ReminderMachine(); let t = Date(timeIntervalSince1970: 100)
-        _ = r.observe(active: true, now: t); _ = r.observe(active: false, now: t.addingTimeInterval(10)); r.observedSleep()
-        var restored = try JSONDecoder().decode(ReminderMachine.self, from: JSONEncoder().encode(r))
-        XCTAssertTrue(restored.observe(active: false, now: t.addingTimeInterval(1000)).isEmpty)
-    }
 }
 extension SafetyTests {
-    @Test func restartPreservesOriginalHourlyCadence() throws {
-        var r=ReminderMachine();let t=Date(timeIntervalSince1970:100)
-        _=r.observe(active:true,now:t)
-        var restart=try JSONDecoder().decode(ReminderMachine.self,from:JSONEncoder().encode(r));restart.resumedAfterUnknownInterval()
-        XCTAssertEqual(restart.observe(active:true,now:t.addingTimeInterval(3600)).map(\.kind),["hourly"])
+    @Test func configuredGuardWarnsAtFairWithoutAnotherDwellAndRepeatsEveryFiveMinutes() {
+        var machine = ReminderMachine()
+        let start = Date(timeIntervalSince1970: 1_000)
+        machine.snooze(now: start)
+        let state = MacThermalReading(state: .fair, guardActive: true)
+        let first = machine.observeHeat(state, now: start)
+        #expect(first?.thermalSeverity == .serious)
+        #expect(first?.thermalState == .fair)
+        #expect(first?.body.contains("Fair") == true)
+        #expect(machine.observeHeat(state, now: start.addingTimeInterval(299)) == nil)
+        let repeatWarning = machine.observeHeat(state, now: start.addingTimeInterval(300))
+        #expect(repeatWarning?.thermalSeverity == .serious)
+        #expect(repeatWarning?.id != first?.id)
     }
-}
-extension SafetyTests {
-    @Test func helperGapCannotCreateEndedWarningFromLastActiveState() throws {
-        var state=ReminderMachine();let now=Date(timeIntervalSince1970:100)
-        _=state.observe(active:true,now:now)
-        state.resumedAfterUnknownInterval()
-        _=state.observe(active:false,now:now.addingTimeInterval(1000))
-        XCTAssertTrue(state.observe(active:false,now:now.addingTimeInterval(1400)).isEmpty)
+
+    @Test func seriousOnlyWarnsWhenNativeGuardReportsAnAction() {
+        var machine = ReminderMachine()
+        let start = Date(timeIntervalSince1970: 1_000)
+        #expect(machine.observeHeat(MacThermalReading(state: .serious), now: start) == nil)
+        #expect(machine.observeHeat(MacThermalReading(state: .serious, guardActive: false), now: start) == nil)
+        #expect(machine.observeHeat(MacThermalReading(state: .serious, guardActive: true), now: start)?.thermalState == .serious)
     }
-}
-extension SafetyTests {
-    @Test func sleepBeforeInactiveSampleCannotRearmEndedWarning() {
-        var state=ReminderMachine();let now=Date(timeIntervalSince1970:100)
-        _=state.observe(active:true,now:now);state.observedSleep()
-        _=state.observe(active:false,now:now.addingTimeInterval(1000))
-        XCTAssertTrue(state.observe(active:false,now:now.addingTimeInterval(1400)).isEmpty)
+
+    @Test func noncriticalCooldownSurvivesCoolingAndRestartWithoutDelayingCritical() throws {
+        var machine = ReminderMachine()
+        let start = Date(timeIntervalSince1970: 1_000)
+        func at(_ seconds: TimeInterval) -> Date { start.addingTimeInterval(seconds) }
+        let serious = MacThermalReading(state: .serious, guardActive: true)
+        let fair = MacThermalReading(state: .fair, guardActive: true)
+
+        #expect(machine.observeHeat(fair, now: at(0))?.thermalState == .fair)
+        #expect(machine.observeHeat(MacThermalReading(state: .nominal, guardActive: false), now: at(1)) == nil)
+        #expect(machine.observeHeat(serious, now: at(2)) == nil)
+        #expect(machine.observeHeat(MacThermalReading(state: .critical, guardActive: false), now: at(3))?.thermalSeverity == .critical)
+
+        let saved = try JSONEncoder().encode(machine)
+        machine = try JSONDecoder().decode(ReminderMachine.self, from: saved)
+        machine.resumedAfterUnknownInterval()
+        #expect(machine.observeHeat(serious, now: at(90))?.alertPhase == .resolved)
+        #expect(machine.observeHeat(serious, now: at(299)) == nil)
+        #expect(machine.observeHeat(serious, now: at(300))?.thermalState == .serious)
     }
-}
-extension SafetyTests {
-    @Test func safetyIncidentBypassesSnoozeButDoesNotDuplicateAcrossRestart()throws{
-        var state=ReminderMachine();let now=Date();state.snooze(now:now)
-        XCTAssertNotNil(state.observeSafety(kind:"thermal",active:true,now:now))
-        var restored=try JSONDecoder().decode(ReminderMachine.self,from:JSONEncoder().encode(state))
-        XCTAssertNil(restored.observeSafety(kind:"thermal",active:true,now:now))
-        XCTAssertNil(restored.observeSafety(kind:"thermal",active:false,now:now))
-        XCTAssertNotNil(restored.observeSafety(kind:"thermal",active:true,now:now))
+
+    @Test func sleepAndUnknownIntervalResetHeatEvidence() {
+        var machine = ReminderMachine()
+        let start = Date(timeIntervalSince1970: 1_000)
+        let serious = MacThermalReading(state: .serious, guardActive: true)
+        _ = machine.observeHeat(serious, now: start)
+        machine.observedSleep()
+        #expect(!machine.noncriticalHeatActive)
+        #expect(machine.observeHeat(serious, now: start.addingTimeInterval(31)) == nil)
+        machine.resumedAfterUnknownInterval()
+        #expect(!machine.noncriticalHeatActive)
+        #expect(machine.observeHeat(serious, now: start.addingTimeInterval(62)) == nil)
     }
+
     @Test func journalSaveFailureDoesNotConvertUncertainMemoryToOK()throws{
         let base=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString);let parent=base.appendingPathComponent("state");let moved=base.appendingPathComponent("previous");defer{try? FileManager.default.removeItem(at:base)}
         let j=try MutationJournal(url:parent.appendingPathComponent("journal.json"));let data=Data("stop".utf8)
@@ -122,10 +127,16 @@ extension SafetyTests {
     }
 }
 extension SafetyTests {
-    @Test func quittingKeepressoAfterKnownActiveSessionSchedulesAwakeWarning(){
-        var state=ReminderMachine();let now=Date(timeIntervalSince1970:100)
-        _=state.observe(active:true,now:now)
-        _=state.observe(active:StatusEvidence.brewingActivity(appRunning:false,nativeActive:nil),now:now.addingTimeInterval(10))
-        XCTAssertEqual(state.observe(active:false,now:now.addingTimeInterval(311)).map(\.kind),["session_ended_awake"])
+    @Test func backgroundDurableRecordsCanBeReopenedAndAtomicallyReplaced() throws {
+        let directory=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer{try? FileManager.default.removeItem(at:directory)}
+        let url=directory.appendingPathComponent("background-record")
+        let first=Data("first fixture".utf8),second=Data("second fixture".utf8)
+        try PrivateDurableFile.save(first,to:url)
+        XCTAssertEqual(try Data(contentsOf:url),first)
+        try PrivateDurableFile.save(second,to:url)
+        XCTAssertEqual(try Data(contentsOf:url),second)
+        let mode=try FileManager.default.attributesOfItem(atPath:url.path)[.posixPermissions] as? NSNumber
+        XCTAssertEqual(mode?.intValue,0o600)
     }
 }

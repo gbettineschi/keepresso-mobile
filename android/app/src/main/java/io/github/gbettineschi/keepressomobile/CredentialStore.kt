@@ -42,6 +42,11 @@ class CredentialStore(context: Context) {
         writePrivate("wrapped", buildJsonObject { put("macId", value.macId); put("deviceId", value.deviceId); put("name", value.name); put("key", encode64(value.key)); value.relayUrl?.let { RelayEndpoint(it); put("relayUrl", it) }; value.relayAuthTicket?.let { decode64(it, 32); put("relayAuthTicket", it) } }.toString())
     }
     fun deviceId(): String = prefs.getString("deviceId", null) ?: UUID.randomUUID().toString().also { require(prefs.edit().putString("deviceId", it).commit()) }
-    fun clearPrivateState() { require(prefs.edit().remove("mutationJournal").remove("eventClaims").remove("latestSnapshot").commit()) }
+    fun clearPrivateState() {
+        require(prefs.edit().remove("mutationJournal").remove("eventClaims").remove("latestSnapshot")
+            .remove("latestThermalWarning").remove("seriousHeatSnoozedUntil")
+            .remove(LID_INCIDENT_KEY).remove(CRITICAL_INCIDENT_KEY)
+            .remove("internetEnrollment").remove("internetEndpointIdentity").remove("directPushRegistration").commit())
+    }
     fun clear() { require(prefs.edit().clear().commit()); KeyStore.getInstance("AndroidKeyStore").apply { load(null); deleteEntry(alias) } }
 }

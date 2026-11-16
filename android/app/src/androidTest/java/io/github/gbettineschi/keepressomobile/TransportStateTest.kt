@@ -16,7 +16,7 @@ import kotlinx.serialization.json.*
 /** Exercises the actual service callback with synthetic freshness proofs only. */
 class TransportStateTest {
     private val ui=createAndroidComposeRule<MainActivity>()
-    @get:Rule val rules=RuleChain.outerRule(EmulatorOnlyRule()).around(GrantPermissionRule.grant(Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.POST_NOTIFICATIONS)).around(ui)
+    @get:Rule val rules=RuleChain.outerRule(EmulatorOnlyRule()).around(GrantPermissionRule.grant(Manifest.permission.BLUETOOTH_ADVERTISE,Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.POST_NOTIFICATIONS)).around(ui)
     @After fun stop(){val c=InstrumentationRegistry.getInstrumentation().targetContext;c.stopService(Intent(c,NearbyService::class.java))}
     private fun scanFailure(age:Long){
         val c=InstrumentationRegistry.getInstrumentation().targetContext

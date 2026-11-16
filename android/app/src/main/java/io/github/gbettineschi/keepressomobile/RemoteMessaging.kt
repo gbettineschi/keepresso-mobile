@@ -1,7 +1,9 @@
 package io.github.gbettineschi.keepressomobile
 
 import android.app.Application
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
 import androidx.work.*
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
@@ -15,6 +17,7 @@ import kotlinx.serialization.json.*
 class KeepressoApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        FirebaseClientSetup.stored(this)?.let{FirebaseClientSetup.configure(this,it);DirectPushRegistration.configurationChanged(this);return}
         // Provider-specific setup is optional; no generated credentials or project enter git.
         if (listOf(BuildConfig.FIREBASE_APPLICATION_ID, BuildConfig.FIREBASE_API_KEY, BuildConfig.FIREBASE_PROJECT_ID, BuildConfig.FIREBASE_SENDER_ID).all { it.isNotBlank() }) {
             runCatching {
@@ -28,13 +31,14 @@ object PushRegistration {
     private val tokenLock = Any()
     private val registrationLock = Any()
     private val network = java.util.concurrent.Executors.newSingleThreadExecutor()
-    fun configured(): Boolean = listOf(BuildConfig.FIREBASE_APPLICATION_ID, BuildConfig.FIREBASE_API_KEY, BuildConfig.FIREBASE_PROJECT_ID, BuildConfig.FIREBASE_SENDER_ID).all { it.isNotBlank() }
+    fun configured(): Boolean = FirebaseClientSetup.current()!=null || listOf(BuildConfig.FIREBASE_APPLICATION_ID, BuildConfig.FIREBASE_API_KEY, BuildConfig.FIREBASE_PROJECT_ID, BuildConfig.FIREBASE_SENDER_ID).all { it.isNotBlank() }
     private fun preferences(c: Context) = c.getSharedPreferences("push", Context.MODE_PRIVATE)
     private fun save(c: Context, token: String) = synchronized(tokenLock) {
         require(token.toByteArray(Charsets.UTF_8).size in 1..4096 && token.none { it.isISOControl() || it.isWhitespace() })
         require(preferences(c).edit().putString("token", token).commit())
     }
     private fun configuration(c: Context): PushRelayConfig? = CredentialStore(c).load()?.let { credential ->
+        if(InternetCredentialStore(CredentialStore(c),credential).configuration!=null)return@let null
         val url = credential.relayUrl; val ticket = credential.relayAuthTicket
         if (url == null || ticket == null) null else PushRelayConfig(url, credential.macId, credential.deviceId, RelayCodec(credential.macId, credential.deviceId, credential.key).bearer(), ticket)
     }
@@ -59,6 +63,7 @@ object PushRegistration {
     }
     fun configurationChanged(c: Context) {
         val context = c.applicationContext
+        if(DirectPushRegistration.configurationChanged(context))return
         // Commit durable work as well as trying immediately while the nearby session is alive.
         runCatching { enqueue(context) }
         network.execute {
@@ -78,6 +83,7 @@ object PushRegistration {
     }
     fun tokenChanged(c: Context, token: String) {
         val context = c.applicationContext
+        if(DirectPushRegistration.tokenChanged(context,token))return
         // Persist before returning from FCM; WorkManager survives process exit and has no BLE dependency.
         runCatching { save(context, token); enqueue(context) }
     }
@@ -96,13 +102,14 @@ class RelayMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         runCatching {
             val credential = CredentialStore(this).load() ?: return
-            if (credential.relayUrl == null || credential.relayAuthTicket == null) return
+
             val direct = message.data["relayEnvelope"]
             if (direct != null) RelayEventDelivery.deliver(this, credential, direct)
-            else if (message.data["relayWake"] == "1" && message.data["macId"] == credential.macId && message.data["deviceId"] == credential.deviceId) {
+            else if (InternetCredentialStore(CredentialStore(this),credential).configuration==null && message.data["relayWake"] == "1" && message.data["macId"] == credential.macId && message.data["deviceId"] == credential.deviceId) {
                 // Only a durable, bounded worker may fetch for a hint; the hint itself cannot notify.
                 val work = OneTimeWorkRequestBuilder<RelayHintWorker>()
                     .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                    .addTag("legacy-relay-hint")
                     .setInputData(workDataOf("macId" to credential.macId, "deviceId" to credential.deviceId, "queuedAt" to Instant.now().epochSecond))
                     .build()
                 WorkManager.getInstance(this).enqueueUniqueWork("relay-hint.${credential.macId}.${credential.deviceId}", ExistingWorkPolicy.REPLACE, work)
@@ -119,6 +126,7 @@ class RelayHintWorker(context: Context, parameters: WorkerParameters) : Worker(c
             if (queuedAt <= 0 || now.epochSecond - queuedAt !in 0..299 || isStopped) return Result.success()
             val credential = CredentialStore(applicationContext).load() ?: return Result.success()
             if (inputData.getString("macId") != credential.macId || inputData.getString("deviceId") != credential.deviceId) return Result.success()
+            if(InternetCredentialStore(CredentialStore(applicationContext),credential).configuration!=null)return Result.success()
             val url = credential.relayUrl ?: return Result.success(); val ticket = credential.relayAuthTicket ?: return Result.success()
             val codec = RelayCodec(credential.macId, credential.deviceId, credential.key)
             val poll = RelayHttp(RelayEndpoint(url), credential.macId, credential.deviceId, codec.bearer(), ticket).call("poll")
@@ -131,18 +139,56 @@ class RelayHintWorker(context: Context, parameters: WorkerParameters) : Worker(c
 private object RelayEventDelivery {
     fun deliver(context: Context, credential: Credential, encoded: String) {
         val now = Instant.now()
-        val opened = RelayCodec(credential.macId, credential.deviceId, credential.key).open(encoded, now, "s2c", setOf("event"))
-        val r = obj(opened.plaintext); require(r.string("type") == "event")
-        val event = r.getValue("event").jsonObject; require(event.string("id") == opened.id)
+        val event=DirectPushEvent.decode(RelayCodec(credential.macId,credential.deviceId,credential.key),encoded,now)
         ReminderDelivery.post(context, credential, event, now)
     }
 }
 
 object ReminderDelivery {
     private val lock = Any()
-    fun snapshot(c: Context, value: JsonObject) = synchronized(lock) { val store = CredentialStore(c); store.writePrivate("latestSnapshot", value.toString()); store.load()?.let { Notifications.cancelResolved(c, it.macId, value) } }
-    fun reset(c: Context) = synchronized(lock) { CredentialStore(c).clear() }
-    fun replace(c: Context, credential: Credential) = synchronized(lock) { val store = CredentialStore(c); store.clearPrivateState(); store.save(credential) }
+    private const val LATEST_THERMAL_WARNING = "latestThermalWarning"
+    private const val THERMAL_SNOOZED_UNTIL = "seriousHeatSnoozedUntil"
+
+    fun snapshot(c: Context, value: JsonObject) = synchronized(lock) {
+        val store = CredentialStore(c)
+        val previous = store.readPrivate("latestSnapshot")?.let(::obj)
+        if (previous != null && Instant.parse(previous.string("capturedAt")) > Instant.parse(value.string("capturedAt"))) return@synchronized
+        store.writePrivate("latestSnapshot", value.toString())
+        store.load()?.let {
+            val latest = store.readPrivate(LATEST_THERMAL_WARNING)?.let(::obj)?.let(ThermalWarning::fromEvent)
+            Notifications.cancelResolved(c, it.macId, value, latest)
+            LidAlert.snapshot(c, store, it.macId, value)
+            CriticalHeatAlerts.snapshot(c, store, it.macId, value)
+        }
+    }
+
+    fun reset(c: Context) = synchronized(lock) {
+        val store = CredentialStore(c)
+        runCatching(store::load).getOrNull()?.let { Notifications.clearThermal(c, it.macId); CriticalHeatAlerts.clear(c, it.macId) }
+        store.clear()
+    }
+
+    fun replace(c: Context, credential: Credential) = synchronized(lock) {
+        val store = CredentialStore(c)
+        runCatching(store::load).getOrNull()?.let { Notifications.clearThermal(c, it.macId); CriticalHeatAlerts.clear(c, it.macId) }
+        store.clearPrivateState()
+        store.save(credential)
+    }
+
+    fun snoozeNoncriticalHeat(c: Context, macId: String, eventId: String) = synchronized(lock) {
+        val store = CredentialStore(c)
+        if (store.load()?.macId != macId) return@synchronized
+        val latest = store.readPrivate(LATEST_THERMAL_WARNING)?.let(::obj) ?: return@synchronized
+        val warning = ThermalWarning.fromEvent(latest)
+        if (latest.string("id") != eventId || warning.level != ThermalWarningLevel.SERIOUS) return@synchronized
+        if (!Notifications.isSnoozableHeatAlertActive(c, macId, eventId)) return@synchronized
+        val snapshot = store.readPrivate("latestSnapshot")?.let(::obj)
+        if (snapshot != null && warning.isSupersededBy(snapshot)) return@synchronized
+        store.writePrivate(THERMAL_SNOOZED_UNTIL, Instant.now().plusSeconds(30 * 60).toString())
+        Notifications.clearThermal(c, macId)
+        Companion.activity("Noncritical heat alerts snoozed on this phone for 30 minutes")
+    }
+
     fun post(c: Context, credential: Credential, event: JsonObject, now: Instant) = synchronized(lock) {
         val macId = credential.macId
         val store = CredentialStore(c)
@@ -155,7 +201,38 @@ object ReminderDelivery {
         if (PhoneReminders.filter(c).suppressed(macId, kind, now)) return@synchronized
         val title = event.string("title").take(120); val body = event.string("body").take(1000)
         Notifications.channels(c)
-        Notifications.reminder(c, event.string("id").hashCode(), title, body, kind, macId, Instant.parse(event.string("createdAt")))
+        val eventId = event.string("id")
+        val incident = AlertIncident.fromEvent(event)
+        if (incident != null) {
+            if (kind == "lid_awake") LidAlert.accept(c, store, macId, event, incident, now)
+            else CriticalHeatAlerts.accept(c, store, macId, event, incident, now)
+            if (incident.phase == AlertPhase.ACTIVE) Companion.activity(title)
+            return@synchronized
+        }
+        if (kind == "unattended_brew") {
+            AlertNotifications.unattended(c, macId, eventId, title, body)
+        } else if (kind == "thermal") {
+            val warning = ThermalWarning.fromEvent(event)
+            val latest = store.readPrivate(LATEST_THERMAL_WARNING)?.let(::obj)?.let(ThermalWarning::fromEvent)
+            if (latest != null && !warning.isNewerThan(latest)) return@synchronized
+            store.writePrivate(LATEST_THERMAL_WARNING, JsonObject(event.filterKeys { it in setOf("id", "createdAt", "thermalSeverity") }).toString())
+            if (warning.level == ThermalWarningLevel.SERIOUS &&
+                store.readPrivate(THERMAL_SNOOZED_UNTIL)?.let(Instant::parse)?.isAfter(Instant.now()) == true) {
+                Notifications.clearThermal(c, macId)
+                return@synchronized
+            }
+            Notifications.thermal(c, title, body, macId, eventId, warning)
+        } else {
+            Notifications.reminder(c, eventId.hashCode(), title, body, kind, macId, Instant.parse(event.string("createdAt")))
+        }
         Companion.activity(title)
+    }
+}
+
+class ThermalSnoozeReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val macId = intent.getStringExtra("macId") ?: return
+        val eventId = intent.data?.schemeSpecificPart ?: return
+        ReminderDelivery.snoozeNoncriticalHeat(context, macId, eventId)
     }
 }

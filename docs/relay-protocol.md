@@ -1,3 +1,5 @@
+> Legacy transport retained for migration and older builds. New operation uses [iroh and direct FCM](internet-protocol.md); do not deploy this service for a fresh setup.
+
 # Internet relay v1
 
 The existing owner-approved deviceKey and BLE protocol stay in place. This is an additional transport, not an additional pairing authority. No Wi-Fi transport, permanent wake assertion, or automatic mutation retry is introduced.
@@ -20,7 +22,7 @@ createdAt decimal integer
 expiresAt decimal integer
 ```
 
-Phone access bearer is standard Base64 of HKDF-SHA256(deviceKey, same salt, info UTF8(`keepresso-mobile/relay/v1/phone-access`), length32). Relay receives only the lowercase hex SHA256 of the UTF8 bearer during Mac enrollment. Never upload deviceKey or encryption keys. Mac bootstrap bearer is an independent random32-byte secret in Keychain; relay gets its hash in environment configuration.
+Phone access bearer is standard Base64 of HKDF-SHA256(deviceKey, same salt, info UTF8(`keepresso-mobile/relay/v1/phone-access`), length32). Relay receives only the lowercase hex SHA256 of the UTF8 bearer during Mac enrollment. Never upload deviceKey or encryption keys. Mac bootstrap bearer is an independent random32-byte secret in the owner-only Mac credential file (0.5.0+); relay gets its hash in environment configuration.
 
 To reject unauthenticated internet noise before any billed database read, the Mac supplies an `authTicket` through encrypted BLE configuration. It is standard Base64 HMAC-SHA256(key UTF8(lowercaseHexSHA256(UTF8 Mac bootstrap bearer)), data UTF8(`keepresso-mobile/relay/v1/access-ticket` + LF + macId + LF + deviceId + LF + lowercaseHexSHA256(UTF8 phone bearer))). Phone HTTPS Authorization is `Bearer <phoneBearer>.<authTicket>`; Mac Authorization remains `Bearer <macBootstrapBearer>`. Ticket proves eligibility to attempt phone authentication, not Mac authorization; the relay still checks the enrolled device/tombstone. The server never receives the bootstrap bearer in phone traffic. Optional RELAY_MAC_ID pins a deployment to one Mac; otherwise it is a single-owner deployment with Mac IDs isolated, not a public multi-tenant service.
 
@@ -58,7 +60,7 @@ Mac sends ordinary snapshots/events over BLE when that device is authenticated n
 
 While the phone is open over internet, a successful status round trip requests a 65-second foreground publication window (snapshots every5s). Android renews after30s from the successful response, leaving room for network delay or another pending operation. A renewal blocked behind a pending request remains due; it is never postponed as if sent. Delayed messages cannot backdate newer authenticated capture evidence within the same epoch. Transient polling failures retain only already-fresh proof; they do not extend its15s expiry. Rejected authorization or invalid payloads invalidate immediately.
 
-Mac persists reminder outbox entries before transmission; one eventID survives handoffs. Android persists claimed event IDs before posting through BLE or FCM, bounded by expiry/time. Reject expired events and obsolete incidents when a newer authenticated snapshot proves them resolved. Outbox retries apply to immutable notifications/status only, never power commands. A local revoked-device tombstone gates every incoming and outgoing transport even if Keychain/remote deletion fails.
+Mac persists reminder outbox entries before transmission; one eventID survives handoffs. Android persists claimed event IDs before posting through BLE or FCM, bounded by expiry/time. Reject expired events and obsolete incidents when a newer authenticated snapshot proves them resolved. Outbox retries apply to immutable notifications/status only, never power commands. A local revoked-device tombstone gates every incoming and outgoing transport even if saved-credential or remote cleanup fails.
 
 ## Free tier model (one Mac, one phone)
 

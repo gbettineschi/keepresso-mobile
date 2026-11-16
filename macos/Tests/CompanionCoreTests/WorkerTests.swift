@@ -28,3 +28,15 @@ extension WorkerTests {
         XCTAssertThrowsError(try ObserverScratch.validate(FileManager.default.temporaryDirectory.path))
     }
 }
+extension WorkerTests {
+    @Test func startupAllowanceLetsAChildFinishAfterEightSecondsButRejectsUnboundedLimits()async throws {
+        // Fixture models startup plus bounded engine time without invoking the
+        // real observer, preferences, monitors or power adapters.
+        let data=try await BoundedWorker.run(executable:URL(fileURLWithPath:"/usr/bin/python3"),arguments:["-c","import os,time; os.setpgrp(); time.sleep(8.1); print('completed')"],timeout:12)
+        XCTAssertEqual(String(data:data,encoding:.utf8),"completed\n")
+        do {
+            _=try await BoundedWorker.run(executable:URL(fileURLWithPath:"/usr/bin/printf"),arguments:["must not run"],timeout:12.1)
+            Issue.record("Parent limits above 12 seconds must be rejected")
+        } catch { XCTAssertTrue(error is CompanionError) }
+    }
+}

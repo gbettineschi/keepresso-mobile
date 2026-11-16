@@ -29,6 +29,19 @@ public enum CLIRequest: Equatable, Sendable {
     case codexHook(event: String)
     /// Record a Grok hook event delivered on stdin. Hidden likewise.
     case grokHook(event: String)
+    /// Record a Hermes plugin event delivered on stdin. Hidden likewise.
+    case hermesHook(event: String)
+    /// Record an Oh My Pi extension event. Hidden likewise.
+    case ompHook(
+        event: String,
+        sessionId: String,
+        cwd: String,
+        willContinue: Bool,
+        awaitingAsyncWork: Bool
+    )
+    /// Record a Qwen Code, Devin, or Kimi Code hook event delivered on
+    /// stdin. Hidden likewise.
+    case compatHook(tool: CompatHooks.Tool, event: String)
     /// Manage automation leases (bounded keep-awake grants for scripts and
     /// agents), executed by ``LeaseClient``.
     case lease(LeaseCommand)
@@ -133,6 +146,12 @@ public enum CLIRequest: Equatable, Sendable {
     /// ``CLIUsageError`` with a user-facing message on bad input.
     public static func parse(_ arguments: [String]) throws -> CLIRequest {
         guard let first = arguments.first else { return .help }
+        if let tool = CompatHooks.Tool.allCases.first(where: { $0.subcommand == first }) {
+            guard arguments.count == 2 else {
+                throw CLIUsageError("\(first) takes exactly one event name")
+            }
+            return .compatHook(tool: tool, event: arguments[1])
+        }
         switch first {
         case "help", "--help", "-h":
             return .help
@@ -176,6 +195,32 @@ public enum CLIRequest: Equatable, Sendable {
                 throw CLIUsageError("grok-hook takes exactly one event name")
             }
             return .grokHook(event: arguments[1])
+        case "hermes-hook":
+            guard arguments.count == 2 else {
+                throw CLIUsageError("hermes-hook takes exactly one event name")
+            }
+            return .hermesHook(event: arguments[1])
+        case "omp-hook":
+            guard arguments.count == 6 else {
+                throw CLIUsageError("omp-hook takes an event, session id, working directory, and two continuation flags")
+            }
+            guard !arguments[2].isEmpty else {
+                throw CLIUsageError("omp-hook needs a session id")
+            }
+            func flag(_ value: String) throws -> Bool {
+                switch value {
+                case "0": return false
+                case "1": return true
+                default: throw CLIUsageError("omp-hook continuation flags must be 0 or 1")
+                }
+            }
+            return .ompHook(
+                event: arguments[1],
+                sessionId: arguments[2],
+                cwd: arguments[3],
+                willContinue: try flag(arguments[4]),
+                awaitingAsyncWork: try flag(arguments[5])
+            )
         case "lease":
             return .lease(try parseLease(Array(arguments.dropFirst())))
         case "wake":

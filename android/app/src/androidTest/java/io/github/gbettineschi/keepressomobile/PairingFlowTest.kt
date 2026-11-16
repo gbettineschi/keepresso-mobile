@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.Instrumentation.ActivityResult
 import android.content.Intent
 import android.os.Build
+import android.os.SystemClock
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.espresso.intent.Intents
@@ -23,7 +24,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 /** Uses real Android GATT/framing/crypto between two isolated virtual devices. */
 class PairingFlowTest {
     private val ui=createAndroidComposeRule<MainActivity>()
-    @get:Rule val rules=RuleChain.outerRule(EmulatorOnlyRule()).around(GrantPermissionRule.grant(Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.POST_NOTIFICATIONS)).around(ui)
+    @get:Rule val rules=RuleChain.outerRule(EmulatorOnlyRule()).around(GrantPermissionRule.grant(Manifest.permission.BLUETOOTH_ADVERTISE,Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.POST_NOTIFICATIONS)).around(ui)
     @Before fun setup(){check(Build.HARDWARE=="ranchu");Intents.init()}
     @After fun finish(){Intents.release()}
     private fun scan(){
@@ -31,6 +32,40 @@ class PairingFlowTest {
         val invitation="keespresso://pair?v=1&mac=11111111-1111-4111-8111-111111111111&token=$token&expires=${Instant.now().epochSecond+300}&name=Emulated%20Mac"
         intending(hasComponent("com.journeyapps.barcodescanner.CaptureActivity")).respondWith(ActivityResult(Activity.RESULT_OK,Intent().putExtra("SCAN_RESULT",invitation).putExtra("SCAN_RESULT_FORMAT","QR_CODE")))
         ui.onNodeWithText("Scan QR").performClick()
+    }
+    @Test fun prepareSavedPairingForBackgroundStartup(){
+        Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("virtualPeer")=="true")
+        scan();ui.waitUntil(25000){Companion.state.value.reachable(Instant.now())}
+        Assert.assertNotNull(CredentialStore(ui.activity).load())
+        ui.runOnIdle{ui.activity.moveTaskToBack(true)}
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        context.stopService(Intent(context,NearbyService::class.java))
+        ui.waitUntil(5000){Companion.service==null}
+    }
+    @android.annotation.SuppressLint("MissingPermission")
+    @Test fun phoneRadioOffBeyondReconnectWindowRecoversInBackground(){
+        Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("virtualPeer")=="true")
+        scan();ui.waitUntil(25000){Companion.state.value.reachable(Instant.now())}
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val saved=requireNotNull(CredentialStore(context).load())
+        val adapter=context.getSystemService(android.bluetooth.BluetoothManager::class.java).adapter
+        ui.runOnIdle{ui.activity.moveTaskToBack(true)}
+        android.util.Log.i("KeepressoRecoveryTest","PHONE_RADIO_OFF_READY")
+        ui.waitUntil(10000){!adapter.isEnabled && !Companion.state.value.authenticated}
+        val deadline=SystemClock.elapsedRealtime()+18000
+        while(SystemClock.elapsedRealtime()<deadline){
+            Assert.assertFalse("Harness must keep the phone radio off beyond the old 15-second retry",adapter.isEnabled)
+            Assert.assertFalse(Companion.state.value.authenticated)
+            Thread.sleep(200)
+        }
+        ui.waitUntil(60000){adapter.isEnabled && Companion.state.value.reachable(Instant.now())}
+        Assert.assertEquals("Nearby Bluetooth",Companion.state.value.transport)
+        Assert.assertEquals(saved.deviceId,requireNotNull(CredentialStore(context).load()).deviceId)
+        Assert.assertTrue(saved.key.contentEquals(requireNotNull(CredentialStore(context).load()).key))
+        Assert.assertEquals("Recovery must not replay controls",0,Companion.state.value.snapshot!!.getValue("fixtureStartCount").jsonPrimitive.int)
+        ui.runOnIdle{
+            Assert.assertFalse(NearbyService::class.java.getDeclaredField("foregroundActivity").apply{isAccessible=true}.getBoolean(requireNotNull(Companion.service)))
+        }
     }
     @Test fun lidWarningUsesUrgentChannelAndDuplicateRoutesCannotPostAgain(){
         Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("virtualPeer")=="true")
@@ -50,6 +85,31 @@ class PairingFlowTest {
         val current=requireNotNull(Companion.state.value.snapshot)
         ReminderDelivery.snapshot(context,buildJsonObject{current.forEach{(k,v)->put(k,v)};put("capturedAt",Instant.now().plusMillis(1).toString());put("mac",buildJsonObject{current.getValue("mac").jsonObject.forEach{(k,v)->put(k,v)};put("lid","open")})})
         ui.waitUntil(3000){warnings().isEmpty()}
+    }
+    @Test fun nearbyStatusStaysFreshAcrossBackgroundAndForeground(){
+        Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("virtualPeer")=="true")
+        scan();ui.waitUntil(25000){Companion.state.value.reachable(Instant.now())}
+        val saved=requireNotNull(CredentialStore(ui.activity).load())
+        var samples=0;var maxAge=0L
+        fun observe(seconds:Int){
+            val until=SystemClock.elapsedRealtime()+seconds*1000L
+            while(SystemClock.elapsedRealtime()<until){
+                val state=Companion.state.value;val now=Instant.now()
+                Assert.assertTrue("Nearby became stale at sample $samples: ${state.connection}",state.reachable(now))
+                Assert.assertEquals("Nearby Bluetooth",state.transport)
+                val age=java.time.Duration.between(requireNotNull(state.receivedAt),now).toMillis()
+                maxAge=maxOf(maxAge,age);samples++;Thread.sleep(500)
+            }
+        }
+        observe(15)
+        ui.runOnIdle{ui.activity.moveTaskToBack(true)}
+        observe(35)
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        context.startActivity(Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+        ui.waitUntil(5000){ui.activity.lifecycle.currentState==androidx.lifecycle.Lifecycle.State.RESUMED}
+        observe(15)
+        Assert.assertEquals(saved.deviceId,requireNotNull(CredentialStore(context).load()).deviceId)
+        java.io.File(context.cacheDir,"nearby-stability.json").writeText(buildJsonObject{put("samples",samples);put("maxSnapshotAgeMs",maxAge);put("backgroundSeconds",35);put("pairingRetained",true)}.toString())
     }
     @Test fun qrApprovalEncryptedDashboardControlsAndReconnect(){
         Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("virtualPeer")=="true")
@@ -77,18 +137,23 @@ class PairingFlowTest {
         ui.onNodeWithText("Resume triggers?").assertIsDisplayed()
         ui.onNodeWithText("Cancel").performClick()
         Assert.assertTrue(Companion.state.value.snapshot.toString().contains("\"manual\""))
-        ui.onNodeWithText("Stop manual session").performScrollTo().performClick()
+        // The earlier command's transient message can cover the lower controls
+        // in this emulator's small viewport. Dismiss it before tapping Stop.
+        if (ui.onAllNodesWithContentDescription("Dismiss").fetchSemanticsNodes().isNotEmpty()) {
+            ui.onNodeWithContentDescription("Dismiss").performClick()
+        }
+        ui.onNodeWithText("Stop manual session").performScrollTo().assertIsEnabled().performClick()
         ui.waitUntil(10000){Companion.state.value.snapshot.toString().contains("\"isActive\":false")}
         ui.onNodeWithText("Settings").performClick()
-        ui.onNodeWithContentDescription("Every 2 hours").performScrollTo().performClick()
-        ui.waitUntil(10000){Companion.state.value.snapshot.toString().contains("\"intervalSeconds\":7200")}
+        ui.onNodeWithContentDescription("Unattended brewing alert").performScrollTo().performClick()
+        ui.waitUntil(10000){Companion.state.value.snapshot?.get("reminders")?.jsonObject?.get("enabled")?.jsonPrimitive?.booleanOrNull==false}
         ui.onNodeWithText("Snooze 6 hours").performScrollTo().performClick()
         ui.waitUntil(10000){Companion.state.value.snapshot?.get("reminders")?.jsonObject?.get("snoozedUntil")?.let{it!=JsonNull}==true}
         ui.onNodeWithText("Status").performClick()
         ui.onNodeWithText("Check").performScrollTo().performClick()
         ui.waitUntil(10000){Companion.state.value.snapshot.toString().contains("\"state\":\"ready\"")}
         ui.waitUntil(10000){!Companion.state.value.authenticated}
-        ui.onNodeWithText("Unreachable").performScrollTo().assertIsDisplayed()
+        ui.onNode(hasText("Updating…") or hasText("Unreachable")).performScrollTo().assertIsDisplayed()
         ui.onNodeWithText("Start").performScrollTo().assertIsNotEnabled()
         ui.waitUntil(35000){Companion.state.value.reachable(Instant.now())}
         ui.onNodeWithText("Awake").performScrollTo().assertIsDisplayed()

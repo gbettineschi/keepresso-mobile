@@ -161,3 +161,138 @@ extension RelayRoutingTests {
         #expect(api.batches.count==3);#expect(api.batches.last!.responses.first?.id==request.id);#expect(reads==1)
     }
 }
+
+// The fake replaces only the bounded observer operation; routing, encryption,
+// durable responses and snapshot capture use the real coordinator/outbox.
+@MainActor private final class SuspendedRelayRead {
+    var started:[String]=[];var cancelled:[String]=[]
+    private var pending:[String:CheckedContinuation<Void,Never>]=[:]
+    func run(_ request:CommandRequest)async->CommandResponse {
+        started.append(request.id)
+        await withCheckedContinuation{pending[request.id]=$0}
+        if Task.isCancelled{cancelled.append(request.id)}
+        return CommandResponse(id:request.id,status:"ok")
+    }
+    func release(){let waits=Array(pending.values);pending=[:];for wait in waits{wait.resume()}}
+}
+@MainActor private func settleRelayTasks()async {for _ in 0..<40{await Task.yield()}}
+
+extension RelayRoutingTests {
+    @MainActor @Test func suspendedTriggerReadAllowsFreshTelemetryAndDuplicateDoesNotExecuteTwice()async throws {
+        let directory=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString);defer{try? FileManager.default.removeItem(at:directory)}
+        let api=RelayFakeAPI(),clock=RelayTestClock(),read=SuspendedRelayRead()
+        let paired=AuthorizedDevice(deviceId:device,name:"Fixture",key:Data(repeating:7,count:32),approvedAt:clock.wall)
+        let outbox=try RelayOutbox(url:directory.appendingPathComponent("outbox"))
+        let coordinator=try RelayCoordinator(macId:mac,api:api,outbox:outbox,devices:{[paired]},nearby:{[]},snapshot:{["capturedAt":WireJSON.iso(clock.wall)]},execute:{r,_,_,_ in await read.run(r)},now:{clock.wall},monotonic:{clock.mono})
+        await coordinator.tick()
+        let request=CommandRequest(id:UUID().uuidString.lowercased(),action:"refresh_triggers",issuedAt:clock.wall,expiresAt:clock.wall.addingTimeInterval(30))
+        let body=try WireJSON.encoder.encode(request)
+        api.commands=[try RelayEnvelope.seal(body,key:paired.key,macId:mac,deviceId:device,id:request.id,epoch:coordinator.epoch,direction:"c2s",kind:"command",now:clock.wall,lifetime:30)]
+        clock.advance(5);let accepting=Task{await coordinator.tick()};await settleRelayTasks()
+        #expect(read.started==[request.id])
+        clock.advance(5);await coordinator.tick()
+        #expect(api.batches.count==3,"A suspended explicit check must not hold the polling busy flag")
+        if api.batches.count==3 {
+            #expect(api.batches[2].states.count==1)
+            let state=try api.batches[2].states[0].open(key:paired.key,macId:mac,deviceId:device,epoch:coordinator.epoch,direction:"s2c",kinds:["state"],now:clock.wall)
+            let snapshot=try WireJSON.object(state)["snapshot"] as? [String:Any]
+            #expect(snapshot?["capturedAt"] as? String==WireJSON.iso(clock.wall))
+        }
+        #expect(read.started==[request.id])
+        api.commands=[];read.release();await accepting.value;await settleRelayTasks()
+        clock.advance(1);await coordinator.tick()
+        #expect(api.batches.last?.responses.first?.id==request.id)
+        #expect(read.started==[request.id])
+        coordinator.stop()
+    }
+
+    @MainActor @Test(arguments:["stop","wake","revoke","authorization_removed"])
+    func suspendedTriggerReadIsCancelledAndLateOutputRejected(_ lifecycle:String)async throws {
+        let directory=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString);defer{try? FileManager.default.removeItem(at:directory)}
+        let api=RelayFakeAPI(),clock=RelayTestClock(),read=SuspendedRelayRead()
+        let paired=AuthorizedDevice(deviceId:device,name:"Fixture",key:Data(repeating:7,count:32),approvedAt:clock.wall);var approved=[paired]
+        let outbox=try RelayOutbox(url:directory.appendingPathComponent("outbox"))
+        let coordinator=try RelayCoordinator(macId:mac,api:api,outbox:outbox,devices:{approved},nearby:{[]},snapshot:{[:]},execute:{r,_,_,_ in await read.run(r)},now:{clock.wall},monotonic:{clock.mono})
+        await coordinator.tick()
+        let request=CommandRequest(id:UUID().uuidString.lowercased(),action:"refresh_triggers",issuedAt:clock.wall,expiresAt:clock.wall.addingTimeInterval(30));let epoch=coordinator.epoch
+        api.commands=[try RelayEnvelope.seal(WireJSON.encoder.encode(request),key:paired.key,macId:mac,deviceId:device,id:request.id,epoch:epoch,direction:"c2s",kind:"command",now:clock.wall,lifetime:30)]
+        clock.advance(5);let accepting=Task{await coordinator.tick()};await settleRelayTasks()
+        #expect(read.started==[request.id]);api.commands=[]
+        switch lifecycle {
+        case "stop":coordinator.stop()
+        case "wake":coordinator.wake()
+        case "revoke":approved=[];await coordinator.revoke(device)
+        default:approved=[];clock.advance(5);await coordinator.tick()
+        }
+        read.release();await accepting.value;await settleRelayTasks()
+        #expect(read.cancelled==[request.id])
+        #expect(try outbox.response(id:request.id,deviceId:device,epoch:epoch,body:WireJSON.encoder.encode(request),now:clock.wall)==nil)
+        coordinator.stop()
+    }
+}
+
+extension RelayRoutingTests {
+    @MainActor @Test func inFlightTriggerIdentityMismatchIsDroppedAndCompetingCheckRejectedWithoutQueue()async throws {
+        let directory=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString);defer{try? FileManager.default.removeItem(at:directory)}
+        let api=RelayFakeAPI(),clock=RelayTestClock(),read=SuspendedRelayRead();var statusReads=0
+        let paired=AuthorizedDevice(deviceId:device,name:"Fixture",key:Data(repeating:7,count:32),approvedAt:clock.wall)
+        let outbox=try RelayOutbox(url:directory.appendingPathComponent("outbox"))
+        let coordinator=try RelayCoordinator(macId:mac,api:api,outbox:outbox,devices:{[paired]},nearby:{[]},snapshot:{[:]},execute:{r,_,_,_ in if r.action=="refresh_triggers"{return await read.run(r)};statusReads+=1;return CommandResponse(id:r.id,status:"ok")},now:{clock.wall},monotonic:{clock.mono})
+        await coordinator.tick()
+        func seal(_ request:CommandRequest)throws->RelayEnvelope {try RelayEnvelope.seal(WireJSON.encoder.encode(request),key:paired.key,macId:mac,deviceId:device,id:request.id,epoch:coordinator.epoch,direction:"c2s",kind:"command",now:clock.wall,lifetime:30)}
+        let original=CommandRequest(id:UUID().uuidString.lowercased(),action:"refresh_triggers",issuedAt:clock.wall,expiresAt:clock.wall.addingTimeInterval(30))
+        api.commands=[try seal(original)];clock.advance(5);let accepting=Task{await coordinator.tick()};await settleRelayTasks()
+        let mismatched=CommandRequest(id:original.id,action:"status",issuedAt:original.issuedAt,expiresAt:original.expiresAt)
+        let competing=CommandRequest(id:UUID().uuidString.lowercased(),action:"refresh_triggers",issuedAt:clock.wall,expiresAt:clock.wall.addingTimeInterval(30))
+        let status=CommandRequest(id:UUID().uuidString.lowercased(),action:"status",issuedAt:clock.wall,expiresAt:clock.wall.addingTimeInterval(30))
+        api.commands=[try seal(mismatched),try seal(competing),try seal(status)];clock.advance(5);await coordinator.tick()
+        #expect(read.started==[original.id]);#expect(statusReads==1)
+        let rejected=try outbox.response(id:competing.id,deviceId:device,epoch:coordinator.epoch,body:WireJSON.encoder.encode(competing),now:clock.wall)
+        #expect(rejected != nil)
+        if let rejected {
+            let object=try WireJSON.object(rejected.open(key:paired.key,macId:mac,deviceId:device,epoch:coordinator.epoch,direction:"s2c",kinds:["response"],now:clock.wall))
+            #expect(object["status"] as? String=="error")
+        }
+        api.commands=[];read.release();await accepting.value;await settleRelayTasks();coordinator.stop()
+        #expect(read.started==[original.id])
+    }
+
+    @MainActor @Test(arguments:[14.0,3.0])
+    func triggerReadDeadlineCancelsUncooperativeWorkAndRejectsLateSuccess(_ validity:TimeInterval)async throws {
+        let directory=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString);defer{try? FileManager.default.removeItem(at:directory)}
+        let api=RelayFakeAPI(),clock=RelayTestClock(),read=SuspendedRelayRead()
+        let paired=AuthorizedDevice(deviceId:device,name:"Fixture",key:Data(repeating:7,count:32),approvedAt:clock.wall)
+        let outbox=try RelayOutbox(url:directory.appendingPathComponent("outbox"))
+        let coordinator=try RelayCoordinator(macId:mac,api:api,outbox:outbox,devices:{[paired]},nearby:{[]},snapshot:{[:]},execute:{r,_,_,_ in await read.run(r)},now:{clock.wall},monotonic:{clock.mono})
+        await coordinator.tick();clock.advance(5)
+        let request=CommandRequest(id:UUID().uuidString.lowercased(),action:"refresh_triggers",issuedAt:clock.wall,expiresAt:clock.wall.addingTimeInterval(validity==14 ? 30:validity))
+        api.commands=[try RelayEnvelope.seal(WireJSON.encoder.encode(request),key:paired.key,macId:mac,deviceId:device,id:request.id,epoch:coordinator.epoch,direction:"c2s",kind:"command",now:clock.wall,lifetime:30)]
+        let accepting=Task{await coordinator.tick()};await settleRelayTasks();#expect(read.started==[request.id]);api.commands=[]
+        clock.advance(validity);await coordinator.tick();read.release();await accepting.value;await settleRelayTasks()
+        #expect(read.cancelled==[request.id])
+        if let result=try outbox.response(id:request.id,deviceId:device,epoch:coordinator.epoch,body:WireJSON.encoder.encode(request),now:clock.wall) {
+            let object=try WireJSON.object(result.open(key:paired.key,macId:mac,deviceId:device,epoch:coordinator.epoch,direction:"s2c",kinds:["response"],now:clock.wall))
+            #expect(object["status"] as? String=="error")
+        }
+        coordinator.stop()
+    }
+}
+
+extension RelayRoutingTests {
+    @MainActor @Test(arguments:[8,9])
+    func triggerReadsRunPerDeviceWithinEightPhoneLimit(_ count:Int)async throws {
+        let directory=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString);defer{try? FileManager.default.removeItem(at:directory)}
+        let api=RelayFakeAPI(),clock=RelayTestClock(),read=SuspendedRelayRead()
+        let paired=(0..<count).map{index in AuthorizedDevice(deviceId:String(format:"22222222-2222-4222-8222-%012d",index),name:"Fixture",key:Data(repeating:7,count:32),approvedAt:clock.wall)}
+        let coordinator=try RelayCoordinator(macId:mac,api:api,outbox:RelayOutbox(url:directory.appendingPathComponent("outbox")),devices:{paired},nearby:{[]},snapshot:{[:]},execute:{r,_,_,_ in await read.run(r)},now:{clock.wall},monotonic:{clock.mono})
+        await coordinator.tick()
+        api.commands=try paired.map{phone in
+            let request=CommandRequest(id:UUID().uuidString.lowercased(),action:"refresh_triggers",issuedAt:clock.wall,expiresAt:clock.wall.addingTimeInterval(30))
+            return try RelayEnvelope.seal(WireJSON.encoder.encode(request),key:phone.key,macId:mac,deviceId:phone.deviceId,id:request.id,epoch:coordinator.epoch,direction:"c2s",kind:"command",now:clock.wall,lifetime:30)
+        }
+        clock.advance(5);let accepting=Task{await coordinator.tick()};await settleRelayTasks()
+        #expect(read.started.count==(count==8 ? 8:0))
+        coordinator.stop();read.release();await accepting.value;await settleRelayTasks()
+        #expect(read.cancelled.count==read.started.count)
+    }
+}

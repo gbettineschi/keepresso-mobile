@@ -91,10 +91,8 @@ jobs:
     name: Mac helper tests and app
     needs: changes
     if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.macos == 'true'
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 20
-    env:
-      DEVELOPER_DIR: /Library/Developer/CommandLineTools
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Verify Swift toolchain
@@ -102,13 +100,14 @@ jobs:
           swift --version
           xcrun --show-sdk-path
           swift --version | grep 'Swift version 6.4'
-      - run: swift test --package-path macos
+      # Process cancellation and Keychain mocks compete for deadlines on the shared runner.
+      - run: swift test --package-path macos --no-parallel
       - name: Check signing policy without Keychain access
         run: python3 macos/scripts/test-sign-app.py
       - name: Package helper
         run: bash macos/scripts/build-app.sh
       - name: Safe packaged self-check
-        run: macos/artifacts/KeepressoMobile.app/Contents/MacOS/KeepressoMac --self-check
+        run: macos/.build/app-staging/KeepressoMobile.app/Contents/MacOS/KeepressoMac --self-check
 
   android:
     name: Android tests, lint and APK
@@ -131,17 +130,8 @@ jobs:
         run: test -f "$ANDROID_HOME/platforms/android-35/android.jar"
       - name: Test, lint and assemble
         working-directory: android
-        env:
-          FIREBASE_APPLICATION_ID: ${{ vars.FIREBASE_APPLICATION_ID }}
-          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
-          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
-          FIREBASE_SENDER_ID: ${{ vars.FIREBASE_SENDER_ID }}
         run: >-
           ./gradlew --no-daemon
-          "-Pkeepresso.firebase.applicationId=$FIREBASE_APPLICATION_ID"
-          "-Pkeepresso.firebase.apiKey=$FIREBASE_API_KEY"
-          "-Pkeepresso.firebase.projectId=$FIREBASE_PROJECT_ID"
-          "-Pkeepresso.firebase.senderId=$FIREBASE_SENDER_ID"
           :core:test :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()

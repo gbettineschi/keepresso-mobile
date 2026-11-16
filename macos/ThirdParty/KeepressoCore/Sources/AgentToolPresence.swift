@@ -14,6 +14,11 @@ public enum AgentTool: CaseIterable, Sendable {
     case codex
     case antigravity
     case grok
+    case omp
+    case hermes
+    case qwen
+    case devin
+    case kimi
 
     /// Paths that each, on their own, prove the tool is here. Any one is
     /// enough, because these tools arrive in several shapes: a config folder
@@ -72,6 +77,42 @@ public enum AgentTool: CaseIterable, Sendable {
                 "/opt/homebrew/bin/grok",
                 "/usr/local/bin/grok",
             ]
+        case .omp:
+            return [
+                "\(home)/.omp/agent",
+                "\(home)/.bun/bin/omp",
+                "\(home)/.local/bin/omp",
+                "/opt/homebrew/bin/omp",
+                "/usr/local/bin/omp",
+            ]
+        case .hermes:
+            return [
+                "\(home)/.hermes",
+                "\(home)/.local/bin/hermes",
+                "/opt/homebrew/bin/hermes",
+                "/usr/local/bin/hermes",
+            ]
+        case .qwen:
+            return [
+                "\(home)/.qwen",
+                "\(home)/.local/bin/qwen",
+                "/opt/homebrew/bin/qwen",
+                "/usr/local/bin/qwen",
+            ]
+        case .devin:
+            return [
+                "\(home)/.config/devin",
+                "\(home)/.local/bin/devin",
+                "/opt/homebrew/bin/devin",
+                "/usr/local/bin/devin",
+            ]
+        case .kimi:
+            // Kimi Code's own folder, never `~/.kimi`: that belongs to the
+            // older Python Kimi CLI, which has no hooks.
+            return [
+                "\(home)/.kimi-code",
+                "\(home)/.kimi-code/bin/kimi",
+            ]
         }
     }
 
@@ -84,6 +125,21 @@ public enum AgentTool: CaseIterable, Sendable {
         case .codex: return "Codex"
         case .antigravity: return "Antigravity"
         case .grok: return "Grok"
+        case .omp: return "Oh My Pi (OMP)"
+        case .hermes: return "Hermes Agent"
+        case .qwen: return "Qwen Code"
+        case .devin: return "Devin"
+        case .kimi: return "Kimi Code"
+        }
+    }
+
+    /// The tools whose hooks share ``CompatHooks``, or `nil`.
+    public var compatTool: CompatHooks.Tool? {
+        switch self {
+        case .qwen: return .qwen
+        case .devin: return .devin
+        case .kimi: return .kimi
+        default: return nil
         }
     }
 

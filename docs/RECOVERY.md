@@ -1,142 +1,69 @@
-# Recovery and reset
+# Recover or redo the setup
 
-The setup can be rebuilt from the source and access to your own Google/Vercel accounts. The original setup text file is convenient, not irreplaceable. These procedures deliberately separate relay access, phone pairing and Android signing.
+This guide is for iroh + direct Firebase. The [legacy recovery guide](legacy/RECOVERY.md) covers older Vercel/Firestore installations. A transport failure is not a reason to erase pairing.
 
-No recovery step needs a Keepresso session or a power command. Do not clear app data or phone pairing merely because an internet credential is missing. A relay outage/rotation interrupts internet status and reminders; nearby Bluetooth remains separate.
+## Start with what still works
 
-## Choose the smallest reset
+| Symptom | First action |
+|---|---|
+| Nearby works, Internet does not | Check Internet fallback on both devices and usable Internet on both. Reconnect nearby to refresh the saved endpoint. |
+| Internet works, no alerts | Check the Mac’s notification state, the Firebase project/API/account, Android notification permission and background restrictions. |
+| Phone waits for registration | Open it with Internet available; it persists and retries the current token registration. |
+| Replaced Firebase project asks for restart | Reopen Android as indicated; retain app data and pairing. |
+| Private storage unavailable | Do not delete all state. Check the named file’s ownership, mode and integrity; other connection state is independent. |
+| Mac is unreachable after sleep | Wake it yourself. Remote wake is not implemented. |
 
-| Situation | Procedure | Pairing / app rebuild |
-| --- | --- | --- |
-| Lost setup text, helper already configured | Reuse saved connection or recover from Keychain | Neither |
-| Lost every Mac bearer copy | Rotate only the Mac bearer | Nearby reconnect; preserve pairing |
-| Lost/compromised Firebase server JSON | Replace server key in Firebase/Vercel | Neither |
-| Recreate Vercel project, keep Firebase | Deploy source into a new Vercel project | Update Mac URL; nearby reconnect |
-| Replace Firebase project | Fresh cloud setup plus Android client configuration | Rebuild APK with same signing key; nearby reconnect |
-| Mac/phone loses a pairing key | Revoke/forget old authorization, pair again | New local approval |
-| Android signing private key lost | Recover signing store, or reinstall a new signed APK | A reinstall loses Android pairing/data |
+## Accessibility switch is on, but trigger controls are unavailable
 
-## 1. Lost file, working/saved Mac configuration
+macOS can retain an enabled entry while refusing access to a newly signed development build. The companion reports whether its current copy is trusted; the switch alone is not proof.
 
-Open **Keepresso Mobile** from Finder or the launcher, then find **Internet fallback** in its settings window. Closing that window hides it; use **Quit Keepresso Mobile** to stop the companion. A saved connection loads automatically. If it is disabled, use **Enable saved relay**. The blank bearer field is normal: it is not intended to reveal the stored secret.
+1. Open **Review setup… → Continue → Open Settings…** beside Remote trigger controls.
+2. In Privacy & Security, find the companion's Accessibility entry (called **Device Control and Data Access** on the tested macOS27). If it remains unusable, remove only **Keepresso Mobile**, add `/Applications/Keepresso Mobile.app` again, and approve it locally.
+3. Return to the companion and press **Recheck**. If macOS still reports the old result, use **Restart app** once, then recheck. Restart closes the setup sheet and preserves its summary; it does not grant permission itself.
 
-For migration/recovery, open **Keychain Access** on that Mac. Search for service `local.keespresso.companion.v1`, account `relay`, in the user's login Keychain. Authenticate to view the saved password. It is JSON with `url` and `macBearer`; copy only the bearer into the helper's bearer field and the URL into its URL field. Keep the JSON private. The current helper has no export/reveal/server-reset button.
+Keep the official Keepresso entry separate. Reapproval does not require new phone pairing. Development signature changes can require renewed OS approval; pairing keys and other saved settings remain independent.
 
-The `devices` entry under the same service holds phone authorization keys. Do not remove it to reset the relay. The Keychain entries are marked device-only; do not assume they will sync to a replacement Mac.
+## Replace a sender key
 
-## 2. Rotate a missing or compromised Mac bearer
+1. In your project’s Google Cloud service account, create a replacement JSON key. Keep the account’s role limited to Firebase Cloud Messaging API Admin.
+2. Download **google-services.json** again from the same Firebase Android registration if you lost it.
+3. On the Mac, use **Phone notifications → Import Firebase configuration…**, choosing both files.
+4. Verify phone registration and a real locked-phone notification.
+5. Delete the superseded key from that service account only after verification. If it is compromised, revoke it immediately and accept the temporary notification outage.
 
-This does **not** need the Firebase server private key. You need owner access to the existing Vercel project and a source checkout linked to it.
+You do not need the old private file to generate a replacement. This does not reset phone authorization or iroh identity. The console cannot reveal an old private key again.
 
-1. Disable Internet in the Mac helper while rotating. Keep nearby authorization.
-2. Sign in to Vercel, enter the source `relay/` directory and link the correct project if necessary. Check `.vercel/project.json` contains the intended project/team IDs. Never guess the target from another checkout's defaults.
-3. Choose an absolute private directory outside the repository. These commands create a new rotation subdirectory rather than overwrite an old bearer:
+## Use a new Firebase project
 
-```sh
-umask 077
-KEEPRESSO_PRIVATE_DIR=/absolute/private/keepresso-relay
-mkdir -p "$KEEPRESSO_PRIVATE_DIR"
-chmod 700 "$KEEPRESSO_PRIVATE_DIR"
-KEEPRESSO_ROTATION_DIR=$(mktemp -d "$KEEPRESSO_PRIVATE_DIR/rotation.XXXXXX")
-node --input-type=module - "$KEEPRESSO_ROTATION_DIR" <<'NODE'
-import {randomBytes, createHash} from 'node:crypto';
-import {writeFileSync} from 'node:fs';
-import {join} from 'node:path';
-const directory = process.argv[2];
-const bearer = randomBytes(32).toString('base64');
-writeFileSync(join(directory, 'mac-bearer.txt'), bearer, {mode: 0o600, flag: 'wx'});
-writeFileSync(join(directory, 'mac-token-sha256.txt'),
-  createHash('sha256').update(bearer, 'utf8').digest('hex'), {mode: 0o600, flag: 'wx'});
-NODE
-vercel env update RELAY_MAC_TOKEN_SHA256 --environment production \
-  --sensitive --yes --scope YOUR_ORGANIZATION_ID \
-  < "$KEEPRESSO_ROTATION_DIR/mac-token-sha256.txt"
-vercel deploy --prod --force --scope YOUR_ORGANIZATION_ID
-```
+Follow [SELF_HOSTING.md](SELF_HOSTING.md) with a new Spark project and the same Android package. Import its matching files on the Mac, reconnect the paired phone, handle any indicated Android app restart, and verify delivery. Old-project tokens cannot receive messages from the new sender. Keep the old project until acceptance; deleting it is not a reset procedure.
 
-4. Check the deployment is **Ready** and `/api/health` returns `configured:true` on the stable production domain.
-5. On the Mac, enter that URL and the **new** `mac-bearer.txt` value, then **Save and enable**. The helper stores it in Keychain. Vercel stores only its SHA-256 hash and cannot reconstruct a lost bearer.
-6. Reconnect each already authorized phone nearby once. Its encrypted connection obtains a refreshed relay ticket using the same pairing key. Open the phone away from Bluetooth and wait for fresh authenticated status before using controls.
+## Lost Internet identity
 
-Changing the environment variable alone is insufficient: existing functions keep their old deployment's environment. If a bearer was compromised, also remove or protect old externally reachable deployments that retain the old hash; switching the production alias does not make their unique deployment URLs disappear. Do not roll back to an old credential-bearing deployment after a security rotation.
+The Mac stores its independent identity in `~/Library/Application Support/Keespresso/Internet/seed.json`. If that file is absent, starting the Internet connection creates a replacement without deleting pairing. An already-authorized phone must reconnect nearby (or through an available authenticated legacy path) to learn the replacement identity. Remote-only recovery is impossible when the phone knows only the lost address.
 
-## 3. Replace the Firebase server private key
+Malformed or insecure files fail closed; they are not silently replaced. Preserve the suspect file for diagnosis. Before a deliberate identity reset, quit Keepresso Mobile using its explicit Quit command, move only that seed file aside privately, then reopen the canonical app and reconnect nearby. Do not delete `Connection/credentials.json` or revocation records. This procedure resets the Internet address, not phone authorization. It is a recovery operation, not an automated test.
 
-1. In the **same Firebase project**, open **Project settings → Service accounts → Firebase Admin SDK** and generate a new private key for the dedicated server account. Store the downloaded JSON privately outside the repo. This leaves Firestore data, public Android settings and phone pairing unchanged.
-2. From the linked `relay/` directory, update the existing production secret using stdin:
+## Lost phone pairing or a new device
 
-```sh
-vercel env update FIREBASE_SERVICE_ACCOUNT --environment production \
-  --sensitive --yes --scope YOUR_ORGANIZATION_ID \
-  < /absolute/private/keepresso-relay/new-firebase-service-account.json
-vercel deploy --prod --force --scope YOUR_ORGANIZATION_ID
-```
+Normal in-place updates retain pairing. If Android Keystore/app data or the Mac’s current pairing keys are genuinely lost, cloud credentials cannot reconstruct them. Remove the obsolete authorization using the phone’s settings and the Mac’s **Remove paired device**, then scan a new QR and approve that phone locally. Never restore an old authorization file blindly after revocation.
 
-3. Verify **Ready**, configured health, and a fresh authenticated phone status exchange. Health alone checks configuration format, not database/push authorization.
-4. In **Google Cloud → IAM & Admin → Service accounts → the server account → Keys**, identify and revoke the superseded key by its key ID. Do not delete the service account or unrelated keys. Keep the old key only until the new deployment works, unless responding to an active compromise. Existing short-lived access tokens may remain valid until they expire.
-5. Remove the transient JSON from places you do not intend as private credential storage. The phone/Mac apps never need it. A future reset can generate a replacement again.
+## What is stored where
 
-## 4. Replace only the Vercel deployment
+All paths are under `~/Library/Application Support/Keespresso/`; the old directory spelling is intentional compatibility.
 
-1. Keep the existing Firebase project, database/rules and Android client registration.
-2. Obtain a replacement Firebase server JSON if the old local copy was removed; use procedure 3 to retire the superseded key after verification.
-3. Follow [SELF_HOSTING.md](SELF_HOSTING.md) to create/link a **new Hobby project**, configure its two production secrets and deploy the current `relay/` source. The initial setup script intentionally refuses to overwrite existing variables; it is appropriate for the new empty project.
-4. Save the new stable production URL and its generated Mac bearer in the helper. Reconnect the same authorized phone nearby to receive the new URL/ticket. No Android rebuild is needed while the Firebase project/client settings stay the same.
-5. Verify fresh remote status and an actual locked-phone reminder before retiring the old project. Retire old deployment access if this is a security reset. Do not delete the working deployment first.
-6. Vercel notification preferences belong to the account/team, so check them for the destination team. Firebase quota alerts remain on the existing Google project.
+| Path | Contents and recovery |
+|---|---|
+| `Connection/credentials.json` | Phone authorization and retained legacy configuration. Treat as secret; losing it may require re-pairing. |
+| `revocations.json`, `mutations.json`, `reminders.json` | Revoked phones, mutation outcomes and reminder state. Preserve across updates; do not replay old commands. |
+| `Internet/seed.json` | Mac Internet identity, independent of pairing. Replacement requires authenticated nearby enrollment. |
+| `Internet/migration.json` | Which exact device key has authenticated over iroh. Losing it may temporarily retain legacy bootstrap; it grants no authority. |
+| `Notifications/sender.json` | Private FCM sender configuration. Recover by importing a new key and matching client configuration. |
+| `Notifications/tokens.json`, `Notifications/outbox.json` | Phone registration and bounded encrypted delivery state. No queued power commands. |
 
-## 5. Rebuild all cloud services from scratch
+Private directories must be user-owned with mode 0700; private files must be regular single-link files owned by that user with mode 0600. Symlinks and malformed data are rejected. Other software running as your user can read these files. FileVault protects the disk at rest; it is not isolation from programs running in your signed-in account.
 
-1. Follow [SELF_HOSTING.md](SELF_HOSTING.md) with a new dedicated Firebase **Spark** project and Vercel **Hobby** project. Set production deny-all Firestore rules; register the same Android package; configure/deploy the relay; configure [quota alerts](QUOTA_ALERTS.md).
-2. Rebuild Android with the new project's four public client properties: `keepresso.firebase.applicationId`, `apiKey`, `projectId`, `senderId`. See [android/README.md](../android/README.md) for their complete names. Keep the same Android application ID and **signing identity** when updating the installed APK to preserve local pairing. Update GitHub repository variables too if using CI. A downloaded server JSON is never an Android build input.
-3. Save the new relay URL/Mac bearer in the helper. Reconnect nearby so existing authorized phones receive the new relay ticket. Allow Android notifications and wait for push-token registration. Losing old Firestore mailboxes does not recover undelivered commands; uncertain mutations are not replayed.
-4. Verify fresh status away from Bluetooth and an actual locked-phone reminder. Old encrypted mailbox data is not required to keep the existing device pairing.
-5. Retire old service-account keys/deployments after verification. Deleting a Firebase project is optional and destructive; it is not required to reset the connection.
+Legacy Keychain entries are not kept in sync after private-file migration and can contain obsolete/revoked authorization. Reinstalling the same app should reuse current files, not restore old Keychain state over them. Preserve the companion’s preferences/Mac UUID and complete current state when making a private Mac backup; copying a single JSON file to another Mac is not a supported migration procedure.
 
-## 6. New Mac or phone; lost local pairing
+## Clean reconstruction
 
-If the Mac's `devices` Keychain entry or the phone's Keystore-backed app data is lost, that pairing cannot be recovered from the relay. In Android **Settings → Remove phone authorization**, confirm **Remove** to clear an obsolete local pairing. On the Mac use **Pairing → Remove paired device** and confirm the obsolete authorization. Authorize the phone again with the Mac's new QR invitation and local approval. Do not restore a plaintext test key or treat a Firebase API key as phone authorization.
-
-Reinstalling the helper on the same Mac can reuse its existing Keychain configuration, but erasing the Mac is different. A replacement Mac normally has a new local identity and needs a new pairing even if it uses the same owner-hosted relay.
-
-If the Android signing private key is lost, the installed APK contains only its public certificate. It cannot recover the private key. A new signing identity requires uninstalling/reinstalling this development app and pairing again. Cloud credential rotation alone does not require losing Android app data.
-
-## Troubleshooting and verification
-
-| Symptom | Check / recovery |
-| --- | --- |
-| Health redirects to Vercel login | Allow production native-client access under Deployment Protection; keep relay authentication enabled |
-| `configured:false` | Correct the two production variables, then deploy again |
-| Mac relay authorization fails after rotation | Check target project/scope, new deployment, exact new bearer and its hash; do not change phone keys |
-| Internet fails but nearby works | Check Vercel usage, Firestore quota, network and project status before resetting anything |
-| Status works but no background alerts | Verify APK Firebase project settings, notification permission, token registration and Android battery policy |
-| App shows stale data / unknown command outcome | Wait for fresh authenticated status or inspect the recorded outcome; never replay an uncertain mutation |
-| CLI deployment is blocked by commit-author membership | Fix owner Git/Vercel membership or use the source-only manual deployment procedure below; do not forge Git authors |
-
-### Source-only manual deployment fallback
-
-An authenticated project owner can deploy a verified source copy without a Git integration. From the linked `relay/` directory, create a fresh staging directory outside Git and copy **only** `api/`, `src/`, `public/`, `package.json`, `package-lock.json`, `vercel.json`, `.vercelignore`, and `.vercel/project.json`. Do not copy `.env*`, server keys, the private setup directory, or `.git`. Run `npm ci`, `npm test`, then `vercel deploy --prod --scope YOUR_ORGANIZATION_ID` from that directory. Keep a record of the source commit and compare the copied source hashes before deployment. This is a manual owner deployment, not a change to repository authorship or a broader GitHub permission grant.
-
-These procedures were checked against the existing source, UI labels and Vercel CLI 64.7.0. The token-generation example can be tested entirely in a temporary directory. Resetting the live credentials was intentionally not performed just to test the documentation.
-
-## After a locally signed Mac update
-
-Four prompts were traced after 0.4.4: two saved entries, each with an ordinary access check and a separate Keychain partition check. Ad-hoc signatures change identity between builds. [Stable Mac signing](MAC_SIGNING.md) records the evidence and the prepared Apple-certificate build path. A self-signed local certificate alone does not fix the partition check; do not reset pairing or broaden ACLs to suppress it.
-
-Keep the same Applications path, bundle ID and Keychain service. Do not delete pairing keys or re-pair merely because an update cannot read them. An ad-hoc signed development build has a new signing requirement: macOS may ask for Keychain access to the existing companion items. Use the persistent signing path in [MAC_SIGNING.md](MAC_SIGNING.md) for owner updates. Settings open before saved keys are read. The first read is noninteractive; if access is needed, use **Pairing → Allow saved connection…** and handle the system prompt in macOS. Choose **Always Allow** when offered if you want the OS to remember this trusted app's access. Reading keys never blocks the settings window or normal Quit. Connections and new pairing remain disabled until all saved credentials are read successfully; denial or invalid data does not replace saved credentials with an empty list. No password belongs in chat or setup files.
-
-From Mac0.4.6, the screen distinguishes a locked Keychain, access approval, cancellation/denial, unreadable stored data and temporary service failure. Keychain unlock, Mac wake/session activation or reopening the app triggers a coalesced, noninteractive retry for recoverable failures. No polling or automatic permission dialogs are used; cancelled/denied access or invalid data waits for explicit retry. Unknown credentials never expose a new QR or remove the saved phone. These events restore access only if macOS already permits it; they cannot repair an unsigned build's identity or grant consent.
-
-From Mac 0.4.3, open the canonical updated app normally. It registers its bundled startup agent automatically. A changed executable fingerprint, explicit signing failure or spawn-failed EX_CONFIG triggers a bounded unregister/register sequence. The executable fingerprint is recorded only after the app actually enters its managed background role. A failed launch gets 12 seconds for macOS to invalidate its stale launch rule, followed by at most one additional repair; persistent or unknown failure produces a warning. An enabled registration alone is never reported as a verified running background app. There is no Enable/Refresh button. **Open Login Items…** opens macOS's own controls; a blocked/required approval produces a warning. macOS may notify that a background item was added instead of asking a blocking question. If consent was revoked, the app leaves it revoked and asks the owner to enable it in Login Items. Failed repair stays visible and does not loop; quit/reopen the companion to retry after fixing the system state. A running managed agent never unregisters itself. Registration, Keychain access and an authenticated phone connection are separate states; do not infer one from another.
-
-Pairing controls are in one section. Until saved keys load, **Allow saved connection…** occupies the first button position. When unpaired, **Show pairing QR code** is enabled; when paired, **Remove paired device** is enabled instead. Removal asks confirmation and revokes every listed legacy phone. On Android, remove the old authorization in the app's Settings before scanning a new QR so a fresh device identity is generated. Trial updates must not remove pairing or clear data as a recovery shortcut.
-
-Future trial updates replace the canonical bundle and update Android with the retained signing certificate; neither requires uninstalling or clearing phone data. The current ad-hoc Mac distribution may still need the above owner approvals after an update.
-
-### Optional Wi-Fi name access (Mac 0.4.4 / Android 0.4.1)
-
-The Internet row checks the Mac's public HTTPS access independently of Bluetooth. Online requires a successful check; Offline means no usable route; Check failed means neither public check endpoint passed. A filter or endpoint outage can also cause Check failed. Checks update on a network change and about every 15 seconds while snapshots are requested, with no additional permanent polling timer. Old internet proof expires after 45 seconds. When the Mac is unreachable, dashboard values are last-known.
-
-To show the current Wi-Fi name, open the installed Keepresso Mobile Mac app, find **Wi-Fi name**, and click **Allow Wi-Fi name…**. Handle the Location permission dialog in macOS. This is optional: no coordinates are requested or read, and internet checking works without it. If permission was denied, **Open Location Settings…** opens macOS Privacy & Security → Location Services; enable the companion there if desired. Name unavailable means macOS did not supply a current SSID, not that internet is down. Ethernet and other active connections have their own labels. No Wi-Fi scanning or saved-network guesses.
-
-Development verification can use `KeepressoMac --read-connectivity`, which performs a bounded read-only diagnostic before app startup, Keychain, Bluetooth, startup registration or power adapters. Its output can contain the current Wi-Fi name: keep diagnostic files private. It never requests Location permission. Do not normally open a staged companion bundle to test it, as normal startup manages its Login Item.
+Install the canonical Mac app and Android package, restore native Keepresso independently, pair the phone, and create/import your own Spark/FCM setup. No Vercel deployment, Firestore database or original backup text file is needed. Keep payment/billing disabled. Verify status, explicit trigger checks and locked-phone alerts before relying on it.

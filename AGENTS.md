@@ -5,7 +5,7 @@
 - Read docs/requirements.md and docs/protocol.md before changing shared behaviour.
 - Keep the official Keepresso app unmodified. Vendored upstream source files must remain byte-identical to the pinned revision; put companion adapters outside its Sources directory.
 - Never start keep-awake leases, alter the user's Keepresso settings, grant permissions or execute sleep/power commands while developing or testing. Use dependency-injected fakes for login-item and other mutation tests. Real power tests require the user's explicit action.
-- Monitoring must not prevent sleep. The duplicate trigger engine runs only for a bounded, explicit refresh, never permanently.
+- Monitoring must not prevent sleep. Run the duplicate trigger engine only for a bounded Check request. The phone may request one check per foreground visit after connection. Ordinary polling never runs it.
 - No Tailscale. Bluetooth is the initial transport. Internet is optional and must not be represented as implemented until tested.
 - Commands require an authorized device and fresh authenticated encryption. Never retry uncertain mutation delivery or replay queued commands on reconnect.
 - Preserve unknown, stale and unavailable states. Missing permissions or decode failures are not evidence of inactivity.

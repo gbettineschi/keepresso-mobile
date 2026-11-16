@@ -27,7 +27,7 @@ class MutationJournal(private val load: () -> String?, private val save: (String
 }
 class RequestRoute {
     private var started = false
-    fun select(nearby: Boolean, relay: Boolean): String { check(!started); return when { nearby -> "nearby"; relay -> "relay"; else -> error("Mac unreachable") } }
+    fun select(nearby: Boolean, relay: Boolean, internet: Boolean = false): String { check(!started); return when { nearby -> "nearby"; internet -> "iroh"; relay -> "relay"; else -> error("Mac unreachable") } }
     fun begin() { check(!started); started = true }
 }
 
@@ -35,21 +35,37 @@ class RequestRoute {
 class EventClaims(private val load: () -> String?, private val save: (String) -> Unit) {
     @Synchronized fun claim(macId: String, event: JsonObject, now: Instant, snapshot: JsonObject?): Boolean {
         canonicalId(macId); val id = canonicalId(event.string("id")); val kind = event.string("kind")
-        require(kind in setOf("hourly", "session_ended_awake", "battery", "thermal", "sleep_failed", "lid_awake"))
+        require(kind in setOf("hourly", "session_ended_awake", "battery", "thermal", "sleep_failed", "lid_awake", "unattended_brew"))
         val created = Instant.parse(event.string("createdAt")); require(created <= now.plusSeconds(10))
+        val thermal = if (kind == "thermal") ThermalWarning.fromEvent(event) else null
+        val incident = AlertIncident.fromEvent(event)
         require(event.string("title").toByteArray().size <= 480 && event.string("body").toByteArray().size <= 4096)
         val key = "$macId/$id"
         val claims = load()?.let { obj(it).mapValues { (_, v) -> v.jsonPrimitive.long } }?.filterValues { it > now.epochSecond }?.toMutableMap() ?: linkedMapOf()
-        if (now >= created.plusSeconds(300) || claims.containsKey(key)) return false
+        val expiresAt = created.plusSeconds(if (thermal?.level == ThermalWarningLevel.CRITICAL && incident?.phase != AlertPhase.RESOLVED) 60 else 300)
+        if (now >= expiresAt || claims.containsKey(key)) return false
         if (claims.size >= 256) return false
-        claims[key] = created.plusSeconds(300).epochSecond
+        claims[key] = expiresAt.epochSecond
         save(buildJsonObject { claims.forEach { (k, v) -> put(k, v) } }.toString())
+        if (incident?.phase == AlertPhase.RESOLVED) return true
+        if (thermal != null) {
+            if (snapshot == null) return true
+            if (incident != null && Instant.parse(snapshot.string("capturedAt")) > created) {
+                when ((snapshot["mac"] as? JsonObject)?.stringOrNull("wakeState")) {
+                    "dark" -> return false
+                    "full" -> return !thermal.isSupersededBy(snapshot)
+                    else -> return true
+                }
+            }
+            return !thermal.isSupersededBy(snapshot)
+        }
         if (snapshot != null && Instant.parse(snapshot.string("capturedAt")) > created) {
-            val k = snapshot["keepresso"]?.jsonObject; val m = snapshot["mac"]?.jsonObject
+            val k = snapshot["keepresso"] as? JsonObject; val m = snapshot["mac"] as? JsonObject
             if (kind == "hourly" && k?.boolOrNull("isActive") == false) return false
             if (kind in setOf("session_ended_awake", "sleep_failed") && k?.boolOrNull("isActive") == true) return false
-            if (kind == "thermal" && m?.stringOrNull("thermal") == "normal") return false
             if (kind == "lid_awake" && m?.stringOrNull("lid") == "open") return false
+            if (kind == "lid_awake" && m?.stringOrNull("wakeState") == "dark") return false
+            if (kind == "unattended_brew" && k?.boolOrNull("isActive") == false) return false
             if (kind == "battery" && m?.get("batteryPercent")?.jsonPrimitive?.doubleOrNull?.let { it >= 30 } == true && k?.stringOrNull("safetyPause") == "none") return false
         }
         return true
@@ -57,11 +73,11 @@ class EventClaims(private val load: () -> String?, private val save: (String) ->
 }
 
 /** One body and one chosen route survive any ambiguous transport failure. */
-class CommandSubmission(val body: String, nearby: Boolean, relay: Boolean) {
+class CommandSubmission(val body: String, nearby: Boolean, relay: Boolean, internet: Boolean = false) {
     val id = canonicalId(obj(body).string("id"))
     val action = obj(body).string("action")
     val mutation = action !in setOf("status", "refresh_triggers", "operation_status")
-    val route = RequestRoute().select(nearby, relay)
+    val route = RequestRoute().select(nearby, relay, internet)
     private var started = false
     @Synchronized fun transmit(journal: MutationJournal, send: (String) -> Unit) {
         check(!started); started = true

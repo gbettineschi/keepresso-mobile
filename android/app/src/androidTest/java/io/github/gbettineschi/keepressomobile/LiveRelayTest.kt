@@ -17,7 +17,7 @@ import kotlinx.serialization.json.*
 /** Opt-in actual HTTPS relay, disposable synthetic Mac only. No native power adapter. */
 class LiveRelayTest {
     private val ui=createAndroidComposeRule<MainActivity>()
-    @get:Rule val rules=RuleChain.outerRule(EmulatorOnlyRule()).around(GrantPermissionRule.grant(Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.POST_NOTIFICATIONS)).around(ui)
+    @get:Rule val rules=RuleChain.outerRule(EmulatorOnlyRule()).around(GrantPermissionRule.grant(Manifest.permission.BLUETOOTH_ADVERTISE,Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.POST_NOTIFICATIONS)).around(ui)
     @Test fun encryptedStatusControlsAndDuplicateMutationOverActualInternet(){
         Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("liveRelay")=="true")
         val c=InstrumentationRegistry.getInstrumentation().targetContext

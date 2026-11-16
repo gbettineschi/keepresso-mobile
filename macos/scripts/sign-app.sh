@@ -8,7 +8,7 @@ if [[ "$REQUIRE_STABLE" != 0 && "$REQUIRE_STABLE" != 1 ]]; then
   exit 2
 fi
 if [[ "$REQUIRE_STABLE" == 1 && "$IDENTITY" == - ]]; then
-  echo 'Owner updates require a persistent signing certificate. Set KEEPRESSO_CODESIGN_IDENTITY to its exact SHA-1 fingerprint.' >&2
+  echo 'Stable-signing mode requires a persistent signing certificate. Set KEEPRESSO_CODESIGN_IDENTITY to its exact SHA-1 fingerprint.' >&2
   exit 2
 fi
 if [[ "$IDENTITY" != - && ! "$IDENTITY" =~ ^[[:xdigit:]]{40}$ ]]; then
@@ -17,7 +17,7 @@ if [[ "$IDENTITY" != - && ! "$IDENTITY" =~ ^[[:xdigit:]]{40}$ ]]; then
 fi
 codesign --force --deep --sign "$IDENTITY" "$APP"
 if [[ "$IDENTITY" == - ]]; then
-  echo 'Development ad-hoc signature: updates change app identity and may repeat Keychain approvals. Use a persistent certificate for owner updates.' >&2
+  echo 'Development ad-hoc signature: legacy migration may need Keychain approval once. Valid private-file loads skip Keychain; macOS privacy approvals remain OS-controlled.' >&2
   codesign --verify --deep --strict "$APP"
 else
   # Match Apple's securityd classification for the stable teamid: partition.

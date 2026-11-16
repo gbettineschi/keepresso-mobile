@@ -16,10 +16,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   macos:
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 30
-    env:
-      DEVELOPER_DIR: /Library/Developer/CommandLineTools
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Verify Swift toolchain and tagged implementation
@@ -28,7 +26,8 @@ jobs:
           swift --version | grep 'Swift version 6.4'
           python3 scripts/verify-upstream.py
       - name: Mac helper tests
-        run: swift test --package-path macos
+      # Process cancellation and Keychain mocks compete for deadlines on the shared runner.
+        run: swift test --package-path macos --no-parallel
       - name: Package Apple silicon helper
         env:
           TAG: ${{ inputs.tag || github.ref_name }}
@@ -86,18 +85,10 @@ jobs:
           KEEPRESSO_SIGNING_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
           KEEPRESSO_SIGNING_ALIAS: keespresso-development
           KEEPRESSO_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
-          FIREBASE_APPLICATION_ID: ${{ vars.FIREBASE_APPLICATION_ID }}
-          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
-          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
-          FIREBASE_SENDER_ID: ${{ vars.FIREBASE_SENDER_ID }}
         run: |
           test -n "$KEEPRESSO_SIGNING_PASSWORD"
           ./gradlew --no-daemon \
             "-Pkeepresso.releaseVersion=$VERSION" "-Pkeepresso.releaseVersionCode=$VERSION_CODE" \
-            "-Pkeepresso.firebase.applicationId=$FIREBASE_APPLICATION_ID" \
-            "-Pkeepresso.firebase.apiKey=$FIREBASE_API_KEY" \
-            "-Pkeepresso.firebase.projectId=$FIREBASE_PROJECT_ID" \
-            "-Pkeepresso.firebase.senderId=$FIREBASE_SENDER_ID" \
             :core:test :app:lintRelease :app:assembleRelease
       - name: Verify signing identity and stage the APK
         env:
@@ -128,6 +119,9 @@ jobs:
       contents: write
       actions: read
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Download both verified packages
         env:
           GH_TOKEN: ${{ github.token }}
@@ -144,10 +138,16 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
         run: |
+          notes_file="$PWD/docs/releases/${TAG#v}.md"
+          if [[ -f "$notes_file" ]]; then
+            notes=(--notes-file "$notes_file")
+          else
+            notes=(--notes 'Personal development preview. Signed Android APK and ad-hoc signed Apple silicon Mac helper.')
+          fi
           cd dist
           gh release create "$TAG" KeepressoMobile.zip ./*.apk SHA256SUMS release.json \
             --verify-tag --prerelease --title "Keepresso Mobile ${TAG#v} (preview)" \
-            --notes 'Personal development preview: signed Android APK plus Apple silicon Mac helper. 100% vibe-coded, provided as is. Android updates use the retained owner key. Add this GitHub repository in Obtainium and enable prereleases. Mac builds require macOS 14+ and are ad-hoc signed, not notarized. Real-device acceptance checks remain incomplete.'
+            "${notes[@]}"
   tap:
     needs: publish
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')

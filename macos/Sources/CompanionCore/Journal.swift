@@ -11,7 +11,8 @@ public final class MutationJournal {
     }
     private func persist() throws {
         try FileManager.default.createDirectory(at:url.deletingLastPathComponent(),withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
-        try WireJSON.encoder.encode(entries).write(to:url,options:[.atomic,.completeFileProtectionUnlessOpen])
+        // Reopening the command journal must work while the screen is locked.
+        try WireJSON.encoder.encode(entries).write(to:url,options:[.atomic,.completeFileProtectionUntilFirstUserAuthentication])
         try FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:url.path)
         let handle=try FileHandle(forWritingTo:url);defer{try? handle.close()};try handle.synchronize()
         guard fcntl(handle.fileDescriptor,F_FULLFSYNC)==0 else{throw CompanionError.unavailable}
