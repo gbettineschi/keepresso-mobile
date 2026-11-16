@@ -91,10 +91,8 @@ jobs:
     name: Mac helper tests and app
     needs: changes
     if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.macos == 'true'
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 20
-    env:
-      DEVELOPER_DIR: /Library/Developer/CommandLineTools
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Verify Swift toolchain
