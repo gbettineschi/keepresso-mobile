@@ -131,7 +131,6 @@ jobs:
         run: test -f "$ANDROID_HOME/platforms/android-35/android.jar"
       - name: Test, lint and assemble
         working-directory: android
-        env:
         run: >-
           ./gradlew --no-daemon
           :core:test :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
