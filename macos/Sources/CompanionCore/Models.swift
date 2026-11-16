@@ -32,24 +32,63 @@ public struct CommandRequest: Codable {
         if action == "set_reminder_settings" { guard let s=reminderSettings else { throw CompanionError.invalid }; try s.validate() } else if reminderSettings != nil { throw CompanionError.invalid }
     }
 }
+public enum SleepOutcome: String, Codable, Sendable {
+    case goingToSleep = "going_to_sleep"
+    case couldNotSleep = "could_not_sleep"
+    case couldNotRequestSleep = "could_not_request_sleep"
+
+    fileprivate var message: String {
+        switch self {
+        case .goingToSleep: return "Going to sleep"
+        case .couldNotSleep: return "Couldn’t sleep"
+        case .couldNotRequestSleep: return "Couldn’t request sleep"
+        }
+    }
+}
+
 public struct CommandResponse: Codable, Equatable {
     public var type = "response"; public var id: String; public var status: String; public var message: String?
     public var operationId:String?; public var operationStatus:String?; public var operationMessage:String?
-    public init(id: String, status: String, message: String? = nil,operationId:String? = nil,operationStatus:String? = nil,operationMessage:String? = nil) { self.id=id; self.status=status; self.message=message;self.operationId=operationId;self.operationStatus=operationStatus;self.operationMessage=operationMessage }
+    public var sleepOutcome: SleepOutcome?
+
+    public init(id: String, status: String, message: String? = nil, operationId: String? = nil,
+                operationStatus: String? = nil, operationMessage: String? = nil, sleepOutcome: SleepOutcome? = nil) {
+        self.id = id
+        self.status = status
+        self.message = message
+        self.operationId = operationId
+        self.operationStatus = operationStatus
+        self.operationMessage = operationMessage
+        self.sleepOutcome = sleepOutcome
+    }
+
+    public static func sleep(id: String, outcome: SleepOutcome, status: String) -> Self {
+        Self(id: id, status: status, message: outcome.message, sleepOutcome: outcome)
+    }
 }
+public enum AlertPhase: String, Codable { case active, updated, resolved }
+
 public struct CompanionEvent: Codable {
     public var id = UUID().uuidString.lowercased(); public var kind: String; public var createdAt: Date; public var title: String; public var body: String; public var scheduledEnd: Date?; public var snoozedUntil: Date?
+    public var thermalSeverity: ThermalAlertSeverity? = nil
+    public var thermalState: MacThermalState? = nil
+    public var incidentId: String? = nil
+    public var alertPhase: AlertPhase? = nil
+    public var deliveryLifetimeSeconds: Int { thermalSeverity == .critical && alertPhase != .resolved ? 60 : 300 }
+    public var deliveryKind: String {
+        kind == "thermal" && incidentId != nil && thermalSeverity == .critical ? "critical_episode" : kind
+    }
 }
 public struct TriggerPreview: Codable {
+    public var checking: Bool?; public var outdated: Bool?; public var checkError: String?
     public var state: String = "not_checked"; public var checkedAt: Date?; public var combined: Bool?; public var rules: [Rule] = []; public var message: String?
     public init() {}
+    /// Failed attempts keep the completed assessment intact; an empty successful
+    /// assessment is still a replacement, never a request to reuse old rows.
     public mutating func retainPriorAssessment(_ previous:Self){
-        if rules.isEmpty{rules=previous.rules}
-        if checkedAt==nil{
-            checkedAt=previous.checkedAt
-            if state != "error",previous.checkedAt != nil{state="stale"}
-        }
-        if state=="error"{combined=nil}
+        guard checkedAt == nil || !["ready","unknown"].contains(state) else { return }
+        let error=checkError ?? message ?? "Couldn't check triggers. Try again."
+        self=previous;checking=false;checkError=error
     }
     public struct Detail: Codable { public var label: String; public var active: Bool; public var agent: String?; public init(label: String, active: Bool, agent: String?) { self.label=label; self.active=active; self.agent=agent } }
     public struct Rule: Codable { public var id: String; public var label: String; public var satisfied: Bool?; public var inGrace: Bool; public var graceRemaining: Double?; public var details: [Detail]; public init(id: String,label: String,satisfied: Bool?,inGrace: Bool,graceRemaining: Double?,details: [Detail]) { self.id=id;self.label=label;self.satisfied=satisfied;self.inGrace=inGrace;self.graceRemaining=graceRemaining;self.details=details } }

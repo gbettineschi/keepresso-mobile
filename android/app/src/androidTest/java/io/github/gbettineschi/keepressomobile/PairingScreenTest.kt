@@ -19,7 +19,7 @@ import java.net.URLEncoder
 /** Only run against the isolated emulator; scan results contain public synthetic fixture keys. */
 class PairingScreenTest {
     private val ui=createAndroidComposeRule<MainActivity>()
-    @get:Rule val rules=RuleChain.outerRule(EmulatorOnlyRule()).around(GrantPermissionRule.grant(Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.POST_NOTIFICATIONS)).around(ui)
+    @get:Rule val rules=RuleChain.outerRule(EmulatorOnlyRule()).around(GrantPermissionRule.grant(Manifest.permission.BLUETOOTH_ADVERTISE,Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.POST_NOTIFICATIONS)).around(ui)
     @Before fun setup(){check(Build.HARDWARE=="ranchu");Intents.init();ui.runOnIdle{Companion.mutable.value=UiState()}}
     @After fun finish(){Intents.release()}
     private fun scan(value:String?){
@@ -35,8 +35,8 @@ class PairingScreenTest {
     @Test fun validScannedQrStartsVisibleDiscovery(){
         val token=URLEncoder.encode("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=","UTF-8")
         scan("keespresso://pair?v=1&mac=11111111-1111-4111-8111-111111111111&token=$token&expires=${Instant.now().epochSecond+300}&name=TestMac")
-        ui.waitUntil(5000){Companion.state.value.connection.contains("Looking")}
-        ui.onNodeWithText("Looking for your Mac nearby…",substring=true).assertIsDisplayed()
+        ui.waitUntil(5000){Companion.state.value.connection.contains("Waiting")}
+        ui.onNodeWithText("Waiting for your Mac nearby…",substring=true).assertIsDisplayed()
     }
     @Test fun expiredScannedQrShowsErrorWithoutConnecting(){
         val token=URLEncoder.encode("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=","UTF-8")

@@ -33,7 +33,36 @@ struct NearbyWakeRecoveryTests {
         let response=await SafeSleep.perform(id:UUID().uuidString.lowercased(),authorized:{!recovery.sleeping && recovery.generation==generation},state:{
             recovery.willSleep();recovery.didWake(enabled:true)
             return SleepPreparationState(stopped:true,sleepDisabled:false)
-        },stop:{stops+=1},requestSleep:{sleeps+=1;return true},wait:{})
+        },stop:{stops+=1},requestSleep:{sleeps+=1;return .willSleep},wait:{})
         #expect(response.status=="error");#expect(stops==0);#expect(sleeps==0)
+    }
+}
+
+extension NearbyWakeRecoveryTests {
+    @MainActor @Test func manuallyGrantedBluetoothResumesOnlyAnEligibleSavedTransportOnce() {
+        var starts = 0, alreadyStarted = false
+        let recovery = NearbyWakeRecovery(stop: {}, start: { starts += 1; alreadyStarted = true })
+        for (enabled, nativeRunning, authorizationReady, permissionGranted, existing) in [
+            (false, true, true, true, false),
+            (true, false, true, true, false),
+            (true, true, false, true, false),
+            (true, true, true, false, false),
+            (true, true, true, true, true)
+        ] {
+            recovery.permissionRefreshed(enabled: enabled, nativeRunning: nativeRunning,
+                authorizationReady: authorizationReady, permissionGranted: permissionGranted, alreadyStarted: existing)
+        }
+        #expect(starts == 0)
+        recovery.willSleep()
+        recovery.permissionRefreshed(enabled: true, nativeRunning: true, authorizationReady: true,
+            permissionGranted: true, alreadyStarted: false)
+        #expect(starts == 0)
+        recovery.reset()
+        recovery.permissionRefreshed(enabled: true, nativeRunning: true, authorizationReady: true,
+            permissionGranted: true, alreadyStarted: alreadyStarted)
+        #expect(starts == 1)
+        recovery.permissionRefreshed(enabled: true, nativeRunning: true, authorizationReady: true,
+            permissionGranted: true, alreadyStarted: alreadyStarted)
+        #expect(starts == 1)
     }
 }

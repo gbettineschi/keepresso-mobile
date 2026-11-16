@@ -1,0 +1,11 @@
+{
+  "transportVersion": 2,
+  "messageVersion": 1,
+  "service": "73f8d1c0-823f-4c2f-9e0a-4454129f3101",
+  "phoneToMac": "73f8d1c0-823f-4c2f-9e0a-4454129f3102",
+  "macToPhone": "73f8d1c0-823f-4c2f-9e0a-4454129f3103",
+  "advertiser": "phone",
+  "central": "mac",
+  "phoneToMacProperty": "notify",
+  "macToPhoneProperty": "write_with_response"
+}

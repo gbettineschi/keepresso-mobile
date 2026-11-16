@@ -1,5 +1,14 @@
 import Foundation
 public enum StatusEvidence {
+    public static func consoleLock(in session: [String: Any]?, userID: UInt32) -> Bool? {
+        guard let session,
+              session["kCGSSessionUserIDKey"] as? UInt32 == userID,
+              session["kCGSSessionOnConsoleKey"] as? Bool == true,
+              session["kCGSessionLoginDoneKey"] as? Bool == true else { return nil }
+        // On the active, logged-in console macOS omits the flag when unlocked.
+        guard let lock = session["CGSSessionScreenIsLocked"] else { return false }
+        return lock as? Bool
+    }
     public static func sameLaunch(pid:Int32,launchDate:Date?,currentPID:Int32?,currentLaunchDate:Date?)->Bool {
         guard let launchDate,let currentLaunchDate else{return false}
         return pid==currentPID && launchDate==currentLaunchDate

@@ -1,0 +1,13 @@
+# Keepresso Mobile 0.5.2 verification — 29 October 2026
+
+Manual trigger assessments now remain unchanged through ordinary telemetry, route changes and failed checks. Only a successful explicit Check replaces their rows, verdicts and checked time, including empty and partial-unknown results. Progress, context changes and failed-attempt feedback are separate. The worker has no automatic retry or prewarm.
+
+The parent process allows twelve seconds including startup; its child engine watchdog remains eight seconds. An explicit relay read is asynchronous and bounded by fourteen seconds or request expiry, while lightweight status continues. The phone allows twenty-five seconds. Existing fifteen-second authentication freshness, thirty-second request validity and mutation deduplication/no-replay rules remain intact.
+
+Validation passed: 153 Swift fixture tests in 29 suites; 105 Android core tests; 41 full two-emulator checks; 11 focused feedback/stable-dashboard checks (seven overlap the full suite); geometry at 130% and 200% text size; final dashboard/settings render checks; release lint/build and retained Android signer verification. Lint has zero errors and 22 existing target/dependency/style warnings; known Swift toolchain/deprecation warnings remain.
+
+The encrypted-GATT trigger-history case exercises an initial failure, successful eight-second delayed retry, twelve seconds of ordinary polls without another check, failed recheck retention and successful empty-list replacement. A feedback-overlay interaction found by the full flow was repaired with a compact fixed outcome row above navigation and full Details. The unchanged Start → Resume/cancel → Stop and settings flow passes with feedback present.
+
+Mac 0.5.2/build14 and Android 0.5.2/code5002 were installed in place using the previous identities, pairing and configuration. The canonical Mac bundle is /Applications/Keepresso Mobile.app; its previous bundle was retained in Trash. The real phone supplied six fresh authenticated nearby observations over about forty-five seconds, with zero observed drops, timeouts or validation failures. No new QR pairing or Keychain recovery was required. One read-only packaged-worker diagnostic finished in 4.457 seconds with three configured rules and an unknown assessment; this is a timing sample, not proof of every detector input.
+
+The original Keepresso app and all 107 pinned upstream files remain unchanged. Test power/session operations used fixtures only. Physical Internet-only handover, lid/sleep/wake and the owner's final explicit Check confirmation are separate acceptance boundaries; the emulator and nearby evidence does not establish them. No cloud setup or release publication was performed.

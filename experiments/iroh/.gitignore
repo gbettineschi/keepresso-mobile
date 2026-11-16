@@ -1,0 +1,7 @@
+.run/
+__pycache__/
+*.log
+swift/.build/
+android/.gradle/
+android/**/build/
+android/local.properties

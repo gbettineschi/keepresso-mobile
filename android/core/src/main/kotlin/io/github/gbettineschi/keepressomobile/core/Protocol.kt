@@ -164,7 +164,9 @@ fun validateSnapshot(s: JsonObject) {
     s.stringOrNull("macName")
     s["mac"]?.takeUnless { it == JsonNull }?.jsonObject?.let {
         it.enums("lock", setOf("locked", "unlocked", "unknown")); it.enums("display", setOf("on", "dimmed", "off", "unknown")); it.enums("lid", setOf("open", "closed", "unknown")); it.enums("powerSource", setOf("battery", "ac", "unknown")); it.enums("thermal", setOf("normal", "warm", "hot", "unknown"))
-        it.numeric("batteryPercent", 0.0..100.0); it.numeric("temperatureC"); it.stringOrNull("temperatureSensor");it.boolOrNull("isCharging")
+        it.enums("thermalSeverity", nativeThermalStates); it.boolOrNull("thermalGuardActive"); it.stringOrNull("modelIdentifier")
+        it.enums("wakeState", setOf("full", "dark", "unknown"))
+        it.numeric("batteryPercent", 0.0..100.0); it.boolOrNull("isCharging")
         it.enums("internet",setOf("online","offline","check_failed","checking","unknown"));it.timestamp("internetCheckedAt")
         it.enums("networkType",setOf("wifi","ethernet","cellular","other","none","unknown"));it.stringOrNull("wifiName")?.let { name -> require(name.toByteArray(Charsets.UTF_8).size<=128) }
     }
@@ -173,7 +175,7 @@ fun validateSnapshot(s: JsonObject) {
         it.enums("sessionKind", setOf("manual", "automatic", "lease", "unknown")); it.enums("safetyPause", setOf("battery", "thermal", "none", "unknown")); it.timestamp("endsAt"); it.stringOrNull("version")
     }
     s["triggers"]?.takeUnless { it == JsonNull }?.jsonObject?.let { t ->
-        t.enums("state", setOf("not_checked", "checking", "ready", "unknown", "stale", "error")); t.timestamp("checkedAt"); t.boolOrNull("combined"); t.stringOrNull("message")
+        t.enums("state", setOf("not_checked", "checking", "ready", "unknown", "stale", "error")); t.timestamp("checkedAt"); t.boolOrNull("combined"); t.stringOrNull("message"); t.boolOrNull("checking"); t.boolOrNull("outdated"); t.stringOrNull("checkError")
         t["rules"]?.takeUnless { it == JsonNull }?.jsonArray?.let { rules ->
             require(rules.size <= 128)
             rules.forEach { value -> val r = value.jsonObject; r.stringOrNull("id"); r.stringOrNull("label"); r.boolOrNull("satisfied"); r.boolOrNull("inGrace"); r.numeric("graceRemaining")

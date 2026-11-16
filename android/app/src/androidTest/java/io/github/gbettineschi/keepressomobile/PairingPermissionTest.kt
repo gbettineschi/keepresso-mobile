@@ -38,7 +38,7 @@ class PairingPermissionTest {
         // dialog legitimately pauses the caller. Request recreation directly.
         if(recreate){InstrumentationRegistry.getInstrumentation().runOnMainSync{original.recreate()};ui.waitUntil(5000){original.isDestroyed}}
         device.wait(Until.findObject(By.res("com.android.permissioncontroller:id/permission_allow_button")),4000)!!.click()
-        ui.waitUntil(5000){Companion.state.value.connection.contains("Looking")}
-        ui.onNodeWithText("Looking for your Mac nearby…",substring=true).assertIsDisplayed()
+        ui.waitUntil(5000){Companion.state.value.connection.contains("Waiting")}
+        ui.onNodeWithText("Waiting for your Mac nearby…",substring=true).assertIsDisplayed()
     }
 }

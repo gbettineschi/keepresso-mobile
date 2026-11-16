@@ -42,6 +42,9 @@ public struct KeepressoSettings: Codable, Equatable, Sendable {
     public var closedLidLowPowerOnAC: Bool
     /// Independent, opt-in fan floor while the lid and sleep override are both closed/on.
     public var closedLidMinimumFanPercent: Int?
+    /// Opt-in: mute the built-in speakers while the lid is closed and
+    /// closed-display mode is active, unmuting when either ends.
+    public var closedLidMuteSpeakers: Bool
     /// Keep a chosen disk/volume spun up, or `nil` (the default) for off.
     public var diskKeepAlive: DiskKeepAliveConfig?
     /// Experimental headless virtual display, or `nil` (the default) for off.
@@ -141,6 +144,7 @@ public struct KeepressoSettings: Codable, Equatable, Sendable {
         closedLidLowPower: Bool = false,
         closedLidLowPowerOnAC: Bool = false,
         closedLidMinimumFanPercent: Int? = nil,
+        closedLidMuteSpeakers: Bool = false,
         diskKeepAlive: DiskKeepAliveConfig? = nil,
         virtualDisplay: VirtualDisplayConfig? = nil,
         thermalSafety: ThermalSafetyConfig? = nil,
@@ -183,6 +187,7 @@ public struct KeepressoSettings: Codable, Equatable, Sendable {
         self.closedLidLowPower = closedLidLowPower
         self.closedLidLowPowerOnAC = closedLidLowPowerOnAC
         self.closedLidMinimumFanPercent = closedLidMinimumFanPercent.map(ClosedLidFanFloor.clampedPercent)
+        self.closedLidMuteSpeakers = closedLidMuteSpeakers
         self.diskKeepAlive = diskKeepAlive
         self.virtualDisplay = virtualDisplay
         self.thermalSafety = thermalSafety
@@ -263,7 +268,9 @@ public struct KeepressoSettings: Codable, Equatable, Sendable {
     /// adding settings doesn't discard a user's older saved configuration.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        options = try c.decodeIfPresent(SleepPreventionOptions.self, forKey: .options) ?? .default
+        // Options decode per field and never throw on a bad value, but a
+        // non-object here (hand-edited import) must not cost the rest either.
+        options = (try? c.decodeIfPresent(SleepPreventionOptions.self, forKey: .options)) ?? .default
         defaultMode = Self.sanitizedMode(
             try c.decodeIfPresent(SessionMode.self, forKey: .defaultMode) ?? .indefinite)
         triggersEnabled = try c.decodeIfPresent(Bool.self, forKey: .triggersEnabled) ?? false
@@ -287,6 +294,7 @@ public struct KeepressoSettings: Codable, Equatable, Sendable {
         closedLidLowPowerOnAC = (try? c.decodeIfPresent(Bool.self, forKey: .closedLidLowPowerOnAC)) ?? false
         closedLidMinimumFanPercent = (try? c.decodeIfPresent(Int.self, forKey: .closedLidMinimumFanPercent))
             .map(ClosedLidFanFloor.clampedPercent)
+        closedLidMuteSpeakers = (try? c.decodeIfPresent(Bool.self, forKey: .closedLidMuteSpeakers)) ?? false
         automationSync = try c.decodeIfPresent(AutomationSyncConfig.self, forKey: .automationSync) ?? AutomationSyncConfig()
         diskKeepAlive = try c.decodeIfPresent(DiskKeepAliveConfig.self, forKey: .diskKeepAlive)
         virtualDisplay = try c.decodeIfPresent(VirtualDisplayConfig.self, forKey: .virtualDisplay)

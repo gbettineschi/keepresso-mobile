@@ -1,0 +1,9 @@
+# Mac 0.5.3 folder setup verification — 29 October 2026
+
+The Mac app now handles configured download-folder privacy requests through foreground setup before pairing. Already-paired owners have the same Allow access action. The isolated explicit worker defaults to no folder reads and only receives bounded exact-folder/current-executable setup evidence through a private disposable scratch file. Missing or denied access yields unknown, while other trigger checks continue. No background folder probe or automatic trigger scan was added.
+
+The local probe runs off MainActor while macOS waits for the owner. Explicit rechecks remain available, remove denied grants, persist before QR creation and block old grants during pending revalidation. Markers are successful local-read evidence, not a live TCC-status query; external permission changes and filesystem symlink retargets are not proactively detected. No TCC database access/reset, Full Disk Access request or signing-identity change was introduced.
+
+Root integration passed164Swift tests in31suites, strict development-signature verification, app crypto/framing self-check, purpose-text/version inspection and107unchanged vendored files. The canonical installed app is Mac0.5.3/build15; Android remains0.5.2/code5002. Saved pairing reauthenticated and the managed startup registration references build15. The official Keepresso binary is unchanged. The previous Android41-case emulator/105-core validation applies to its unchanged app; it was not needlessly repeated for this Mac-only change.
+
+Real macOS permission choices remain with the owner. The new section was observed in the installed Mac UI, but actual Allow/Don't Allow decisions and the following phone Check require the owner's action; automated tests did not grant permission or read the owner's download folders. No real power operations, cloud changes or release publication were performed.

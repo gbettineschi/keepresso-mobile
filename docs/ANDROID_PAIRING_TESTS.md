@@ -2,7 +2,7 @@
 
 The two-device emulator harness exercises the Android app through real virtual
 Bluetooth GATT, framing, authorization proofs and authenticated encryption. The
-second emulator is a synthetic Mac protocol peer, not a connection to macOS.
+second emulator is a synthetic Mac central; the production phone advertises the v2 service and remains the logical authentication client. The fixture is not a connection to macOS.
 Its manual-session, trigger and reminder operations change test data only.
 
 Use Android Emulator 36.5 or later with API 31+ images that support virtual
@@ -25,7 +25,7 @@ The suite covers QR permission handoff, Activity recreation during that prompt,
 visible invalid/expired-invitation feedback, canceled scans, pending local
 approval, approval and denial, encrypted status, synthetic manual controls,
 handover confirmation/cancel, notification deduplication and OK actions, reminder
-settings, six-hour snooze and authenticated reconnect with the saved identity.
+settings, six-hour snooze and authenticated reconnect with the saved identity. A65-second foreground/background/foreground observation checks continuously fresh nearby status and retained pairing; slow-read tests check queued controls and one effect. `--case startup-recovery` and `--case phone-radio-recovery` hold only the validated phone emulator's adapter off for25seconds, then check background recovery with retained keys; both also run in `--case all`.
 The harness briefly switches off only the validated peer emulator's BLE radio
 to check disconnection, disabled controls and reconnect. Logs and a dashboard capture
 are written under `android/app/build/emulator-results/`.
@@ -62,24 +62,12 @@ through multiple foreground renewals, records maximum snapshot age and asserts
 that a duplicate mutation executes once. It does not establish physical radio,
 closed-lid, Keychain or completed-sleep behavior. Keep fixture reports private.
 
-## Stale Android Bluetooth service caches
+## Version and permission boundaries
 
-Some phones cache a Mac's GATT services across app restarts and omit the
-advertised Keepresso service. The client attempts one cache refresh per
-connection, only when the expected service/channels are missing, and delays
-rediscovery briefly. Android exposes no public cache-invalidation API here:
-`BluetoothGatt.refresh()` is an unsupported, guarded fallback. If it is absent,
-restricted or ineffective, the app displays a retry instruction instead of
-continuing with missing channels or looping. A service change during negotiation
-invalidates that connection and outstanding callbacks; an existing authorization
-can reconnect, while an unpaired phone must scan a fresh QR.
+From0.5.0 the phone no longer scans or uses the unsupported `BluetoothGatt.refresh()` cache workaround. Both apps use new v2 service UUIDs and must be updated together. Production Android requests CONNECT + ADVERTISE on API31+, without SCAN or Location. Only the synthetic central test adopts SCAN + CONNECT + Location through instrumentation after its emulator guard; those permissions are not requested by the installed phone app. Denied advertising is exercised with fixture authorization and Internet settings retained.
 
-A separate opt-in `GattDiscoveryDiagnosticTest` can read public GATT UUIDs on an
-already permission-authorized physical phone (`-e hardware true`, optionally
-`-e refreshCache true`). It never pairs or sends controls. Normal emulator runs
-do not execute it. Cache refresh is device-dependent; the emulator suite cannot
-prove support on every Android vendor/version.
+Virtual GATT success does not prove Mac Core Bluetooth discovery, Samsung background policy or coexistence with other sharing apps. Test those on the owner's devices after reconnection without resetting pairing or stopping those apps.
 
-References: [virtual Bluetooth support](https://developer.android.com/studio/run/emulator-networking),
-[service-change callback](https://developer.android.com/reference/android/bluetooth/BluetoothGattCallback#onServiceChanged(android.bluetooth.BluetoothGatt)),
-[Android BluetoothGatt implementation](https://android.googlesource.com/platform/packages/modules/Bluetooth/+/refs/heads/main/framework/java/android/bluetooth/BluetoothGatt.java).
+## Shared physical GATT callbacks
+
+`SharedGattConnectionTest` replays public connection callbacks observed before service publication on the real phone, with an emulator-only fake BluetoothDevice and the actual transport callback. It verifies that a generic connection is not a subscribed peer and an unrelated disconnect cannot stop this server. The test waits for asynchronous advertisement registration before cleanup so a late platform publication cannot contaminate the next virtual GATT flow. Ownership, selected-only MTU, bounded unclaimed metadata, duplicate/competing subscriptions and stale-generation behavior are also covered by17focused core tests. Physical acceptance remains distinct from replaying callbacks.

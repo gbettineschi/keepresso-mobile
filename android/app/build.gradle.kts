@@ -8,8 +8,8 @@ android {
     compileSdk = 35
     defaultConfig {
         applicationId = namespace; minSdk = 28; targetSdk = 35
-        versionCode = providers.gradleProperty("keepresso.releaseVersionCode").orElse("4007").get().toInt()
-        versionName = providers.gradleProperty("keepresso.releaseVersion").orElse("0.4.7").get()
+        versionCode = providers.gradleProperty("keepresso.releaseVersionCode").orElse("6009").get().toInt()
+        versionName = providers.gradleProperty("keepresso.releaseVersion").orElse("0.6.9").get()
     }
     defaultConfig { testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
     buildFeatures { compose = true; buildConfig = true }
@@ -31,8 +31,8 @@ android {
             keyPassword = signingInputs.getValue("KEEPRESSO_SIGNING_KEY_PASSWORD")!!
         }
         buildTypes.getByName("debug").signingConfig = persistentDebug
-        buildTypes.getByName("release").signingConfig = persistentDebug
     }
+    packaging.resources.excludes += setOf("darwin-*/**", "win32-*/**", "linux-*/**")
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
 }
@@ -46,6 +46,7 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
     implementation(project(":core"))
+    implementation("computer.iroh:iroh-android:1.2.0")
     implementation(platform("com.google.firebase:firebase-bom:33.12.0"))
     implementation("com.google.firebase:firebase-messaging")
     implementation("androidx.work:work-runtime-ktx:2.10.1")

@@ -15,8 +15,8 @@ Current scope: retain official Keepresso updates and avoid maintaining a persona
 ## Status screen and order
 
 6. App header: original app icon and Keepresso name.
-7. MacBook status: **Awake** or **Unreachable**.
-8. Group all dashboard readings together: **Lock / Display / Lid**, a thin separator, then **Battery / Temperature**, and **Internet / Wi-Fi or Network** below. Show Locked/Unlocked, Display On/Dimmed/Off, Lid Open/Closed, battery percentage and power source, and temperature with severity colour. Temperature has no separate section.
+7. MacBook status shows **Awake** with a fresh authenticated reading. During the first six seconds without one, show **Updating…** before switching to **Unreachable**. Reopening the dashboard starts a new wait if the reading is stale. Mac controls require a current authenticated connection throughout.
+8. Group all dashboard readings together: **Lock / Display / Lid**, a thin separator, then **Battery / Thermal state**, and **Internet / Wi-Fi or Network** below. Show Locked/Unlocked, Display On/Dimmed/Off, Lid Open/Closed, battery percentage and power source, and the macOS thermal state with severity colour. Thermal state has no separate section.
 9. Preserve unknown and last-known readings. An unreachable Mac must not be presented as currently off, asleep, locked or unlocked based only on a lost connection.
 
     Owner addition, 24 October: a compact third facts row shows the Mac's actual Internet check and current Wi-Fi name (or Ethernet/other network), independently of nearby Bluetooth. No route is Offline; a route without successful public HTTPS checks is Check failed. Unknown/Checking remain explicit; Wi-Fi permission is optional and denied/hidden names are unavailable, never inferred. No new notifications. Prepare and emulator-test this addition, then wait for explicit approval before installing either updated app.
@@ -41,7 +41,7 @@ Current scope: retain official Keepresso updates and avoid maintaining a persona
 ## Session and command behaviour
 
 25. Starting a manual session uses the chosen duration and stock Keepresso semantics: trigger control is paused for the manual session.
-26. Run the observer engine for a bounded assessment when opening/refreshing the condition preview, then stop its sampling. Do not keep the duplicate detector running merely because the phone dashboard remains open. Ordinary Mac status and reminders update independently, using the native lightweight session snapshot and separate macOS readings. The worker hard ceiling is 8 seconds (observed typical worker about 4 seconds), not a phone-to-Mac guarantee; CPU-only detection may need longer or remain uncertain. Show Checking while data is incomplete. The preview does not resume native trigger control, change the manual timer or create power holds. Never present observer-only grace or a cold-start negative as an authoritative native handover decision.
+26. Run the observer engine once when the paired phone app opens or returns to the foreground, after an authenticated Mac connection is ready. The user can also tap Check. Stop sampling after each attempt. Ordinary status polling never checks triggers. Retain the last completed rows, verdicts and checked time through polling, route/session changes and failed attempts; only a successful check replaces them. Progress, changed-context information and attempt errors are separate from that result. Do not keep the duplicate detector running merely because the phone dashboard remains open. Ordinary Mac status and reminders update independently, using the native lightweight session snapshot and separate macOS readings. The engine watchdog is 8 seconds, with a 12-second parent bound allowing process startup, not a phone-to-Mac guarantee; CPU-only detection may need longer or remain uncertain. Show Checking while data is incomplete. The preview does not resume native trigger control, change the manual timer or create power holds. Never present observer-only grace or a cold-start negative as an authoritative native handover decision.
 27. Manual expiry or stop leaves triggers paused, matching the unmodified app. Automatic return to the previous state, including timers started in native Keepresso, is deferred rather than implemented through an unreliable event/polling approximation.
 28. Resume triggers is an immediate handover, ending manual timer control. Show a concise confirmation explaining that no current match may allow sleep and make the Mac unreachable. A detected condition can change; the preview is not a promise of continued wakefulness.
 29. Respect Keepresso's separately configured end action. Do not describe allowing normal sleep as equivalent to issuing an immediate sleep command.
@@ -82,15 +82,15 @@ Remote-control feasibility remains separate from preview feasibility: the public
 
 ## Reminders and warnings carried forward
 
-35. Send a reminder every hour while Keepresso is actively holding the Mac awake. Include the scheduled end if there is one, otherwise say there is no automatic end time.
-36. **OK** dismisses that reminder and preserves the next regularly scheduled hourly reminder.
-37. **Snooze 6 hours** silences routine reminders for this Mac for six hours. Show the end time and provide Resume reminders.
-38. Snoozing notifications never extends, starts, stops or pauses a brewing session.
-39. Proposed default retained from the earlier mock: battery, heat and sleep-failure warnings bypass the routine-reminder snooze.
-40. Warn once when the session ends but the Mac has not slept after a grace period; the current draft uses five minutes, configurable in Settings.
-41. Give stronger prominence to the case where system sleep remains disabled after Keepresso becomes inactive. Include the known reason when available.
-42. Cancel an obsolete stopped-session warning if another legitimate session begins before it is due. Do not send a stale warning after the Mac slept and later woke normally.
-43. Include battery/thermal pauses and relevant failures in the warning/activity experience without duplicate alerts for the same incident.
+35. Send one reminder after the open-lid Mac has brewed continuously while unattended for an hour. Use the start of unattended brewing in the title.
+36. Rearm only after user input resumes or the continuous open-lid brewing period ends.
+37. Preserve the existing routine-snooze and reminder-enable preferences.
+38. Snoozing alerts changes only their presentation.
+39. Alert once when the lid is closed and the Mac stays fully awake. Play Glass from the same decision on the Mac.
+40. Keep a single ongoing Android status for this lid incident. Update it silently when brewing changes, and clear it when the lid opens or sleep begins.
+41. Include the brewing mode, end time and configured Automatic handover where applicable. If a closed-lid brew ends while the Mac stays on, show “Keepresso is no longer brewing.”
+42. All three alert flows require full wake. DarkWake never creates an alert.
+43. Use the same authenticated Sleep now action and result reporting from the critical alarm and both lid notifications.
 44. Retain a small activity history of session changes, trigger changes, reminders, snoozes, commands and outcomes.
 
 Presentation refinement: keep the small reminder-status line, and remove the extra boxed feedback beneath it from the Status screen.
@@ -115,11 +115,17 @@ Presentation refinement: keep the small reminder-status line, and remove the ext
 
 ## Temperature and additional status
 
-60. Add a temperature reading to the mobile dashboard, in °C, naming the selected sensor or sensor group. Show Unavailable when unsupported, and explicitly distinguish current, stale and unknown readings.
-61. Show a readable thermal status as well as colour: normal stays neutral, elevated/warm is yellow, high/critical is red. Default classification should follow macOS thermal pressure; if Celsius thresholds are offered, make them configurable for the chosen sensor rather than presenting universal safe temperature cutoffs. The mock's numbers and thermal states are sample data, not calibrated limits.
+60. Show Apple’s macOS thermal state in the mobile dashboard: Nominal, Fair, Serious or Critical. Show Unknown if no current reading is available.
+61. Base noncritical thermal notifications on actions reported by Keepresso’s configured native guard. Notify when it engages and again at most every five minutes, with a 30-minute phone snooze. Critical starts one Android alarm, with Sleep now and a confirmed five-minute Ignore. A fresh Critical report can re-arm a snoozed episode. On recovery the same screen shows the current Apple thermal state and offers Sleep now or Dismiss.
 62. Reuse Keepresso's original low-battery pause icon in Android and preserve its yellow accent in both light and dark appearance.
 
 Keep native Keepresso setting names unchanged. Do not maintain a fork for wording changes.
+
+## Guided setup and trigger coverage — owner correction, 29 October
+
+63. Automatically show a simple setup flow on foreground opening for an unhandled app build or permission scope, including an already-paired owner. One **Continue** requests relevant permissions in sequence. Keep macOS allow/deny choices with the owner; never prompt from hidden login. Keep **Review setup…** for recovery rather than a collection of individual permission buttons. Preserve pairing and ordinary status updates while the owner answers.
+64. Derive access from every configured native rule, not the owner's current three. Include companion Bluetooth, Wi-Fi name and optional remote-control needs. Do not request unrelated recording, Input Monitoring, Full Disk Access or Mac notification access. Declined inputs stay unavailable; complete setup can retain explicit skips without nagging.
+65. Assess all 20 pinned Keepresso 1.27.0 trigger types through unchanged native matching and audited input boundaries. Verified complete input can prove inactivity; unavailable/cold/partial input remains unknown unless a direct positive is sufficient. Keep the independent observer's baseline/grace limitations explicit. Future unsupported upstream versions require a companion compatibility update. See [trigger support](TRIGGER_SUPPORT.md).
 
 ## Feasibility items for the architecture phase
 

@@ -27,6 +27,39 @@ public final class IORegistryLidState: LidStateReading {
     }
 }
 
+/// Shares one lid reading among everything that looks within a tick (the
+/// session ticker and the closed-lid features), so the IORegistry is read
+/// once a second rather than once per feature. Timed with a monotonic clock
+/// that keeps counting through sleep, so a wall clock set back can't pin a
+/// stale reading.
+public final class CachedLidState: LidStateReading, @unchecked Sendable {
+    private let source: LidStateReading
+    private let ttlNanos: UInt64
+    private let clock: @Sendable () -> UInt64
+    private let lock = NSLock()
+    private var cached: (at: UInt64, closed: Bool?)?
+
+    public init(
+        _ source: LidStateReading = IORegistryLidState(),
+        ttl: TimeInterval = 0.5,
+        clock: @escaping @Sendable () -> UInt64 = { clock_gettime_nsec_np(CLOCK_MONOTONIC) }
+    ) {
+        self.source = source
+        self.ttlNanos = UInt64(max(ttl, 0) * 1_000_000_000)
+        self.clock = clock
+    }
+
+    public func isClosed() -> Bool? {
+        lock.lock()
+        defer { lock.unlock() }
+        let now = clock()
+        if let cached, now >= cached.at, now - cached.at < ttlNanos { return cached.closed }
+        let closed = source.isClosed()
+        cached = (now, closed)
+        return closed
+    }
+}
+
 /// Commands the display(s) to sleep immediately, independent of any idle timer.
 public protocol DisplaySleepCommanding: Sendable {
     func sleepNow()

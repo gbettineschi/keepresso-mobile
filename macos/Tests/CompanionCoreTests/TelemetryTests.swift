@@ -4,41 +4,53 @@ import KeepressoCore
 @testable import CompanionCore
 
 struct TelemetryTests {
-    private final class Sensors:ThermalSensorReading {
-        var values:[String:Double]=["Tp01":58,"Te05":62,"Tg01":95,"TB0T":33]
-        var failed=false
-        func discoverSensors()->[ThermalSensor]{values.keys.map{ThermalSensor(id:$0,name:$0)}}
-        func readCelsius(ids:[String])->[String:Double]?{failed ? nil:values.filter{ids.contains($0.key)}}
+    @Test func nativeThermalObservationRequiresMatchingFreshActiveEvidence() throws {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let data = Data(#"{"thermalState":"fair","thermalGuardActive":true,"thermalBrewingPaused":true}"#.utf8)
+        let native = try WireJSON.decoder.decode(NativeThermalReport.self, from: data)
+        let fresh = MacThermalReading(system: .fair, report: native, writtenAt: now.addingTimeInterval(-5), now: now)
+        #expect(fresh.state == .fair)
+        #expect(fresh.guardActive == true)
+        #expect(fresh.brewingPaused == true)
+        let stale = MacThermalReading(system: .fair, report: native, writtenAt: now.addingTimeInterval(-16), now: now)
+        #expect(stale.guardActive == nil)
+        #expect(stale.brewingPaused == nil)
+        let mismatched = MacThermalReading(system: .critical, report: native, writtenAt: now, now: now)
+        #expect(mismatched.state == .critical)
+        #expect(mismatched.guardActive == nil)
+        #expect(mismatched.brewingPaused == nil)
     }
-    @Test func cpuReadingDoesNotConfuseGpuOrBatteryWithCpu(){
-        let sensors=Sensors();let monitor=CompanionTemperatureMonitor(sensors:sensors)
-        XCTAssertEqual(monitor.reading()?.celsius,62)
-        XCTAssertEqual(monitor.reading()?.sensor,"CPU (hottest sensor)")
+
+    @Test func olderNativeReportLeavesGuardUnknown() throws {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let legacy = try WireJSON.decoder.decode(NativeThermalReport.self, from: Data(#"{"isActive":true}"#.utf8))
+        let reading = MacThermalReading(system: .serious, report: legacy, writtenAt: now, now: now)
+        #expect(reading.state == .serious)
+        #expect(reading.guardActive == nil)
     }
-    @Test func failedOrImplausibleReadCannotReuseOldTemperatureAsCurrent(){
-        let sensors=Sensors();var clock=0.0
-        let monitor=CompanionTemperatureMonitor(sensors:sensors,monotonic:{clock})
-        XCTAssertEqual(monitor.reading()?.celsius,62)
-        clock=2;sensors.failed=true;XCTAssertNil(monitor.reading())
-        clock=4;sensors.failed=false;sensors.values=["Tp01":Double.nan,"Te05":0,"Tg01":95]
-        XCTAssertNil(monitor.reading())
-    }
-    @Test func intelUsesCpuTemperatureKeysAndNoOtherSensorFallback(){
-        let sensors=Sensors();sensors.values=["TC0P":53,"TB0T":34]
-        XCTAssertEqual(CompanionTemperatureMonitor(sensors:sensors).reading()?.celsius,53)
-        sensors.values=["Tg01":80,"TB0T":34]
-        XCTAssertNil(CompanionTemperatureMonitor(sensors:sensors).reading())
-    }
+
     @Test func observerBudgetAllowsStartupMarginWhileRemainingBounded()async throws{
-        let data=try await BoundedWorker.run(executable:URL(fileURLWithPath:"/usr/bin/printf"),arguments:["ready"],timeout:8)
+        let data=try await BoundedWorker.run(executable:URL(fileURLWithPath:"/usr/bin/printf"),arguments:["ready"],timeout:12)
         XCTAssertEqual(String(data:data,encoding:.utf8),"ready")
     }
-    @Test func failedRefreshKeepsPriorTimeAndRowsWithoutBecomingAStaleSuccess(){
+    @Test func failedRefreshKeepsTheCompletedAssessmentQualityAndVerdict(){
         var old=TriggerPreview();old.state="ready";old.checkedAt=Date(timeIntervalSince1970:100);old.combined=true
         old.rules=[.init(id:"0",label:"Agent working",satisfied:true,inGrace:false,graceRemaining:nil,details:[])]
         var failed=TriggerPreview();failed.state="error"
         failed.retainPriorAssessment(old)
-        XCTAssertEqual(failed.state,"error");XCTAssertEqual(failed.checkedAt,Date(timeIntervalSince1970:100))
-        XCTAssertEqual(failed.rules.first?.label,"Agent working");XCTAssertNil(failed.combined)
+        XCTAssertEqual(failed.state,"ready");XCTAssertEqual(failed.checkedAt,Date(timeIntervalSince1970:100))
+        XCTAssertEqual(failed.rules.first?.label,"Agent working");XCTAssertEqual(failed.combined,true)
+    }
+}
+
+extension TelemetryTests {
+    @Test func successfulEmptyAssessmentReplacesPreviousRows() {
+        var old=TriggerPreview();old.state="ready";old.checkedAt=Date(timeIntervalSince1970:100)
+        old.rules=[.init(id:"0",label:"Agent working",satisfied:true,inGrace:false,graceRemaining:nil,details:[])]
+        var empty=TriggerPreview();empty.state="ready";empty.checkedAt=Date(timeIntervalSince1970:200);empty.combined=false
+        empty.retainPriorAssessment(old)
+        XCTAssertTrue(empty.rules.isEmpty)
+        XCTAssertEqual(empty.checkedAt,Date(timeIntervalSince1970:200))
+        XCTAssertEqual(empty.combined,false)
     }
 }
