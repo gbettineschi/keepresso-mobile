@@ -1,6 +1,6 @@
 # Internet and background notifications
 
-This guide describes the **iroh + direct Firebase** previews from 0.6.9. Older apps need the [legacy Vercel/Firestore guide](legacy/SELF_HOSTING.md) until both are updated and verified.
+This guide describes the **iroh + direct Firebase** previews from 0.6.10. Older apps need the [legacy Vercel/Firestore guide](legacy/SELF_HOSTING.md) until both are updated and verified.
 
 You do not deploy a server. iroh handles Internet connections through its public discovery and encrypted relay infrastructure. Firebase is only for waking Android to show notifications; status and controls do not pass through Firebase. Bluetooth works independently.
 

@@ -8,8 +8,8 @@ android {
     compileSdk = 35
     defaultConfig {
         applicationId = namespace; minSdk = 28; targetSdk = 35
-        versionCode = providers.gradleProperty("keepresso.releaseVersionCode").orElse("6009").get().toInt()
-        versionName = providers.gradleProperty("keepresso.releaseVersion").orElse("0.6.9").get()
+        versionCode = providers.gradleProperty("keepresso.releaseVersionCode").orElse("6010").get().toInt()
+        versionName = providers.gradleProperty("keepresso.releaseVersion").orElse("0.6.10").get()
     }
     defaultConfig { testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
     buildFeatures { compose = true; buildConfig = true }
@@ -31,6 +31,7 @@ android {
             keyPassword = signingInputs.getValue("KEEPRESSO_SIGNING_KEY_PASSWORD")!!
         }
         buildTypes.getByName("debug").signingConfig = persistentDebug
+        buildTypes.getByName("release").signingConfig = persistentDebug
     }
     packaging.resources.excludes += setOf("darwin-*/**", "win32-*/**", "linux-*/**")
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }

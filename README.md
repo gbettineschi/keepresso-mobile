@@ -19,7 +19,7 @@ The same pairing authorizes both connections. There is no shared Keepresso backe
 
 The Mac helper requires **Apple silicon and macOS 14.5+**. Android requires **Android 9+**. Background notifications require Google Play services. The Mac ZIP is ad-hoc signed and may require approval in System Settings on first open. [Mac signing and troubleshooting](docs/MAC_SIGNING.md)
 
-Stock Keepresso supports status, trigger checks, and the controls shown as available in the app. The new unattended, closed-lid, and critical alarm flows and the new **Sleep now** path depend on status fields from an experimental native Keepresso build. [Preview compatibility and verification](docs/releases/0.6.9.md)
+Stock Keepresso supports status, trigger checks, and the controls shown as available in the app. The new unattended, closed-lid, and critical alarm flows and the new **Sleep now** path depend on status fields from an experimental native Keepresso build. [Preview compatibility and verification](docs/releases/0.6.10.md)
 
 ## Privacy and control
 
