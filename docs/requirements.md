@@ -82,15 +82,15 @@ Remote-control feasibility remains separate from preview feasibility: the public
 
 ## Reminders and warnings carried forward
 
-35. Send one reminder after the open-lid Mac has brewed continuously while unattended for an hour. Use the start of unattended brewing in the title.
-36. Rearm only after user input resumes or the continuous open-lid brewing period ends.
-37. Preserve the existing routine-snooze and reminder-enable preferences.
+35. Send one reminder after a fully awake Mac has brewed unattended for an hour, while a usable display is awake. Use the start of unattended brewing in the title.
+36. Rearm after real user input or the brewing episode ends. Display/context transitions alone must not repeat an already-sent unattended reminder.
+37. Preserve routine-snooze and reminder-enable preferences.
 38. Snoozing alerts changes only their presentation.
-39. Play Glass once on the Mac at an observed open-to-closed lid transition during full wake. Send the phone alert only after one continuous minute fully awake with the lid closed. Waking already closed does not play Glass.
-40. Keep a single ongoing Android status for this lid incident. Update it silently when brewing changes, and clear it on received evidence that the lid opened or sleep began. Refresh evidence every 90 seconds while awake; Android also expires the card after three minutes without fresh evidence, even if the phone app is no longer running. Expiration does not prove the Mac slept.
-41. Include the brewing mode, end time and configured Automatic handover where applicable. If a closed-lid brew ends while the Mac stays on, show “Keepresso is no longer brewing.”
-42. All three alert flows require full wake. DarkWake never creates an alert.
-43. Use the same authenticated Sleep now action and result reporting from the critical alarm and both lid notifications.
+39. Play Glass once at an observed physical open-to-closed lid transition, with confirmed full wake and no usable awake screen. No brewing prerequisite. Never play it on monitor standby, a refresh, or waking already closed. Retain the optional mute override.
+40. After 60 continuous full-wake seconds without a usable awake display, keep one ongoing phone card. Say “Your Mac is running with the lid closed” or “Your Mac is running with the screen off”, according to the physical lid. Update the same incident silently across these contexts and when brewing changes. An awake external display makes closed-lid desktop use normal; its standby is treated as screen unavailability. A closed built-in display is excluded even if its framebuffer remains awake. Dim, lock and screensaver alone do not mean display sleep.
+41. Include brewing mode, end time and Automatic handover. If brewing stops while the Mac remains awake, show “Keepresso is no longer brewing.” Refresh evidence every 90 seconds. After 180 seconds without fresh evidence, turn the card into quiet, dismissible history: “Your Mac was running…” / “Last confirmed at TIME.” Delivered full-wake normal context or sleep resolution clears it. Unknown evidence cannot refresh it; DarkWake hides it. Dismissal survives app restart, and old callbacks cannot overwrite newer evidence. Android removes an expired live card even without the app; quiet history may arrive later under OS scheduling restrictions.
+42. New alerts require confirmed full wake. DarkWake never creates or refreshes one. Missing wake/display evidence is not proof of sleep or recovery.
+43. Use the same authenticated Sleep now flow everywhere: Going to sleep, Couldn’t sleep, or Couldn’t request sleep. Historical notification actions never queue a power command while disconnected.
 44. Retain a small activity history of session changes, trigger changes, reminders, snoozes, commands and outcomes.
 
 Presentation refinement: keep the small reminder-status line, and remove the extra boxed feedback beneath it from the Status screen.
@@ -116,7 +116,7 @@ Presentation refinement: keep the small reminder-status line, and remove the ext
 ## Temperature and additional status
 
 60. Show Apple’s macOS thermal state in the mobile dashboard: Nominal, Fair, Serious or Critical. Show Unknown if no current reading is available.
-61. Base noncritical thermal notifications on actions reported by Keepresso’s configured native guard. Notify when it engages and again at most every five minutes, with a 30-minute phone snooze. Critical starts one Android alarm, with Sleep now and a confirmed five-minute Ignore. A fresh Critical report can re-arm a snoozed episode. On recovery the same screen shows the current Apple thermal state and offers Sleep now or Dismiss.
+61. Thermal onset requires full wake and either a physically closed lid, brewing, or a fresh native report that the thermal guard paused brewing. Base noncritical warnings on the configured native guard, no more than once per five minutes, with a 30-minute phone snooze. Once Critical starts, stopped brewing, lid opening, lost contact and unknown readings cannot resolve it. Keep the repeated standard Android notification tone until a confirmed lower Apple state or confirmed Ignore for five minutes; rearm after Ignore even without fresh telemetry. Use alarm audio without changing alarm volume. Silent ringer mode does not govern it; alarm volume zero, channel permissions, DND and full-screen access remain OS-controlled. Precise Ignore rearming requires Android’s optional Alarms & reminders access; otherwise Android may delay it. On confirmed recovery show the lower state and Sleep now/Dismiss. Force-stop, uninstall and revoked permissions remain platform limits.
 62. Reuse Keepresso's original low-battery pause icon in Android and preserve its yellow accent in both light and dark appearance.
 
 Keep native Keepresso setting names unchanged. Do not maintain a fork for wording changes.

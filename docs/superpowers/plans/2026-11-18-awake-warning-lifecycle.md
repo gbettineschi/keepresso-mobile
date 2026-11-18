@@ -21,7 +21,7 @@
 - No new server, persistent Android foreground service, wake lock, exact-alarm permission, or private desktop-mode API for informative warning history.
 - Real lid/display/power tests are owner-operated. Automated tests use pure fixtures, injected readers and an isolated emulator.
 - Product wording is exactly the spec's live/history titles. History is silent and dismissible. First new live phone incident can sound even when waking already closed; Glass cannot.
-- Unresolved Critical remains audible even when readings are stale, except during confirmed five-minute Ignore. Only a confirmed lower thermal state marks recovery. Use a gentle warning tone and existing alarm volume; never force maximum volume or promise to bypass denied OS settings.
+- Unresolved Critical remains audible even when readings are stale, except during confirmed five-minute Ignore. Only a confirmed lower thermal state marks recovery. Use Android’s standard notification tone and existing alarm volume; never force maximum volume or promise to bypass denied OS settings.
 
 ## Review Focus
 
@@ -176,7 +176,7 @@
 - [ ] **3. Write failing snooze-receiver tests:** a callback at the old deadline cannot interrupt a newer Ignore; elapsed time survives wall-clock rollback; repeated app starts do not extend Ignore; previous-boot restoration obeys the five-minute bound. Exercise both exact-permission allowed and denied scheduling using injected scheduler fakes, then the isolated emulator.
 - [ ] **4. Implement the pure lifecycle and durable rearming, keeping 90-second freshness only for copy.** Remove the automatic five-minute ringing cap from unresolved attention. Unknown temperature, lack of contact and brew stop never mark recovery or silence an unsnoozed episode. Foreground and background restoration share the same persisted decision.
 - [ ] **5. Use the standard warning sound (owner correction during implementation):** Android’s current default notification tone, repeated by the system. Remove the custom cue. Preserve alarm-volume/DND/notification controls. Settings Test alert plays one pattern; do not trigger a physical looping alarm without the owner’s action.
-- [ ] **6. Implement the dedicated sound channel and concise settings readiness.** Read sound/DND readiness from the new Critical channel, preserving an already-allowed DND exception only where Android permits it; never override an explicit user block. The settings Test alert plays one gentle pattern without creating an unresolved Critical incident or a looping alarm. Alarm screen shows truthful last-reported Critical copy when stale, with Sleep now/Ignore. History's inexact scheduling and Critical's snooze scheduling remain separate, with distinct receiver identities.
+- [ ] **6. Implement the dedicated sound channel and concise settings readiness.** Read sound/DND readiness from the new Critical channel, preserving an already-allowed DND exception only where Android permits it; never override an explicit user block. The settings Test alert plays one standard notification sound without creating an unresolved Critical incident or a looping alarm. Alarm screen shows truthful last-reported Critical copy when stale, with Sleep now/Ignore. History's inexact scheduling and Critical's snooze scheduling remain separate, with distinct receiver identities.
 - [ ] **7. Run core and Critical/lifecycle instrumentation tests**, including an unresolved warning beyond five minutes, denied-permission fallback, recovery after process restart, and no automatic volume changes. Report OS permission and force-stop limits honestly.
 - [ ] **8. Commit** the Critical alarm deliverable separately from activity warning history.
 
@@ -198,4 +198,4 @@
 
 Map every spec section to Tasks 1–7 and keep public fields/signatures consistent. The owner selected continued Critical sound on stale evidence and Android’s standard notification tone; no unresolved sound-policy choice remains. Recommended execution is native/inline for this coupled state-machine change, with one fresh final reviewer; separate task commits retain review boundaries without a fresh implementation context for every small change.
 
-Only planning documents are changed at this stage. The installed 0.6.11 applications remain unchanged. The owner reviews this design/plan before implementation begins.
+The owner approved implementation. Tasks 1–6 are implemented and verified; delivery remains a preview until owner-operated lid/display/sleep checks are completed. The installed applications are updated only after package verification and final review.
