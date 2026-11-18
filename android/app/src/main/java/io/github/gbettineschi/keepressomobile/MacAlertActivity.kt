@@ -111,7 +111,7 @@ internal fun CriticalHeatDialog(alert: CriticalAlert, confirmIgnoreOnOpen: Boole
     var confirmIgnore by remember(alert.incidentId) { mutableStateOf(confirmIgnoreOnOpen) }
     var requested by remember(alert.incidentId) { mutableStateOf(false) }
     val (busy, outcome) = sleepFeedback(alert.macId, requested) { requested = false }
-    val critical = alert.status == CriticalAlarmStatus.CRITICAL
+    val critical = alert.status == CriticalAlarmStatus.CRITICAL || alert.status == CriticalAlarmStatus.STALE
     val dismiss = { CriticalHeatAlerts.dismiss(context, alert); onClose() }
     AlertDialog(
         onDismissRequest = { if (!critical) dismiss() },
@@ -129,7 +129,7 @@ internal fun CriticalHeatDialog(alert: CriticalAlert, confirmIgnoreOnOpen: Boole
     if (critical && confirmIgnore) AlertDialog(
         onDismissRequest = { confirmIgnore = false },
         title = { Text("Silence the alarm?") },
-        text = { Text("Your Mac is still critically hot. Silence the alarm for five minutes?") },
+        text = { Text(if (alert.status == CriticalAlarmStatus.STALE) "Your Mac last reported Critical heat; recovery is not confirmed. Silence the alarm for five minutes?" else "Your Mac is still critically hot. Silence the alarm for five minutes?") },
         confirmButton = { TextButton(onClick = { CriticalHeatAlerts.snooze(context, alert); onClose() }) { Text("Ignore for 5 minutes") } },
         dismissButton = { TextButton(onClick = { confirmIgnore = false }) { Text("Cancel") } },
     )

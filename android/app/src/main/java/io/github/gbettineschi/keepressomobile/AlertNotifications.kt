@@ -71,25 +71,31 @@ internal object AlertNotifications {
         manager(c).notify(tag, ALERT_ID, notification.build())
     }
 
-    fun critical(c: Context, alert: CriticalAlert, ring: Boolean) {
+    fun hasCriticalStatus(c: Context, mac: String, incident: String) = manager(c).activeNotifications.any { it.tag == criticalTag(mac, incident) }
+    fun hasCriticalAlarm(c: Context, mac: String, incident: String) = manager(c).activeNotifications.any {
+        it.tag == criticalTag(mac, incident) && it.notification.channelId == CriticalWarningSound.CHANNEL && it.notification.flags and Notification.FLAG_INSISTENT != 0
+    }
+
+    fun critical(c: Context, alert: CriticalAlert, ring: Boolean, silentUpdate: Boolean = false) {
         if (!canNotify(c)) return
         val manager = manager(c)
         val tag = criticalTag(alert.macId, alert.incidentId)
         val open = intent(c, MacAlertActivity.ACTION_ALARM, alert.macId, alert.incidentId)
         if (!ring) manager.createNotificationChannel(NotificationChannel(STATUS_CHANNEL, "Critical heat status", NotificationManager.IMPORTANCE_LOW))
-        else Notifications.channels(c)
-        val b = builder(c, if (ring) Notifications.URGENT_CHANNEL else STATUS_CHANNEL, alert.title, alert.body)
+        else CriticalWarningSound.ensure(c)
+        val unresolved = alert.status == CriticalAlarmStatus.CRITICAL || alert.status == CriticalAlarmStatus.STALE
+        val b = builder(c, if (ring) CriticalWarningSound.CHANNEL else STATUS_CHANNEL, alert.title, alert.body)
             .setContentIntent(open)
             .addAction(0, "Sleep now", intent(c, MacAlertActivity.ACTION_SLEEP, alert.macId, alert.incidentId))
             .setCategory(if (ring) NotificationCompat.CATEGORY_ALARM else NotificationCompat.CATEGORY_STATUS)
-            .setOngoing(alert.status == CriticalAlarmStatus.CRITICAL)
+            .setOngoing(unresolved)
             .setPriority(if (ring) NotificationCompat.PRIORITY_MAX else NotificationCompat.PRIORITY_LOW)
-        if (alert.status == CriticalAlarmStatus.CRITICAL) b.addAction(0, "Ignore for 5 minutes",
+        if (unresolved) b.addAction(0, "Ignore for 5 minutes",
             intent(c, MacAlertActivity.ACTION_IGNORE, alert.macId, alert.incidentId))
         if (ring) {
-            // NotificationManager owns looping and the cap also applies if the process is killed.
-            b.setTimeoutAfter(5 * 60_000L)
-            if (Build.VERSION.SDK_INT < 34 || manager.canUseFullScreenIntent()) b.setFullScreenIntent(open, true)
+            // Android owns the warning loop across process loss. Freshness changes copy, not sound.
+            b.setOnlyAlertOnce(silentUpdate)
+            if (!silentUpdate && (Build.VERSION.SDK_INT < 34 || manager.canUseFullScreenIntent())) b.setFullScreenIntent(open, true)
         } else b.setSilent(true).setOnlyAlertOnce(true)
         manager.notify(tag, ALERT_ID, b.build().also { if (ring) it.flags = it.flags or Notification.FLAG_INSISTENT })
     }

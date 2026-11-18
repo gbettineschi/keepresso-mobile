@@ -56,6 +56,7 @@ try:
         text = cards()
         if "keepresso.critical." not in text or "INSISTENT" not in text:
             raise RuntimeError("System-owned Critical warning did not survive five minutes/process loss")
+        print("System-owned unresolved Critical warning retained after 310s/process loss", flush=True)
     else:
         expected = "keepresso.critical." if args.mode == "snooze" else "Your Mac was running with the screen off"
         while expected not in cards():

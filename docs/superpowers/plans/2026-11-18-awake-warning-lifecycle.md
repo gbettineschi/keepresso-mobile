@@ -149,12 +149,12 @@
 - [ ] **6. Run core tests, Android lint and debug/test packaging.** Then run the incident and new lifecycle instrumentation classes. On the emulator only, use the two-stage host harness for normal process loss, and verify deep Doze and reboot; record real fallback delay rather than asserting exact 180-second execution. Force-stop is a documented boundary; reconcile on subsequent launch.
 - [ ] **7. Commit** the Android lifecycle deliverable after applicable checks pass. Report any broader-suite failures by name instead of calling the entire suite green.
 
-### Task 6: Persistent Critical warning, gentle tone and durable Ignore
+### Task 6: Persistent Critical warning, standard tone and durable Ignore
 
 **Files:**
 - Modify: `android/core/src/main/kotlin/io/github/gbettineschi/keepressomobile/core/AlertIncident.kt`
 - Create: `android/app/src/main/java/io/github/gbettineschi/keepressomobile/CriticalAlarmReceiver.kt`
-- Create: `android/app/src/main/res/raw/critical_warning.wav`
+- Create: `android/app/src/main/java/io/github/gbettineschi/keepressomobile/CriticalWarningSound.kt`
 - Modify: `android/app/src/main/java/io/github/gbettineschi/keepressomobile/WarningIncidents.kt`
 - Modify: `android/app/src/main/java/io/github/gbettineschi/keepressomobile/AlertNotifications.kt`
 - Modify: `android/app/src/main/java/io/github/gbettineschi/keepressomobile/MacAlertActivity.kt`
@@ -168,14 +168,14 @@
 - Preserve `CriticalAlarmStatus` values; STALE describes evidence, not a recovered or silent alarm. Snooze takes precedence over freshness.
 - Extend `CriticalAlarmState` with `needsAttention(now: Instant): Boolean`; it is true for unresolved unsnoozed Critical or STALE. `shouldRearm(now)` permits unresolved stale episodes after Ignore expires.
 - `CriticalAlarmReceiver.onReceive(Context, Intent)` validates current pairing, incident and snooze version before ringing. Persist deadlines before canceling the current alarm; use monotonic time within a boot and the spec's bounded previous-boot fallback.
-- Define one new Critical channel ID `critical_heat_alarm_v2`, a resource-name sound URI ending `/raw/critical_warning`, AudioAttributes.USAGE_ALARM and high importance. Keep the activity channel ID unchanged; never set the phone's alarm-stream volume. A current unresolved alarm has no fixed notification timeout.
+- Define one new Critical channel ID `critical_heat_alarm_v2`, Android’s current default notification sound URI, AudioAttributes.USAGE_ALARM and high importance. Keep the activity channel ID unchanged; never set the phone's alarm-stream volume. A current unresolved alarm has no fixed notification timeout.
 - Manifest declares SCHEDULE_EXACT_ALARM for Critical Ignore rearming only. On API31+ inspect canScheduleExactAlarms; settings offer a single link to system special access. Use an inexact fallback when denied/revoked and report that timing may be delayed. No auto-grant, perpetual foreground service or app wake lock.
 
 - [ ] **1. Write failing pure state tests:** freshness expires at 90 seconds without ending attention; snoozed Critical remains snoozed when it becomes stale; at 300 seconds unresolved stale Critical needs rearming; confirmed recovery wins over any pending snooze callback.
 - [ ] **2. Write failing isolated instrumentation tests (and the Task 5 two-stage host harness for actual process death):** a fresh alarm becomes stale without switching to a quiet channel, losing its Ignore action or expiring after five minutes; process loss retains the OS-owned warning; a fresh lower-state event stops sound and shows the recovered presentation. Test old/new incident and pairing-removal races.
 - [ ] **3. Write failing snooze-receiver tests:** a callback at the old deadline cannot interrupt a newer Ignore; elapsed time survives wall-clock rollback; repeated app starts do not extend Ignore; previous-boot restoration obeys the five-minute bound. Exercise both exact-permission allowed and denied scheduling using injected scheduler fakes, then the isolated emulator.
 - [ ] **4. Implement the pure lifecycle and durable rearming, keeping 90-second freshness only for copy.** Remove the automatic five-minute ringing cap from unresolved attention. Unknown temperature, lack of contact and brew stop never mark recovery or silence an unsnoozed episode. Foreground and background restoration share the same persisted decision.
-- [ ] **5. Prepare and preview the original gentle warning cue:** short two-note sound plus pause, approximately four seconds per pattern, no siren or escalating volume. Preserve alarm-volume/DND/notification controls. Do not trigger an alarm on the physical phone for audition without the owner's action; provide an ordinary playable preview first.
+- [ ] **5. Use the standard warning sound (owner correction during implementation):** Android’s current default notification tone, repeated by the system. Remove the custom cue. Preserve alarm-volume/DND/notification controls. Settings Test alert plays one pattern; do not trigger a physical looping alarm without the owner’s action.
 - [ ] **6. Implement the dedicated sound channel and concise settings readiness.** Read sound/DND readiness from the new Critical channel, preserving an already-allowed DND exception only where Android permits it; never override an explicit user block. The settings Test alert plays one gentle pattern without creating an unresolved Critical incident or a looping alarm. Alarm screen shows truthful last-reported Critical copy when stale, with Sleep now/Ignore. History's inexact scheduling and Critical's snooze scheduling remain separate, with distinct receiver identities.
 - [ ] **7. Run core and Critical/lifecycle instrumentation tests**, including an unresolved warning beyond five minutes, denied-permission fallback, recovery after process restart, and no automatic volume changes. Report OS permission and force-stop limits honestly.
 - [ ] **8. Commit** the Critical alarm deliverable separately from activity warning history.
@@ -196,6 +196,6 @@
 
 ## Planning self-review and execution handoff
 
-Map every spec section to Tasks 1–7 and keep public fields/signatures consistent. The owner selected continued Critical sound on stale evidence and a gentle warning tone; no unresolved sound-policy choice remains. Recommended execution is native/inline for this coupled state-machine change, with one fresh final reviewer; separate task commits retain review boundaries without a fresh implementation context for every small change.
+Map every spec section to Tasks 1–7 and keep public fields/signatures consistent. The owner selected continued Critical sound on stale evidence and Android’s standard notification tone; no unresolved sound-policy choice remains. Recommended execution is native/inline for this coupled state-machine change, with one fresh final reviewer; separate task commits retain review boundaries without a fresh implementation context for every small change.
 
 Only planning documents are changed at this stage. The installed 0.6.11 applications remain unchanged. The owner reviews this design/plan before implementation begins.
