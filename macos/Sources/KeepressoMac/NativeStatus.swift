@@ -37,6 +37,7 @@ private struct NativeTriggerModeRequest: Encodable {
 
 @MainActor final class NativeStatus {
     let network=MacNetworkStatus()
+    private let displayAvailability = MacDisplayAvailabilityReader()
     private let modelIdentifier = MachineIdentity.currentModelIdentifier()
     static let appURL=URL(fileURLWithPath:"/Applications/Keepresso.app")
     func runningApp() -> NSRunningApplication? { NSWorkspace.shared.runningApplications.first { $0.bundleURL?.standardizedFileURL == Self.appURL.standardizedFileURL } }
