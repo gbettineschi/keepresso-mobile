@@ -76,7 +76,7 @@ internal object AlertNotifications {
         it.tag == criticalTag(mac, incident) && it.notification.channelId == CriticalWarningSound.CHANNEL && it.notification.flags and Notification.FLAG_INSISTENT != 0
     }
 
-    fun critical(c: Context, alert: CriticalAlert, ring: Boolean, silentUpdate: Boolean = false) {
+    fun critical(c: Context, alert: CriticalAlert, ring: Boolean) {
         if (!canNotify(c)) return
         val manager = manager(c)
         val tag = criticalTag(alert.macId, alert.incidentId)
@@ -84,7 +84,9 @@ internal object AlertNotifications {
         if (!ring) manager.createNotificationChannel(NotificationChannel(STATUS_CHANNEL, "Critical heat status", NotificationManager.IMPORTANCE_LOW))
         else CriticalWarningSound.ensure(c)
         val unresolved = alert.status == CriticalAlarmStatus.CRITICAL || alert.status == CriticalAlarmStatus.STALE
-        val b = builder(c, if (ring) CriticalWarningSound.CHANNEL else STATUS_CHANNEL, alert.title, alert.body)
+        val b = builder(c, if (ring) CriticalWarningSound.CHANNEL else STATUS_CHANNEL,
+            if (ring) "Your Mac reported Critical heat" else alert.title,
+            if (ring) "Last reported thermal state: Critical." else alert.body)
             .setContentIntent(open)
             .addAction(0, "Sleep now", intent(c, MacAlertActivity.ACTION_SLEEP, alert.macId, alert.incidentId))
             .setCategory(if (ring) NotificationCompat.CATEGORY_ALARM else NotificationCompat.CATEGORY_STATUS)
@@ -93,9 +95,8 @@ internal object AlertNotifications {
         if (unresolved) b.addAction(0, "Ignore for 5 minutes",
             intent(c, MacAlertActivity.ACTION_IGNORE, alert.macId, alert.incidentId))
         if (ring) {
-            // Android owns the warning loop across process loss. Freshness changes copy, not sound.
-            b.setOnlyAlertOnce(silentUpdate)
-            if (!silentUpdate && (Build.VERSION.SDK_INT < 34 || manager.canUseFullScreenIntent())) b.setFullScreenIntent(open, true)
+            // Android owns this loop across process loss. No freshness-only silent updates.
+            if (Build.VERSION.SDK_INT < 34 || manager.canUseFullScreenIntent()) b.setFullScreenIntent(open, true)
         } else b.setSilent(true).setOnlyAlertOnce(true)
         manager.notify(tag, ALERT_ID, b.build().also { if (ring) it.flags = it.flags or Notification.FLAG_INSISTENT })
     }

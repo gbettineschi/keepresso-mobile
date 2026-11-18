@@ -148,6 +148,12 @@ internal object CriticalHeatAlerts {
         publish(c, store, alert.macId, record)
     }
 
+    @Synchronized internal fun invalidatePairing(c: Context, macId: String, mutation: () -> Unit) = LidAlert.withLock {
+        // Pair removal/replacement holds both alert monitors through cancellation and storage invalidation.
+        clear(c, macId)
+        mutation()
+    }
+
     @Synchronized fun clear(c: Context, macId: String) {
         pending?.let(handler::removeCallbacks)
         pending = null
@@ -188,7 +194,9 @@ internal object CriticalHeatAlerts {
             AlertNotifications.cancelCritical(context, macId, incidentId)
         } else if (alarm.needsAttention(now)) {
             val alreadyRinging = AlertNotifications.hasCriticalAlarm(context, macId, incidentId)
-            if (!alreadyRinging || before != view) AlertNotifications.critical(context, view, ring = true, silentUpdate = alreadyRinging)
+            // The OS card uses timeless last-reported copy. Never replace an actual playing loop
+            // for freshness alone: ONLY_ALERT_ONCE updates can stop sound on some Android versions.
+            if (!alreadyRinging) AlertNotifications.critical(context, view, ring = true)
         } else if (before != view || !AlertNotifications.hasCriticalStatus(context, macId, incidentId)) {
             AlertNotifications.cancelCritical(context, macId, incidentId)
             AlertNotifications.critical(context, view, ring = false)

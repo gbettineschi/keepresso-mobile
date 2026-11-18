@@ -110,4 +110,42 @@ class AwakeAlertLifecycleTest {
         LidAlert.reconcile(c, mac.macId, incident, id)
         Assert.assertTrue(cards().isEmpty())
     }
+    @Test fun delayedButNewerEvidenceCannotResurrectDismissedOrDarkWakeHistory() {
+        val old = post(age = -240)
+        waitFor { cards().size == 1 }
+        LidAlert.dismiss(c, mac.macId, incident, old, historical = true)
+        waitFor { cards().isEmpty() }
+        val late = post(age = -181, phase = "updated")
+        val store = CredentialStore(c)
+        Assert.assertEquals(late, obj(requireNotNull(store.readPrivate(LID_INCIDENT_KEY))).string("phoneDismissedEventId"))
+        LidAlert.restore(c)
+        Assert.assertTrue(cards().isEmpty())
+    }
+    @Test fun newerButExpiredEvidenceCannotUndoDarkWakeSuppression() {
+        post(age = -240)
+        ReminderDelivery.snapshot(c, buildJsonObject {
+            put("capturedAt", time.minusSeconds(220).toString())
+            put("mac", buildJsonObject { put("wakeState", "dark") })
+        })
+        waitFor { cards().isEmpty() }
+        post(age = -181, phase = "updated")
+        val record = obj(requireNotNull(CredentialStore(c).readPrivate(LID_INCIDENT_KEY)))
+        Assert.assertTrue(Instant.parse(record.string("phoneDarkWakeAt")) >= Instant.parse(record.string("createdAt")))
+        LidAlert.restore(c)
+        Assert.assertTrue(cards().isEmpty())
+    }
+    @Test fun historicalTimeUsesOffsetCorrectedPhoneObservation() {
+        post()
+        val observed = Instant.now().minusSeconds(181)
+        val store = CredentialStore(c)
+        val record = obj(requireNotNull(store.readPrivate(LID_INCIDENT_KEY)))
+        store.writePrivate(LID_INCIDENT_KEY, JsonObject(record + mapOf(
+            "createdAt" to JsonPrimitive(observed.plusSeconds(3600).toString()),
+            "phoneObservedAt" to JsonPrimitive(observed.toString()),
+        )).toString())
+        expireStored()
+        val formatted = android.text.format.DateFormat.getTimeFormat(c).format(java.util.Date.from(observed))
+        waitFor { cards().singleOrNull()?.notification?.extras?.getString(Notification.EXTRA_TEXT) == "Last confirmed at $formatted." }
+    }
+
 }

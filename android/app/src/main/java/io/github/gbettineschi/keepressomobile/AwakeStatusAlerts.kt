@@ -29,7 +29,7 @@ internal object LidAlert {
     private fun read(store: CredentialStore) = store.readPrivate(LID_INCIDENT_KEY)?.let(::obj)
     private fun state(record: JsonObject) = AwakeCardState(
         requireNotNull(AlertIncident.fromEvent(record)), record.string("id"), AwakeWarningContext.fromEvent(record),
-        Instant.parse(record.string("createdAt")), record[DEADLINE]?.jsonPrimitive?.longOrNull,
+        Instant.parse(record.stringOrNull(OBSERVED) ?: record.string("createdAt")), record[DEADLINE]?.jsonPrimitive?.longOrNull,
         record[BOOT]?.jsonPrimitive?.intOrNull, record.stringOrNull(DISMISSED), record.stringOrNull(HIDDEN)?.let(Instant::parse),
     )
 
@@ -43,10 +43,16 @@ internal object LidAlert {
         val retiredIds = if (previous != null && previous.id != incident.id) (retired + previous.id).takeLast(32) else retired
         val observed = Instant.now().minus(Duration.between(incident.createdAt, serverNow).coerceAtLeast(Duration.ZERO))
         val remaining = Duration.between(Instant.now(), observed.plusSeconds(180)).toMillis()
-        val record = JsonObject(event + mapOf(
+        val metadata = mutableMapOf<String, JsonElement>(
             RETIRED to JsonArray(retiredIds.map(::JsonPrimitive)), OBSERVED to JsonPrimitive(observed.toString()),
             DEADLINE to JsonPrimitive(SystemClock.elapsedRealtime() + remaining), BOOT to JsonPrimitive(boot(c)),
-        ) + if (previous?.id == incident.id && stored?.stringOrNull(DISMISSED) != null) mapOf(DISMISSED to stored.getValue(DISMISSED)) else emptyMap())
+        )
+        if (previous?.id == incident.id && stored?.stringOrNull(DISMISSED) != null) {
+            // A delayed newer packet must not undo acknowledgement without genuinely live evidence.
+            metadata[DISMISSED] = if (remaining <= 0) JsonPrimitive(event.string("id")) else stored.getValue(DISMISSED)
+        }
+        if (hidden != null && remaining <= 0) metadata[HIDDEN] = JsonPrimitive(maxOf(hidden, incident.createdAt).toString())
+        val record = JsonObject(event + metadata)
         store.writePrivate(LID_INCIDENT_KEY, record.toString())
         if (stored != null) cancelSchedule(c, macId, stored)
         if (previous != null && previous.id != incident.id) AlertNotifications.cancelLid(c, macId, previous.id)
@@ -86,6 +92,8 @@ internal object LidAlert {
         val incident = AlertIncident.fromEvent(record) ?: return
         AwakeAlertReceiver.cancel(c, macId, incident.id, record.string("id"))
     }
+
+    @Synchronized internal fun <T> withLock(body: () -> T): T = body()
 
     @Synchronized fun clearTimer() { pending?.let(handler::removeCallbacks); pending = null }
     @Synchronized fun clear(c: Context, macId: String) {

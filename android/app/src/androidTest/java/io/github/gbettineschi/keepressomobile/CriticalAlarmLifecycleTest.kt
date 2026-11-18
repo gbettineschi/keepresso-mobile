@@ -43,9 +43,12 @@ class CriticalAlarmLifecycleTest {
     }
     @Test fun missingReadingsKeepAlarmAndIgnoreUntilActualRecovery() {
         post(); waitFor { cards().size == 1 }
+        val first = cards().single()
+        Assert.assertEquals("Your Mac reported Critical heat", first.notification.extras.getString(Notification.EXTRA_TITLE))
         edit("observedAt" to JsonPrimitive(Instant.now().minusSeconds(100).toString()))
         CriticalHeatAlerts.restore(c)
         waitFor { cards().singleOrNull()?.notification?.extras?.getString(Notification.EXTRA_TITLE) == "Your Mac reported Critical heat" }
+        Assert.assertEquals(first.postTime, cards().single().postTime)
         val card = cards().single().notification
         Assert.assertNotEquals(0, card.flags and Notification.FLAG_INSISTENT)
         Assert.assertNotEquals(0, card.flags and Notification.FLAG_ONGOING_EVENT)
@@ -133,4 +136,48 @@ class CriticalAlarmLifecycleTest {
         CriticalWarningSound.ensure(c)
         Assert.assertEquals(sound, manager.getNotificationChannel(CriticalWarningSound.CHANNEL).sound)
     }
+    @Test fun channelMigrationHonorsPreviousBlockAndSilentSound() {
+        val blocked = android.app.NotificationChannel("old-blocked", "Blocked", NotificationManager.IMPORTANCE_NONE)
+        val silent = android.app.NotificationChannel("old-silent", "Silent", NotificationManager.IMPORTANCE_HIGH).apply { setSound(null, null); enableVibration(false) }
+        Assert.assertEquals(NotificationManager.IMPORTANCE_NONE, CriticalWarningSound.newChannel(c, blocked, false).importance)
+        Assert.assertNull(CriticalWarningSound.newChannel(c, silent, false).sound)
+        Assert.assertFalse(CriticalWarningSound.newChannel(c, silent, false).shouldVibrate())
+    }
+    @Test fun invalidationHoldsBothAlertLocksUntilCredentialsAreGone() {
+        post()
+        val started = java.util.concurrent.CountDownLatch(2)
+        val finished = java.util.concurrent.CountDownLatch(2)
+        val executor = java.util.concurrent.Executors.newFixedThreadPool(2)
+        try {
+            CriticalHeatAlerts.invalidatePairing(c, mac.macId) {
+                listOf<() -> Unit>({ CriticalHeatAlerts.restore(c) }, { LidAlert.restore(c) }).forEach { callback ->
+                    executor.execute { started.countDown(); try { callback() } finally { finished.countDown() } }
+                }
+                Assert.assertTrue(started.await(1, java.util.concurrent.TimeUnit.SECONDS))
+                val ranTooEarly = finished.await(150, java.util.concurrent.TimeUnit.MILLISECONDS)
+                CredentialStore(c).clear()
+                Assert.assertFalse("Receiver callbacks must wait until pairing invalidation has completed", ranTooEarly)
+            }
+            Assert.assertTrue(finished.await(3, java.util.concurrent.TimeUnit.SECONDS))
+            waitFor { cards().isEmpty() }
+            Assert.assertNull(CriticalHeatAlerts.state.value)
+        } finally { executor.shutdownNow() }
+    }
+
+    @Test fun androidStillOwnsTheActualSoundAfterFreshnessExpires() {
+        fun soundOwner(): String {
+            val descriptor = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("dumpsys notification --noredact")
+            return android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).bufferedReader().use { input ->
+                input.lineSequence().firstOrNull { it.contains("mSoundNotificationKey=") }.orEmpty()
+            }
+        }
+        post()
+        waitFor { soundOwner().contains(mac.macId) }
+        edit("observedAt" to JsonPrimitive(Instant.now().minusSeconds(100).toString()))
+        CriticalHeatAlerts.restore(c)
+        waitFor { cards().singleOrNull()?.notification?.extras?.getString(Notification.EXTRA_TITLE) == "Your Mac reported Critical heat" }
+        SystemClock.sleep(100) // Let NotificationAttentionHelper apply the update, not just enqueue it.
+        Assert.assertTrue("A posted INSISTENT flag alone does not prove Android is still playing the warning", soundOwner().contains(mac.macId))
+    }
+
 }

@@ -13,15 +13,16 @@ internal object CriticalWarningSound {
         val manager = c.getSystemService(NotificationManager::class.java)
         // Returning an existing channel preserves explicit sound, importance and DND choices.
         if (manager.getNotificationChannel(CHANNEL) != null) return
-        val channel = NotificationChannel(CHANNEL, "Critical Mac heat alarm", NotificationManager.IMPORTANCE_HIGH).apply {
+        manager.createNotificationChannel(newChannel(c, manager.getNotificationChannel(Notifications.URGENT_CHANNEL), manager.isNotificationPolicyAccessGranted))
+    }
+    internal fun newChannel(c: Context, previous: NotificationChannel?, policyAccess: Boolean): NotificationChannel {
+        return NotificationChannel(CHANNEL, "Critical Mac heat alarm", (previous?.importance ?: NotificationManager.IMPORTANCE_HIGH)).apply {
             description = "Critical heat until confirmed recovery or Ignore for 5 minutes"
-            setSound(Settings.System.DEFAULT_NOTIFICATION_URI,
+            setSound(if (previous != null && previous.sound == null) null else Settings.System.DEFAULT_NOTIFICATION_URI,
                 AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
-            enableVibration(true); vibrationPattern = longArrayOf(0, 180, 120, 180)
-            if (manager.isNotificationPolicyAccessGranted && manager.getNotificationChannel(Notifications.URGENT_CHANNEL)?.canBypassDnd() == true)
-                setBypassDnd(true)
+            vibrationPattern = longArrayOf(0, 180, 120, 180); enableVibration(previous?.shouldVibrate() ?: true)
+            if (policyAccess && previous?.canBypassDnd() == true) setBypassDnd(true)
         }
-        manager.createNotificationChannel(channel)
     }
     fun preview(c: Context) {
         ensure(c)
