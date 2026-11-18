@@ -21,6 +21,10 @@ public struct ReminderMachine: Codable {
 
     public init() {}
 
+    public mutating func consumeLidClosureSound() -> Bool {
+        awakeAlerts?.consumeLidClosureSound() ?? false
+    }
+
     public mutating func observeAwake(_ reading: MacAwakeReading, now: Date) -> [CompanionEvent] {
         if awakeAlerts == nil { awakeAlerts = AwakeAlerts() }
         let routineEnabled = settings.enabled && (snoozedUntil.map { now >= $0 } ?? true)
