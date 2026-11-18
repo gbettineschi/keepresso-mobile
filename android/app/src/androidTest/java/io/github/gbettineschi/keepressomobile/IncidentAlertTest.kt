@@ -62,21 +62,24 @@ class IncidentAlertTest {
 
     @Test fun lidCardExpiresThroughAndroidWhenItsInProcessTimerIsLost() {
         post("lid_awake", "Still awake", "active", age = -178)
+        await { active("lid").size == 1 }
         val card = active("lid").single().notification
         Assert.assertTrue(card.timeoutAfter in 1..2_000L)
         LidAlert.clearTimer()
         val deadline = SystemClock.elapsedRealtime() + 10_000
-        while (active("lid").isNotEmpty() && SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(100)
-        Assert.assertTrue("Android should expire the card without an app callback", active("lid").isEmpty())
+        while (active("lid").any { it.notification.flags and Notification.FLAG_ONGOING_EVENT != 0 } && SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(100)
+        Assert.assertFalse("Android must not retain a live assertion without an app callback", active("lid").any { it.notification.flags and Notification.FLAG_ONGOING_EVENT != 0 })
         LidAlert.restore(context)
-        Assert.assertTrue("Reopening must not restore an expired assertion", active("lid").isEmpty())
+        await { active("lid").singleOrNull()?.notification?.extras?.getString(Notification.EXTRA_TITLE) == "Your Mac was running with the lid closed" }
     }
 
-    @Test fun expiredLidEvidenceNeverCreatesAnAwakeCard() {
+    @Test fun expiredLidEvidenceCreatesOnlyQuietHistory() {
         post("lid_awake", "Old closed-lid reading", "active", age = -181)
-        Assert.assertTrue(active("lid").isEmpty())
+        Assert.assertEquals("Your Mac was running with the lid closed", active("lid").single().notification.extras.getString(Notification.EXTRA_TITLE))
+        Assert.assertEquals(0, active("lid").single().notification.flags and Notification.FLAG_ONGOING_EVENT)
         LidAlert.restore(context)
-        Assert.assertTrue(active("lid").isEmpty())
+        // Android 16 may add its own three-day TTL; the app must not retain the live 180s deadline.
+        Assert.assertTrue(active("lid").single().notification.timeoutAfter.let { it == 0L || it >= 86_400_000L })
     }
 
     @Test fun wallClockRollbackCannotRestoreAnExpiredLidCard() {
@@ -91,7 +94,8 @@ class IncidentAlertTest {
             "phoneExpiresAtElapsed" to JsonPrimitive(SystemClock.elapsedRealtime() - 1),
         )).toString())
         LidAlert.restore(context)
-        await { active("lid").isEmpty() }
+        await { active("lid").singleOrNull()?.notification?.extras?.getString(Notification.EXTRA_TITLE) == "Your Mac was running with the lid closed" }
+        Assert.assertEquals(0, active("lid").single().notification.flags and Notification.FLAG_ONGOING_EVENT)
     }
 
     @Test fun lidEvidenceFromAPreviousPhoneBootIsNotRestored() {
@@ -102,7 +106,8 @@ class IncidentAlertTest {
         val record = Json.parseToJsonElement(requireNotNull(store.readPrivate(LID_INCIDENT_KEY))).jsonObject
         store.writePrivate(LID_INCIDENT_KEY, JsonObject(record + ("phoneBootCount" to JsonPrimitive(-1))).toString())
         LidAlert.restore(context)
-        await { active("lid").isEmpty() }
+        await { active("lid").singleOrNull()?.notification?.extras?.getString(Notification.EXTRA_TITLE) == "Your Mac was running with the lid closed" }
+        Assert.assertEquals(0, active("lid").single().notification.flags and Notification.FLAG_ONGOING_EVENT)
     }
 
     @Test fun criticalHeartbeatDoesNotRepostTheAlarmAndRecoveredStatusIsQuiet() {

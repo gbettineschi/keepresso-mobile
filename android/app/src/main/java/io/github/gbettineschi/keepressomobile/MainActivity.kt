@@ -82,9 +82,22 @@ class MainActivity : ComponentActivity() {
             pendingPairing.invitation=text;permissions.launch(requiredBluetooth())
         }else{pendingPairing.invitation=null;startNearby("pair",text)}
     }
+    private fun acknowledgeAwakeHistory(value: Intent) {
+        if (value.action != AwakeAlertReceiver.OPEN_HISTORY) return
+        val mac = value.getStringExtra("macId") ?: return
+        val incident = value.getStringExtra("incidentId") ?: return
+        val event = value.getStringExtra("eventId") ?: return
+        runCatching { LidAlert.dismiss(this, mac, incident, event, historical = true) }
+    }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        acknowledgeAwakeHistory(intent)
+    }
     override fun onStart() {
         super.onStart()
         Companion.dashboardVisible = true
+        acknowledgeAwakeHistory(intent)
         runCatching { CriticalHeatAlerts.restore(this) }
         runCatching { LidAlert.restore(this) }
         foregroundVisit++

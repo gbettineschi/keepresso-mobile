@@ -17,6 +17,7 @@ import kotlinx.serialization.json.*
 class KeepressoApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        runCatching { LidAlert.restore(this) }
         FirebaseClientSetup.stored(this)?.let{FirebaseClientSetup.configure(this,it);DirectPushRegistration.configurationChanged(this);return}
         // Provider-specific setup is optional; no generated credentials or project enter git.
         if (listOf(BuildConfig.FIREBASE_APPLICATION_ID, BuildConfig.FIREBASE_API_KEY, BuildConfig.FIREBASE_PROJECT_ID, BuildConfig.FIREBASE_SENDER_ID).all { it.isNotBlank() }) {

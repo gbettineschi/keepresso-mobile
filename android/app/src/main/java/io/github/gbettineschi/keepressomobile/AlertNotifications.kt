@@ -46,15 +46,17 @@ internal object AlertNotifications {
         c, key.hashCode(), Intent(c, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE,
     )
 
-    fun lid(c: Context, mac: String, incident: String, title: String, body: String, observed: Instant, silent: Boolean, validForMillis: Long) {
+    fun lid(c: Context, mac: String, incident: String, title: String, body: String, observed: Instant, silent: Boolean, validForMillis: Long, eventId: String, historical: Boolean = false) {
         if (!canNotify(c)) return
         val manager = manager(c)
-        manager.createNotificationChannel(NotificationChannel(LID_CHANNEL, "Lid closed while awake", NotificationManager.IMPORTANCE_DEFAULT))
+        manager.createNotificationChannel(NotificationChannel(LID_CHANNEL, "Mac running without a visible screen", NotificationManager.IMPORTANCE_DEFAULT))
         val tag = lidTag(mac, incident)
         val sleep = intent(c, MacAlertActivity.ACTION_SLEEP, mac, incident)
-        val notification = builder(c, LID_CHANNEL, title, body).setOngoing(true).setShowWhen(true).setWhen(observed.toEpochMilli())
-            .setTimeoutAfter(validForMillis)
-            .setSilent(silent).setOnlyAlertOnce(silent).setContentIntent(dashboard(c, incident))
+        val notification = builder(c, LID_CHANNEL, title, body).setOngoing(!historical).setAutoCancel(historical).setShowWhen(true).setWhen(observed.toEpochMilli())
+            .setTimeoutAfter(if (historical) 0 else validForMillis)
+            .setSilent(silent || historical).setOnlyAlertOnce(silent || historical)
+            .setContentIntent(if (historical) AwakeAlertReceiver.openHistory(c, mac, incident, eventId) else dashboard(c, incident))
+            .setDeleteIntent(AwakeAlertReceiver.deleteIntent(c, mac, incident, eventId, historical))
             .addAction(0, "Sleep now", sleep)
         manager.notify(tag, ALERT_ID, notification.build())
     }

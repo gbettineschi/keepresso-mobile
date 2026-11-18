@@ -3,8 +3,6 @@ package io.github.gbettineschi.keepressomobile
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import android.os.SystemClock
-import android.provider.Settings
 import io.github.gbettineschi.keepressomobile.core.*
 import java.time.Duration
 import java.time.Instant
@@ -15,99 +13,6 @@ import kotlinx.serialization.json.*
 internal const val LID_INCIDENT_KEY = "lidAlertIncident"
 internal const val CRITICAL_INCIDENT_KEY = "criticalAlertIncident"
 private const val RETIRED_INCIDENTS = "phoneRetiredIncidents"
-private const val OBSERVED_AT = "phoneObservedAt"
-private const val LID_HIDDEN_AT = "phoneDarkWakeAt"
-private const val LID_EXPIRES_ELAPSED = "phoneExpiresAtElapsed"
-private const val LID_BOOT_COUNT = "phoneBootCount"
-
-internal object LidAlert {
-    private val handler = Handler(Looper.getMainLooper())
-    private var pending: Runnable? = null
-
-    @Synchronized fun accept(c: Context, store: CredentialStore, macId: String, event: JsonObject, incident: AlertIncident, serverNow: Instant) {
-        val stored = store.readPrivate(LID_INCIDENT_KEY)?.let(::obj)
-        val previous = stored?.let(AlertIncident::fromEvent)
-        val retired = (stored?.get(RETIRED_INCIDENTS) as? JsonArray)?.map { it.jsonPrimitive.content }.orEmpty()
-        if (incident.id in retired) return
-        if (previous != null && !incident.isNewerThan(previous)) return
-        val hidden = stored?.stringOrNull(LID_HIDDEN_AT)?.let(Instant::parse)
-        if (hidden != null && incident.phase != AlertPhase.RESOLVED && incident.createdAt <= hidden) return
-        val retiredIds = if (previous != null && previous.id != incident.id) (retired + previous.id).takeLast(32) else retired
-        val observed = Instant.now().minus(Duration.between(incident.createdAt, serverNow).coerceAtLeast(Duration.ZERO))
-        val remaining = Duration.between(Instant.now(), observed.plusSeconds(180)).toMillis()
-        val record = JsonObject(event + mapOf(
-            RETIRED_INCIDENTS to JsonArray(retiredIds.map(::JsonPrimitive)),
-            OBSERVED_AT to JsonPrimitive(observed.toString()),
-            LID_EXPIRES_ELAPSED to JsonPrimitive(SystemClock.elapsedRealtime() + remaining),
-            LID_BOOT_COUNT to JsonPrimitive(bootCount(c)),
-        ))
-        store.writePrivate(LID_INCIDENT_KEY, record.toString())
-        if (previous != null && previous.id != incident.id) AlertNotifications.cancelLid(c, macId, previous.id)
-        publish(c, macId, record, incident, silent = previous?.id == incident.id || incident.phase != AlertPhase.ACTIVE)
-    }
-
-    private fun publish(c: Context, macId: String, record: JsonObject, incident: AlertIncident, silent: Boolean) {
-        clearTimer()
-        if (incident.phase == AlertPhase.RESOLVED) {
-            AlertNotifications.cancelLid(c, macId, incident.id)
-            return
-        }
-        val observed = record.stringOrNull(OBSERVED_AT)?.let(Instant::parse) ?: return
-        val context = c.applicationContext
-        // Wall-clock corrections must not restore an expired assertion. A new phone
-        // boot (or an older record without this deadline) needs fresh Mac evidence.
-        val boot = bootCount(c)
-        val sameBoot = boot >= 0 && record[LID_BOOT_COUNT]?.jsonPrimitive?.intOrNull == boot
-        val freshFor = if (sameBoot) {
-            (record[LID_EXPIRES_ELAPSED]?.jsonPrimitive?.longOrNull ?: 0) - SystemClock.elapsedRealtime()
-        } else 0
-        if (freshFor <= 0) {
-            AlertNotifications.cancelLid(c, macId, incident.id)
-            return
-        }
-        AlertNotifications.lid(c, macId, incident.id, record.string("title"), record.string("body"), observed, silent, freshFor)
-        val expected = record.string("id")
-        val task = Runnable { runCatching { restore(context, expected) } }
-        pending = task
-        handler.postDelayed(task, freshFor)
-    }
-
-    private fun bootCount(c: Context): Int = Settings.Global.getInt(c.contentResolver, Settings.Global.BOOT_COUNT, -1)
-
-    @Synchronized fun clearTimer() {
-        pending?.let(handler::removeCallbacks)
-        pending = null
-    }
-
-    @Synchronized fun restore(c: Context, expectedEvent: String? = null) {
-        val store = CredentialStore(c)
-        val macId = store.load()?.macId ?: return
-        val record = store.readPrivate(LID_INCIDENT_KEY)?.let(::obj) ?: return
-        if (expectedEvent != null && record.string("id") != expectedEvent) return
-        if (record.stringOrNull(LID_HIDDEN_AT) != null) return
-        val incident = AlertIncident.fromEvent(record) ?: return
-        publish(c, macId, record, incident, silent = true)
-    }
-
-    @Synchronized fun snapshot(c: Context, store: CredentialStore, macId: String, snapshot: JsonObject) {
-        val mac = snapshot["mac"] as? JsonObject ?: return
-        val wake = mac.stringOrNull("wakeState")
-        val opened = wake == "full" && mac.stringOrNull("lid") == "open"
-        if (!opened && wake != "dark") return
-        val previous = store.readPrivate(LID_INCIDENT_KEY)?.let(::obj) ?: return
-        val incident = AlertIncident.fromEvent(previous) ?: return
-        val captured = Instant.parse(snapshot.string("capturedAt"))
-        if (incident.phase == AlertPhase.RESOLVED || captured <= incident.createdAt) return
-        if (!opened) {
-            store.writePrivate(LID_INCIDENT_KEY, JsonObject(previous + (LID_HIDDEN_AT to JsonPrimitive(captured.toString()))).toString())
-            clearTimer()
-            AlertNotifications.cancelLid(c, macId, incident.id)
-            return
-        }
-        val resolved = JsonObject(previous - LID_HIDDEN_AT + mapOf("createdAt" to JsonPrimitive(captured.toString()), "alertPhase" to JsonPrimitive("resolved")))
-        accept(c, store, macId, resolved, AlertIncident(incident.id, AlertPhase.RESOLVED, captured), captured)
-    }
-}
 
 internal data class CriticalAlert(
     val macId: String,
@@ -224,7 +129,7 @@ internal object CriticalHeatAlerts {
         pending?.let(handler::removeCallbacks)
         pending = null
         current.value = null
-        LidAlert.clearTimer()
+        LidAlert.clear(c, macId)
         AlertNotifications.clear(c, macId)
     }
 
