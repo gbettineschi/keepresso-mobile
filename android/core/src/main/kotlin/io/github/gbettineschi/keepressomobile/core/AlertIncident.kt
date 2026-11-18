@@ -13,6 +13,7 @@ data class AlertIncident(val id: String, val phase: AlertPhase, val createdAt: I
 
     companion object {
         fun fromEvent(event: JsonObject): AlertIncident? {
+            if (event.string("kind") == "lid_awake") AwakeWarningContext.fromEvent(event)
             val id = event.stringOrNull("incidentId")
             val phase = event.stringOrNull("alertPhase")
             if (id == null && phase == null) return null
@@ -21,6 +22,8 @@ data class AlertIncident(val id: String, val phase: AlertPhase, val createdAt: I
             if (kind == "thermal") event.stringOrNull("thermalState")?.let {
                 require((it == "critical") != (phase == "resolved"))
             }
+            if (kind == "thermal" && phase == "resolved")
+                require(event.stringOrNull("thermalState") in setOf("nominal", "fair", "serious"))
             return AlertIncident(canonicalId(requireNotNull(id)), when (phase) {
                 "active" -> AlertPhase.ACTIVE
                 "updated" -> AlertPhase.UPDATED
@@ -43,11 +46,22 @@ data class CriticalAlarmState(
 
     fun status(now: Instant): CriticalAlarmStatus = when {
         recoveryState != null -> CriticalAlarmStatus.RECOVERED
-        now >= freshUntil -> CriticalAlarmStatus.STALE
         snoozedUntil?.isAfter(now) == true -> CriticalAlarmStatus.SNOOZED
+        now >= freshUntil -> CriticalAlarmStatus.STALE
         else -> CriticalAlarmStatus.CRITICAL
     }
 
-    fun shouldRearm(now: Instant): Boolean =
-        snoozedUntil?.let { now >= it } == true && status(now) == CriticalAlarmStatus.CRITICAL
+    fun needsAttention(now: Instant): Boolean = status(now) in setOf(CriticalAlarmStatus.CRITICAL, CriticalAlarmStatus.STALE)
+
+    fun shouldRearm(now: Instant): Boolean = snoozedUntil?.let { now >= it } == true && needsAttention(now)
+}
+
+/** Same-boot timing ignores wall-clock edits. A reboot cannot grant more than five minutes. */
+data class CriticalSnoozeDeadline(val wall: Instant, val elapsed: Long?, val boot: Int?) {
+    fun remainingMillis(now: Instant, nowElapsed: Long, currentBoot: Int): Long {
+        if (currentBoot >= 0 && boot == currentBoot && elapsed != null)
+            return (elapsed - nowElapsed).coerceIn(0, 300_000)
+        val remaining = java.time.Duration.between(now, wall).toMillis()
+        return if (remaining in 1..300_000) remaining else 0
+    }
 }

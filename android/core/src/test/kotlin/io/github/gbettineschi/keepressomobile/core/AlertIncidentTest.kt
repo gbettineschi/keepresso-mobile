@@ -43,16 +43,33 @@ class AlertIncidentTest {
         assertTrue(claim(recovery))
     }
 
-    @Test fun staleCriticalSilencesAndAnExplicitSnoozeRearmsOnlyWithFreshEvidence() {
+    @Test fun staleCriticalKeepsAttentionAndSnoozeWinsUntilItsDeadline() {
         val active = requireNotNull(AlertIncident.fromEvent(event("thermal", "active", thermalState = "critical")))
-        val alarm = CriticalAlarmState(active, observedAt = now, snoozedUntil = now.plusSeconds(300))
-        assertEquals(CriticalAlarmStatus.SNOOZED, alarm.status(now.plusSeconds(60)))
-        assertEquals(CriticalAlarmStatus.STALE, alarm.status(now.plusSeconds(300)))
-        assertFalse(alarm.shouldRearm(now.plusSeconds(300)))
-        val refreshed = alarm.copy(observedAt = now.plusSeconds(290))
-        assertTrue(refreshed.shouldRearm(now.plusSeconds(300)))
-        assertFalse(refreshed.copy(snoozedUntil = null).shouldRearm(now.plusSeconds(300)))
-        assertEquals(CriticalAlarmStatus.RECOVERED, refreshed.copy(recoveryState = "fair").status(now.plusSeconds(300)))
+        val alarm = CriticalAlarmState(active, observedAt = now)
+        assertTrue(alarm.needsAttention(now.plusSeconds(90)))
+        assertEquals(CriticalAlarmStatus.STALE, alarm.status(now.plusSeconds(90)))
+        val snoozed = alarm.copy(snoozedUntil = now.plusSeconds(300))
+        assertEquals(CriticalAlarmStatus.SNOOZED, snoozed.status(now.plusSeconds(299)))
+        assertFalse(snoozed.needsAttention(now.plusSeconds(299)))
+        assertTrue(snoozed.shouldRearm(now.plusSeconds(300)))
+        assertTrue(snoozed.needsAttention(now.plusSeconds(300)))
+        assertFalse(snoozed.copy(recoveryState = "fair").shouldRearm(now.plusSeconds(300)))
+        assertFalse(snoozed.copy(recoveryState = "fair").needsAttention(now.plusSeconds(300)))
+    }
+
+    @Test fun criticalSnoozeUsesElapsedTimeAndBoundsPreviousBootRemainders() {
+        val deadline = CriticalSnoozeDeadline(now.plusSeconds(300), 310_000, 4)
+        assertEquals(200_000, deadline.remainingMillis(now.minusSeconds(3600), 110_000, 4))
+        assertEquals(0, deadline.remainingMillis(now, 310_000, 4))
+        assertEquals(250_000, deadline.remainingMillis(now.plusSeconds(50), 1000, 5))
+        assertEquals(0, deadline.remainingMillis(now.minusSeconds(1), 1000, 5))
+        assertEquals(0, deadline.remainingMillis(now.plusSeconds(301), 1000, 5))
+    }
+
+    @Test fun unknownOrMissingThermalStateCannotResolveCritical() {
+        assertFails { AlertIncident.fromEvent(event("thermal", "resolved", thermalState = "unknown")) }
+        val valid = event("thermal", "resolved", thermalState = "fair")
+        assertFails { AlertIncident.fromEvent(JsonObject(valid - "thermalState")) }
     }
 
     @Test fun sleepOutcomesRequireAnExplicitVerifiedOutcome() {

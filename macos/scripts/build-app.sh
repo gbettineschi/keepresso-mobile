@@ -33,8 +33,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundleDisplayName</key><string>Keepresso Mobile</string>
 <key>CFBundleExecutable</key><string>KeepressoMac</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.6.11</string>
-<key>CFBundleVersion</key><string>6011</string>
+<key>CFBundleShortVersionString</key><string>0.6.12</string>
+<key>CFBundleVersion</key><string>6012</string>
 <key>LSMinimumSystemVersion</key><string>14.5</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>

@@ -49,17 +49,35 @@ public struct MacBrewReading {
     }
 }
 
+public enum MacAwakeContext: String, Codable {
+    case normal, lidClosed = "lid_closed", screenOff = "screen_off", unknown
+
+    public init(wake: MacAlertWakeState, lidClosed: Bool?, displays: MacDisplayAvailability) {
+        guard wake == .full else { self = .unknown; return }
+        switch displays {
+        case .available: self = .normal
+        case .unavailable:
+            self = lidClosed.map { $0 ? .lidClosed : .screenOff } ?? .unknown
+        case .unknown: self = .unknown
+        }
+    }
+    var nonVisible: Bool { self == .lidClosed || self == .screenOff }
+}
+
 public struct MacAwakeReading {
     public let wake: MacAlertWakeState
-    let lidClosed: Bool?
-    let isBrewing: Bool?
+    public let lidClosed: Bool?
+    public let displayAvailability: MacDisplayAvailability
+    public let isBrewing: Bool?
     let brew: MacBrewReading?
     let lastUserInputAt: Date?
+    public var context: MacAwakeContext { .init(wake: wake, lidClosed: lidClosed, displays: displayAvailability) }
 
-    public init(wake: MacAlertWakeState, lidClosed: Bool?, isBrewing: Bool?,
+    public init(wake: MacAlertWakeState, lidClosed: Bool?, displayAvailability: MacDisplayAvailability, isBrewing: Bool?,
                 brew: MacBrewReading?, lastUserInputAt: Date?) {
         self.wake = wake
         self.lidClosed = lidClosed
+        self.displayAvailability = displayAvailability
         self.isBrewing = isBrewing
         self.brew = brew
         self.lastUserInputAt = lastUserInputAt
@@ -78,14 +96,14 @@ struct AwakeAlerts: Codable {
         var lastPublishedAt: Date
         var lastBody: String
         var brewedWhileClosed: Bool
+        var lastContext: MacAwakeContext? = nil
     }
 
     private var unattended: UnattendedEpisode?
     private var lidIncident: LidIncident?
-    private var openSince: Date?
+    private var continuousAwakeSince: Date?
     private var closedSince: Date?
     private var lastLidClosed: Bool?
-    private var observedClosure: Bool?
     private var closureSoundPending: Bool?
     private var brewedDuringDelay: Bool?
 
@@ -99,32 +117,28 @@ struct AwakeAlerts: Codable {
         _ reading: MacAwakeReading, now: Date, routineEnabled: Bool
     ) -> [CompanionEvent] {
         closureSoundPending = false
-        guard reading.wake == .full, let closed = reading.lidClosed else {
+        let context = reading.context
+        guard reading.wake == .full, context != .unknown else {
             invalidateContinuity()
             return []
         }
         let lidWasClosed = lastLidClosed
-        lastLidClosed = closed
-        if closed {
-            openSince = nil
-            unattended = nil
-            if closedSince == nil {
-                closedSince = now
-                observedClosure = lidWasClosed == false
-                closureSoundPending = observedClosure
-            }
+        lastLidClosed = reading.lidClosed
+        closureSoundPending = lidWasClosed == false && reading.lidClosed == true && context.nonVisible
+        if continuousAwakeSince == nil { continuousAwakeSince = now }
+        // The unattended episode survives screen changes. Only its presentation
+        // depends on whether a usable screen is currently awake.
+        let routine = observeUnattended(reading, now: now, routineEnabled: routineEnabled && context == .normal)
+        if context.nonVisible {
+            if closedSince == nil { closedSince = now }
             if reading.isBrewing == true { brewedDuringDelay = true }
-            // Confirm a full minute awake so ordinary lid sleep never produces an alert.
             guard let closedSince, now.timeIntervalSince(closedSince) >= 60 else { return [] }
             return observeClosedLid(reading, now: now).map { [$0] } ?? []
         }
 
         closedSince = nil
         brewedDuringDelay = nil
-        observedClosure = nil
-        if openSince == nil { openSince = now }
-        let events = resolveLid(now: now).map { [$0] } ?? []
-        return events + (observeUnattended(reading, now: now, routineEnabled: routineEnabled).map { [$0] } ?? [])
+        return (resolveLid(now: now).map { [$0] } ?? []) + (routine.map { [$0] } ?? [])
     }
 
     private mutating func observeUnattended(
@@ -132,18 +146,18 @@ struct AwakeAlerts: Codable {
     ) -> CompanionEvent? {
         if reading.isBrewing == false {
             unattended = nil
-            openSince = now
+            continuousAwakeSince = now
             return nil
         }
         guard let brew = reading.brew, let start = brew.startedAt, start <= now,
-              let lastInput = reading.lastUserInputAt, lastInput <= now, let openSince else {
-            self.openSince = nil
+              let lastInput = reading.lastUserInputAt, lastInput <= now, let continuousAwakeSince else {
+            self.continuousAwakeSince = nil
             return nil
         }
-        let since = max(start, lastInput, openSince)
+        let since = max(start, lastInput, continuousAwakeSince)
         if unattended?.brewStart != start || lastInput > (unattended?.since ?? .distantPast).addingTimeInterval(2) {
             unattended = UnattendedEpisode(brewStart: start, since: since)
-        } else if let previous = unattended, !previous.notified, openSince > previous.since {
+        } else if let previous = unattended, !previous.notified, continuousAwakeSince > previous.since {
             unattended = UnattendedEpisode(brewStart: start, since: since)
         }
         guard let episode = unattended, !episode.notified, routineEnabled,
@@ -156,6 +170,7 @@ struct AwakeAlerts: Codable {
     }
 
     private mutating func observeClosedLid(_ reading: MacAwakeReading, now: Date) -> CompanionEvent? {
+        let context = reading.context
         let brewed = reading.isBrewing == true || brewedDuringDelay == true || lidIncident?.brewedWhileClosed == true
         let body: String
         if let brew = reading.brew { body = brew.description }
@@ -166,17 +181,17 @@ struct AwakeAlerts: Codable {
         let incidentID: String
         let phase: AlertPhase
         if let previous = lidIncident {
-            guard body != previous.lastBody || now.timeIntervalSince(previous.lastPublishedAt) >= 90 else { return nil }
+            guard body != previous.lastBody || context != previous.lastContext || now.timeIntervalSince(previous.lastPublishedAt) >= 90 else { return nil }
             incidentID = previous.id
             phase = .updated
         } else {
             incidentID = UUID().uuidString.lowercased()
-            phase = observedClosure == true ? .active : .updated
+            phase = .active
         }
-        lidIncident = LidIncident(id: incidentID, lastPublishedAt: now, lastBody: body, brewedWhileClosed: brewed)
-        return CompanionEvent(kind: "lid_awake", createdAt: now, title: "Your Mac is running with the lid closed",
+        lidIncident = LidIncident(id: incidentID, lastPublishedAt: now, lastBody: body, brewedWhileClosed: brewed, lastContext: context)
+        return CompanionEvent(kind: "lid_awake", createdAt: now, title: context == .screenOff ? "Your Mac is running with the screen off" : "Your Mac is running with the lid closed",
                               body: body, scheduledEnd: reading.brew?.endsAt, snoozedUntil: nil,
-                              incidentId: incidentID, alertPhase: phase)
+                              incidentId: incidentID, alertPhase: phase, awakeContext: context)
     }
 
     mutating func resolveLid(now: Date) -> CompanionEvent? {
@@ -184,20 +199,19 @@ struct AwakeAlerts: Codable {
         lidIncident = nil
         return CompanionEvent(kind: "lid_awake", createdAt: now, title: "Closed-lid alert ended",
                               body: "", scheduledEnd: nil, snoozedUntil: nil,
-                              incidentId: incident.id, alertPhase: .resolved)
+                              incidentId: incident.id, alertPhase: .resolved, awakeContext: incident.lastContext ?? .lidClosed)
     }
 
     mutating func invalidateContinuity() {
         closureSoundPending = false
         brewedDuringDelay = nil
-        openSince = nil
+        continuousAwakeSince = nil
         closedSince = nil
         lastLidClosed = nil
-        observedClosure = nil
     }
 
     mutating func observedSleep(now: Date) -> CompanionEvent? {
-        unattended = nil
+        if unattended?.notified != true { unattended = nil }
         invalidateContinuity()
         return resolveLid(now: now)
     }

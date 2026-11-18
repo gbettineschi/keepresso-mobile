@@ -4,6 +4,12 @@ public enum ThermalAlertSeverity: String, Codable {
     case serious, critical
 }
 
+public struct MacThermalAlertExposure {
+    public let lidClosed: Bool?
+    public let isBrewing: Bool?
+    public init(lidClosed: Bool?, isBrewing: Bool?) { self.lidClosed = lidClosed; self.isBrewing = isBrewing }
+}
+
 public struct ReminderMachine: Codable {
     public var settings = ReminderSettings()
     public private(set) var snoozedUntil: Date?
@@ -31,13 +37,16 @@ public struct ReminderMachine: Codable {
         return awakeAlerts?.observe(reading, now: now, routineEnabled: routineEnabled) ?? []
     }
 
-    public mutating func observeHeat(_ reading: MacThermalReading, now: Date) -> CompanionEvent? {
+    public mutating func observeHeat(_ reading: MacThermalReading, exposure: MacThermalAlertExposure, now: Date) -> CompanionEvent? {
+        let eligible = exposure.lidClosed == true || exposure.isBrewing == true || reading.brewingPaused == true
         switch reading.state {
         case .unknown:
             noncriticalActive = false
             return nil
         case .critical:
             noncriticalActive = false
+            // Exposure arms an episode. The guard's own pause must never disarm it.
+            guard critical != nil || eligible else { return nil }
             let phase: AlertPhase
             if let ongoing = critical {
                 guard now.timeIntervalSince(ongoing.lastPublishedAt) >= 30 else { return nil }
@@ -61,7 +70,7 @@ public struct ReminderMachine: Codable {
             }
         }
 
-        let active = reading.alertSeverity == .serious
+        let active = reading.alertSeverity == .serious && (eligible || noncriticalActive == true)
         noncriticalActive = active
         guard active, lastSeriousWarningAt.map({ now.timeIntervalSince($0) >= 300 }) ?? true else { return nil }
         lastSeriousWarningAt = now

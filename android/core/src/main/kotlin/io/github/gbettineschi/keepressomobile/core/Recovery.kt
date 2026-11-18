@@ -63,7 +63,7 @@ class EventClaims(private val load: () -> String?, private val save: (String) ->
             val k = snapshot["keepresso"] as? JsonObject; val m = snapshot["mac"] as? JsonObject
             if (kind == "hourly" && k?.boolOrNull("isActive") == false) return false
             if (kind in setOf("session_ended_awake", "sleep_failed") && k?.boolOrNull("isActive") == true) return false
-            if (kind == "lid_awake" && m?.stringOrNull("lid") == "open") return false
+            if (kind == "lid_awake" && m != null && AwakeWarningContext.fromEvent(event).endedBy(m)) return false
             if (kind == "lid_awake" && m?.stringOrNull("wakeState") == "dark") return false
             if (kind == "unattended_brew" && k?.boolOrNull("isActive") == false) return false
             if (kind == "battery" && m?.get("batteryPercent")?.jsonPrimitive?.doubleOrNull?.let { it >= 30 } == true && k?.stringOrNull("safetyPause") == "none") return false

@@ -37,6 +37,7 @@ private struct NativeTriggerModeRequest: Encodable {
 
 @MainActor final class NativeStatus {
     let network=MacNetworkStatus()
+    private let displayAvailability = MacDisplayAvailabilityReader()
     private let modelIdentifier = MachineIdentity.currentModelIdentifier()
     static let appURL=URL(fileURLWithPath:"/Applications/Keepresso.app")
     func runningApp() -> NSRunningApplication? { NSWorkspace.shared.runningApplications.first { $0.bundleURL?.standardizedFileURL == Self.appURL.standardizedFileURL } }
@@ -84,7 +85,7 @@ private struct NativeTriggerModeRequest: Encodable {
             return MacBrewReading(startedAt: reading.alerts?.brewingStartedAt, mode: reading.alerts?.brewingMode ?? .unknown,
                                   endsAt: reading.status.endsAt, returnsToAutomatic: reading.alerts?.returnsToAutomatic == true)
         }
-        let awake = MacAwakeReading(wake: wake, lidClosed: lid, isBrewing: record?.status.isActive, brew: brew,
+        let awake = MacAwakeReading(wake: wake, lidClosed: lid, displayAvailability: displayAvailability.read(lidClosed: lid), isBrewing: record?.status.isActive, brew: brew,
                                     lastUserInputAt: record?.alerts?.lastUserInputAt)
         let thermal = MacThermalReading(system: .current, report: record?.thermal, writtenAt: record?.status.writtenAt, now: now)
         return (awake, thermal)
@@ -106,7 +107,9 @@ private struct NativeTriggerModeRequest: Encodable {
         let source=IOKitPowerSourceMonitor().current
         let session=CGSessionCopyCurrentDictionary() as? [String: Any]
         let lock=StatusEvidence.consoleLock(in:session,userID:getuid()).map { $0 ? "locked":"unlocked" } ?? "unknown"
-        let lid=IORegistryLidState().isClosed().map { $0 ? "closed":"open" } ?? "unknown"
+        let physicalLid=IORegistryLidState().isClosed()
+        let lid=physicalLid.map { $0 ? "closed":"open" } ?? "unknown"
+        let usableDisplay=displayAvailability.read(lidClosed:physicalLid)
         var count:UInt32=0;var display="unknown"
         if CGGetOnlineDisplayList(0,nil,&count) == .success,count>0 {
             var ids=[CGDirectDisplayID](repeating:0,count:Int(count))
@@ -132,7 +135,9 @@ private struct NativeTriggerModeRequest: Encodable {
         let safetyPause = thermal.brewingPaused == true ? "thermal" : "unknown"
         let k:[String:Any]=["appRunning":running,"version":installedVersion as Any? ?? NSNull(),"isActive":StatusEvidence.brewingActivity(appRunning:running,nativeActive:status?.isActive) as Any? ?? NSNull(),"endsAt":status?.endsAt.map(WireJSON.iso) as Any? ?? NSNull(),"triggersEnabled":status?.triggersEnabled as Any? ?? NSNull(),"triggersPaused":status?.triggersPaused as Any? ?? NSNull(),"sessionKind":kind,"safetyPause":safetyPause]
         var mac:[String:Any]=["lock":lock,"display":display,"lid":lid,"batteryPercent":source.percentage as Any? ?? NSNull(),"powerSource":source.provider.rawValue,"isCharging":source.hasBattery ? source.isCharging as Any:NSNull(),"temperatureC":NSNull(),"temperatureSensor":NSNull(),"thermal":thermal.state.legacyStatus,"thermalSeverity":thermal.state.rawValue]
-        if let wake = record?.alerts?.wakeState { mac["wakeState"] = verifiedWake(wake).rawValue }
+        let wake = verifiedWake(record?.alerts?.wakeState ?? .unknown)
+        mac["wakeState"] = wake.rawValue
+        mac["awakeContext"] = MacAwakeContext(wake:wake,lidClosed:physicalLid,displays:usableDisplay).rawValue
         if let guardActive = thermal.guardActive { mac["thermalGuardActive"] = guardActive }
         if let modelIdentifier { mac["modelIdentifier"] = modelIdentifier }
         mac.merge(network.snapshot()){_,new in new}

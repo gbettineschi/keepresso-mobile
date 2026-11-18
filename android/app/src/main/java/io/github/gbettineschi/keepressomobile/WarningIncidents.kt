@@ -5,6 +5,8 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
+import android.util.Log
+import java.util.UUID
 import io.github.gbettineschi.keepressomobile.core.*
 import java.time.Duration
 import java.time.Instant
@@ -15,99 +17,6 @@ import kotlinx.serialization.json.*
 internal const val LID_INCIDENT_KEY = "lidAlertIncident"
 internal const val CRITICAL_INCIDENT_KEY = "criticalAlertIncident"
 private const val RETIRED_INCIDENTS = "phoneRetiredIncidents"
-private const val OBSERVED_AT = "phoneObservedAt"
-private const val LID_HIDDEN_AT = "phoneDarkWakeAt"
-private const val LID_EXPIRES_ELAPSED = "phoneExpiresAtElapsed"
-private const val LID_BOOT_COUNT = "phoneBootCount"
-
-internal object LidAlert {
-    private val handler = Handler(Looper.getMainLooper())
-    private var pending: Runnable? = null
-
-    @Synchronized fun accept(c: Context, store: CredentialStore, macId: String, event: JsonObject, incident: AlertIncident, serverNow: Instant) {
-        val stored = store.readPrivate(LID_INCIDENT_KEY)?.let(::obj)
-        val previous = stored?.let(AlertIncident::fromEvent)
-        val retired = (stored?.get(RETIRED_INCIDENTS) as? JsonArray)?.map { it.jsonPrimitive.content }.orEmpty()
-        if (incident.id in retired) return
-        if (previous != null && !incident.isNewerThan(previous)) return
-        val hidden = stored?.stringOrNull(LID_HIDDEN_AT)?.let(Instant::parse)
-        if (hidden != null && incident.phase != AlertPhase.RESOLVED && incident.createdAt <= hidden) return
-        val retiredIds = if (previous != null && previous.id != incident.id) (retired + previous.id).takeLast(32) else retired
-        val observed = Instant.now().minus(Duration.between(incident.createdAt, serverNow).coerceAtLeast(Duration.ZERO))
-        val remaining = Duration.between(Instant.now(), observed.plusSeconds(180)).toMillis()
-        val record = JsonObject(event + mapOf(
-            RETIRED_INCIDENTS to JsonArray(retiredIds.map(::JsonPrimitive)),
-            OBSERVED_AT to JsonPrimitive(observed.toString()),
-            LID_EXPIRES_ELAPSED to JsonPrimitive(SystemClock.elapsedRealtime() + remaining),
-            LID_BOOT_COUNT to JsonPrimitive(bootCount(c)),
-        ))
-        store.writePrivate(LID_INCIDENT_KEY, record.toString())
-        if (previous != null && previous.id != incident.id) AlertNotifications.cancelLid(c, macId, previous.id)
-        publish(c, macId, record, incident, silent = previous?.id == incident.id || incident.phase != AlertPhase.ACTIVE)
-    }
-
-    private fun publish(c: Context, macId: String, record: JsonObject, incident: AlertIncident, silent: Boolean) {
-        clearTimer()
-        if (incident.phase == AlertPhase.RESOLVED) {
-            AlertNotifications.cancelLid(c, macId, incident.id)
-            return
-        }
-        val observed = record.stringOrNull(OBSERVED_AT)?.let(Instant::parse) ?: return
-        val context = c.applicationContext
-        // Wall-clock corrections must not restore an expired assertion. A new phone
-        // boot (or an older record without this deadline) needs fresh Mac evidence.
-        val boot = bootCount(c)
-        val sameBoot = boot >= 0 && record[LID_BOOT_COUNT]?.jsonPrimitive?.intOrNull == boot
-        val freshFor = if (sameBoot) {
-            (record[LID_EXPIRES_ELAPSED]?.jsonPrimitive?.longOrNull ?: 0) - SystemClock.elapsedRealtime()
-        } else 0
-        if (freshFor <= 0) {
-            AlertNotifications.cancelLid(c, macId, incident.id)
-            return
-        }
-        AlertNotifications.lid(c, macId, incident.id, record.string("title"), record.string("body"), observed, silent, freshFor)
-        val expected = record.string("id")
-        val task = Runnable { runCatching { restore(context, expected) } }
-        pending = task
-        handler.postDelayed(task, freshFor)
-    }
-
-    private fun bootCount(c: Context): Int = Settings.Global.getInt(c.contentResolver, Settings.Global.BOOT_COUNT, -1)
-
-    @Synchronized fun clearTimer() {
-        pending?.let(handler::removeCallbacks)
-        pending = null
-    }
-
-    @Synchronized fun restore(c: Context, expectedEvent: String? = null) {
-        val store = CredentialStore(c)
-        val macId = store.load()?.macId ?: return
-        val record = store.readPrivate(LID_INCIDENT_KEY)?.let(::obj) ?: return
-        if (expectedEvent != null && record.string("id") != expectedEvent) return
-        if (record.stringOrNull(LID_HIDDEN_AT) != null) return
-        val incident = AlertIncident.fromEvent(record) ?: return
-        publish(c, macId, record, incident, silent = true)
-    }
-
-    @Synchronized fun snapshot(c: Context, store: CredentialStore, macId: String, snapshot: JsonObject) {
-        val mac = snapshot["mac"] as? JsonObject ?: return
-        val wake = mac.stringOrNull("wakeState")
-        val opened = wake == "full" && mac.stringOrNull("lid") == "open"
-        if (!opened && wake != "dark") return
-        val previous = store.readPrivate(LID_INCIDENT_KEY)?.let(::obj) ?: return
-        val incident = AlertIncident.fromEvent(previous) ?: return
-        val captured = Instant.parse(snapshot.string("capturedAt"))
-        if (incident.phase == AlertPhase.RESOLVED || captured <= incident.createdAt) return
-        if (!opened) {
-            store.writePrivate(LID_INCIDENT_KEY, JsonObject(previous + (LID_HIDDEN_AT to JsonPrimitive(captured.toString()))).toString())
-            clearTimer()
-            AlertNotifications.cancelLid(c, macId, incident.id)
-            return
-        }
-        val resolved = JsonObject(previous - LID_HIDDEN_AT + mapOf("createdAt" to JsonPrimitive(captured.toString()), "alertPhase" to JsonPrimitive("resolved")))
-        accept(c, store, macId, resolved, AlertIncident(incident.id, AlertPhase.RESOLVED, captured), captured)
-    }
-}
 
 internal data class CriticalAlert(
     val macId: String,
@@ -116,12 +25,16 @@ internal data class CriticalAlert(
     val recoveryState: String?,
 ) {
     val title: String
-        get() = if (status == CriticalAlarmStatus.CRITICAL) "Your Mac is critically hot" else "Your Mac has been critically hot"
+        get() = when (status) {
+            CriticalAlarmStatus.CRITICAL -> "Your Mac is critically hot"
+            CriticalAlarmStatus.STALE -> "Your Mac reported Critical heat"
+            else -> "Your Mac has been critically hot"
+        }
     val body: String
         get() = when {
             status == CriticalAlarmStatus.CRITICAL -> "macOS thermal state is Critical"
             recoveryState != null && recoveryState != "unknown" -> "Now at ${recoveryState.replaceFirstChar(Char::uppercase)}"
-            status == CriticalAlarmStatus.STALE -> "Last reported thermal state: Critical"
+            status == CriticalAlarmStatus.STALE -> "Last reported thermal state: Critical."
             else -> "Current thermal state unknown"
         }
 }
@@ -133,7 +46,10 @@ internal object CriticalHeatAlerts {
     private val current = MutableStateFlow<CriticalAlert?>(null)
     val state = current.asStateFlow()
 
-    private data class Record(val alarm: CriticalAlarmState, val dismissed: Boolean = false, val retired: List<String> = emptyList()) {
+    private data class Record(
+        val alarm: CriticalAlarmState, val dismissed: Boolean = false, val retired: List<String> = emptyList(),
+        val snoozeElapsed: Long? = null, val snoozeBoot: Int? = null, val snoozeToken: String? = null,
+    ) {
         fun encode(): String = buildJsonObject {
             put("kind", "thermal")
             put("thermalSeverity", "critical")
@@ -143,6 +59,9 @@ internal object CriticalHeatAlerts {
             put("observedAt", alarm.observedAt.toString())
             alarm.recoveryState?.let { put("recoveryState", it) }
             alarm.snoozedUntil?.let { put("snoozedUntil", it.toString()) }
+            snoozeElapsed?.let { put("snoozeElapsed", it) }
+            snoozeBoot?.let { put("snoozeBoot", it) }
+            snoozeToken?.let { put("snoozeToken", it) }
             put("dismissed", dismissed)
             put(RETIRED_INCIDENTS, JsonArray(retired.map(::JsonPrimitive)))
         }.toString()
@@ -150,11 +69,13 @@ internal object CriticalHeatAlerts {
 
     private fun read(store: CredentialStore): Record? = store.readPrivate(CRITICAL_INCIDENT_KEY)?.let(::obj)?.let {
         Record(CriticalAlarmState(
-            requireNotNull(AlertIncident.fromEvent(it)),
+            // Saved records predate thermalState on wire recoveries and use recoveryState instead.
+            AlertIncident(canonicalId(it.string("incidentId")), AlertPhase.valueOf(it.string("alertPhase").uppercase()), Instant.parse(it.string("createdAt"))),
             Instant.parse(it.string("observedAt")),
             it.stringOrNull("recoveryState"),
             it.stringOrNull("snoozedUntil")?.let(Instant::parse),
-        ), it.boolOrNull("dismissed") == true, (it[RETIRED_INCIDENTS] as? JsonArray)?.map { id -> id.jsonPrimitive.content }.orEmpty())
+        ), it.boolOrNull("dismissed") == true, (it[RETIRED_INCIDENTS] as? JsonArray)?.map { id -> id.jsonPrimitive.content }.orEmpty(),
+            it["snoozeElapsed"]?.jsonPrimitive?.longOrNull, it["snoozeBoot"]?.jsonPrimitive?.intOrNull, it.stringOrNull("snoozeToken"))
     }
 
     @Synchronized fun accept(c: Context, store: CredentialStore, macId: String, event: JsonObject, incident: AlertIncident, serverNow: Instant) {
@@ -163,7 +84,6 @@ internal object CriticalHeatAlerts {
         if (previous != null && !incident.isNewerThan(previous.alarm.incident)) return
         val same = previous?.alarm?.incident?.id == incident.id
         val resolved = incident.phase == AlertPhase.RESOLVED
-        if (!same && previous != null) AlertNotifications.cancelCritical(c, macId, previous.alarm.incident.id)
         val observed = Instant.now().minus(Duration.between(incident.createdAt, serverNow).coerceAtLeast(Duration.ZERO))
         val record = Record(
             CriticalAlarmState(
@@ -173,9 +93,14 @@ internal object CriticalHeatAlerts {
             ),
             dismissed = (same && previous?.dismissed == true) || (resolved && !same),
             retired = if (!same && previous != null) (previous.retired + previous.alarm.incident.id).takeLast(32) else previous?.retired.orEmpty(),
+            snoozeElapsed = if (same && !resolved) previous?.snoozeElapsed else null,
+            snoozeBoot = if (same && !resolved) previous?.snoozeBoot else null,
+            snoozeToken = if (same && !resolved) previous?.snoozeToken else null,
         )
         store.writePrivate(CRITICAL_INCIDENT_KEY, record.encode())
-        publish(c, store, macId, record, ring = !same && !resolved)
+        previous?.let { cancelSchedule(c, macId, it) }
+        if (!same && previous != null) AlertNotifications.cancelCritical(c, macId, previous.alarm.incident.id)
+        publish(c, store, macId, record)
     }
 
     @Synchronized fun snapshot(c: Context, store: CredentialStore, macId: String, snapshot: JsonObject) {
@@ -188,8 +113,9 @@ internal object CriticalHeatAlerts {
         val record = previous.copy(alarm = previous.alarm.copy(
             incident = previous.alarm.incident.copy(createdAt = captured, phase = AlertPhase.RESOLVED),
             recoveryState = thermal, snoozedUntil = null,
-        ))
+        ), snoozeElapsed = null, snoozeBoot = null, snoozeToken = null)
         store.writePrivate(CRITICAL_INCIDENT_KEY, record.encode())
+        cancelSchedule(c, macId, previous)
         publish(c, store, macId, record)
     }
 
@@ -204,9 +130,11 @@ internal object CriticalHeatAlerts {
         if (store.load()?.macId != alert.macId) return
         val previous = read(store) ?: return
         val now = Instant.now()
-        if (previous.alarm.incident.id != alert.incidentId || previous.alarm.status(now) != CriticalAlarmStatus.CRITICAL) return
-        val record = previous.copy(alarm = previous.alarm.copy(snoozedUntil = now.plusSeconds(300)))
+        if (previous.alarm.incident.id != alert.incidentId || !previous.alarm.needsAttention(now)) return
+        val record = previous.copy(alarm = previous.alarm.copy(snoozedUntil = now.plusSeconds(300)),
+            snoozeElapsed = SystemClock.elapsedRealtime() + 300_000, snoozeBoot = boot(c), snoozeToken = UUID.randomUUID().toString())
         store.writePrivate(CRITICAL_INCIDENT_KEY, record.encode())
+        cancelSchedule(c, alert.macId, previous)
         publish(c, store, alert.macId, record)
     }
 
@@ -214,58 +142,88 @@ internal object CriticalHeatAlerts {
         val store = CredentialStore(c)
         if (store.load()?.macId != alert.macId) return
         val previous = read(store) ?: return
-        if (previous.alarm.incident.id != alert.incidentId || previous.alarm.status(Instant.now()) !in setOf(CriticalAlarmStatus.STALE, CriticalAlarmStatus.RECOVERED)) return
+        if (previous.alarm.incident.id != alert.incidentId || previous.alarm.status(Instant.now()) != CriticalAlarmStatus.RECOVERED) return
         val record = previous.copy(dismissed = true)
         store.writePrivate(CRITICAL_INCIDENT_KEY, record.encode())
         publish(c, store, alert.macId, record)
+    }
+
+    @Synchronized internal fun invalidatePairing(c: Context, macId: String, mutation: () -> Unit) = LidAlert.withLock {
+        // Pair removal/replacement holds both alert monitors through cancellation and storage invalidation.
+        clear(c, macId)
+        mutation()
     }
 
     @Synchronized fun clear(c: Context, macId: String) {
         pending?.let(handler::removeCallbacks)
         pending = null
         current.value = null
-        LidAlert.clearTimer()
+        read(CredentialStore(c))?.let { cancelSchedule(c, macId, it) }
+        LidAlert.clear(c, macId)
         AlertNotifications.clear(c, macId)
     }
 
-    private fun publish(c: Context, store: CredentialStore, macId: String, record: Record, ring: Boolean = false) {
-        pending?.let(handler::removeCallbacks)
-        pending = null
+    private fun boot(c: Context) = Settings.Global.getInt(c.contentResolver, Settings.Global.BOOT_COUNT, -1)
+    private fun cancelSchedule(c: Context, macId: String, record: Record) =
+        CriticalAlarmReceiver.cancel(c, macId, record.alarm.incident.id, record.snoozeToken)
+
+    private fun publish(c: Context, store: CredentialStore, macId: String, saved: Record) {
+        pending?.let(handler::removeCallbacks); pending = null
         val context = c.applicationContext
         val now = Instant.now()
-        val incidentId = record.alarm.incident.id
-        val status = record.alarm.status(now)
-        val rearm = !record.dismissed && record.alarm.shouldRearm(now)
-        val alarm = if (rearm) record.alarm.copy(snoozedUntil = null) else record.alarm
-        if (rearm) store.writePrivate(CRITICAL_INCIDENT_KEY, record.copy(alarm = alarm).encode())
-
-        val view = if (!record.dismissed && alarm.snoozedUntil?.isAfter(now) != true)
+        val elapsed = SystemClock.elapsedRealtime()
+        val currentBoot = boot(c)
+        var record = saved
+        saved.alarm.snoozedUntil?.let { until ->
+            val remaining = CriticalSnoozeDeadline(until, saved.snoozeElapsed, saved.snoozeBoot).remainingMillis(now, elapsed, currentBoot)
+            record = if (remaining == 0L) saved.copy(alarm = saved.alarm.copy(snoozedUntil = null),
+                snoozeElapsed = null, snoozeBoot = null, snoozeToken = null)
+            else saved.copy(alarm = saved.alarm.copy(snoozedUntil = now.plusMillis(remaining)),
+                snoozeElapsed = elapsed + remaining, snoozeBoot = currentBoot, snoozeToken = saved.snoozeToken ?: UUID.randomUUID().toString())
+        }
+        if (record != saved) store.writePrivate(CRITICAL_INCIDENT_KEY, record.encode())
+        cancelSchedule(c, macId, saved)
+        val alarm = record.alarm
+        val incidentId = alarm.incident.id
+        val status = alarm.status(now)
+        val view = if (!record.dismissed && status != CriticalAlarmStatus.SNOOZED)
             CriticalAlert(macId, incidentId, status, alarm.recoveryState) else null
         val before = current.value
         current.value = view
         if (view == null) {
             AlertNotifications.cancelCritical(context, macId, incidentId)
-        } else if (status == CriticalAlarmStatus.CRITICAL && (ring || rearm)) {
-            AlertNotifications.critical(context, view, ring = true)
-        } else if (before != view) {
-            if (before?.incidentId == incidentId && before.status == CriticalAlarmStatus.CRITICAL)
-                AlertNotifications.cancelCritical(context, macId, incidentId)
+        } else if (alarm.needsAttention(now)) {
+            val alreadyRinging = AlertNotifications.hasCriticalAlarm(context, macId, incidentId)
+            // The OS card uses timeless last-reported copy. Never replace an actual playing loop
+            // for freshness alone: ONLY_ALERT_ONCE updates can stop sound on some Android versions.
+            if (!alreadyRinging) AlertNotifications.critical(context, view, ring = true)
+        } else if (before != view || !AlertNotifications.hasCriticalStatus(context, macId, incidentId)) {
+            AlertNotifications.cancelCritical(context, macId, incidentId)
             AlertNotifications.critical(context, view, ring = false)
         }
 
         if (!record.dismissed && alarm.recoveryState == null) {
-            val next = listOfNotNull(alarm.freshUntil, alarm.snoozedUntil).filter { it > now }.minOrNull()
+            val until = alarm.snoozedUntil
+            if (until != null) CriticalAlarmReceiver.schedule(context, macId, incidentId, requireNotNull(record.snoozeToken), requireNotNull(record.snoozeElapsed))
+            val next = listOfNotNull(alarm.freshUntil, until).filter { it > now }.minOrNull()
             if (next != null) {
-                val expected = alarm.incident.id
                 val task = Runnable {
-                    runCatching { refresh(context, macId, expected) }.onFailure {
-                        AlertNotifications.cancelCritical(context, macId, expected)
+                    runCatching { refresh(context, macId, incidentId) }.onFailure {
+                        Log.w("KeepressoAlerts", "Critical evidence refresh failed; retaining the warning", it)
                     }
                 }
                 pending = task
                 handler.postDelayed(task, Duration.between(now, next).toMillis().coerceAtLeast(1))
             }
         }
+    }
+
+    @Synchronized fun rearm(c: Context, macId: String, incidentId: String, snoozeToken: String) {
+        val store = CredentialStore(c)
+        if (store.load()?.macId != macId) return
+        val record = read(store) ?: return
+        if (record.alarm.incident.id != incidentId || record.snoozeToken != snoozeToken) return
+        publish(c, store, macId, record)
     }
 
     @Synchronized private fun refresh(c: Context, macId: String, incidentId: String) {
