@@ -57,12 +57,12 @@ extension SafetyTests {
         let start = Date(timeIntervalSince1970: 1_000)
         machine.snooze(now: start)
         let state = MacThermalReading(state: .fair, guardActive: true)
-        let first = machine.observeHeat(state, now: start)
+        let first = machine.observeHeat(state, exposure: .init(lidClosed: true, isBrewing: true), now: start)
         #expect(first?.thermalSeverity == .serious)
         #expect(first?.thermalState == .fair)
         #expect(first?.body.contains("Fair") == true)
-        #expect(machine.observeHeat(state, now: start.addingTimeInterval(299)) == nil)
-        let repeatWarning = machine.observeHeat(state, now: start.addingTimeInterval(300))
+        #expect(machine.observeHeat(state, exposure: .init(lidClosed: true, isBrewing: true), now: start.addingTimeInterval(299)) == nil)
+        let repeatWarning = machine.observeHeat(state, exposure: .init(lidClosed: true, isBrewing: true), now: start.addingTimeInterval(300))
         #expect(repeatWarning?.thermalSeverity == .serious)
         #expect(repeatWarning?.id != first?.id)
     }
@@ -70,9 +70,9 @@ extension SafetyTests {
     @Test func seriousOnlyWarnsWhenNativeGuardReportsAnAction() {
         var machine = ReminderMachine()
         let start = Date(timeIntervalSince1970: 1_000)
-        #expect(machine.observeHeat(MacThermalReading(state: .serious), now: start) == nil)
-        #expect(machine.observeHeat(MacThermalReading(state: .serious, guardActive: false), now: start) == nil)
-        #expect(machine.observeHeat(MacThermalReading(state: .serious, guardActive: true), now: start)?.thermalState == .serious)
+        #expect(machine.observeHeat(MacThermalReading(state: .serious), exposure: .init(lidClosed: true, isBrewing: true), now: start) == nil)
+        #expect(machine.observeHeat(MacThermalReading(state: .serious, guardActive: false), exposure: .init(lidClosed: true, isBrewing: true), now: start) == nil)
+        #expect(machine.observeHeat(MacThermalReading(state: .serious, guardActive: true), exposure: .init(lidClosed: true, isBrewing: true), now: start)?.thermalState == .serious)
     }
 
     @Test func noncriticalCooldownSurvivesCoolingAndRestartWithoutDelayingCritical() throws {
@@ -82,30 +82,30 @@ extension SafetyTests {
         let serious = MacThermalReading(state: .serious, guardActive: true)
         let fair = MacThermalReading(state: .fair, guardActive: true)
 
-        #expect(machine.observeHeat(fair, now: at(0))?.thermalState == .fair)
-        #expect(machine.observeHeat(MacThermalReading(state: .nominal, guardActive: false), now: at(1)) == nil)
-        #expect(machine.observeHeat(serious, now: at(2)) == nil)
-        #expect(machine.observeHeat(MacThermalReading(state: .critical, guardActive: false), now: at(3))?.thermalSeverity == .critical)
+        #expect(machine.observeHeat(fair, exposure: .init(lidClosed: true, isBrewing: true), now: at(0))?.thermalState == .fair)
+        #expect(machine.observeHeat(MacThermalReading(state: .nominal, guardActive: false), exposure: .init(lidClosed: true, isBrewing: true), now: at(1)) == nil)
+        #expect(machine.observeHeat(serious, exposure: .init(lidClosed: true, isBrewing: true), now: at(2)) == nil)
+        #expect(machine.observeHeat(MacThermalReading(state: .critical, guardActive: false), exposure: .init(lidClosed: true, isBrewing: true), now: at(3))?.thermalSeverity == .critical)
 
         let saved = try JSONEncoder().encode(machine)
         machine = try JSONDecoder().decode(ReminderMachine.self, from: saved)
         machine.resumedAfterUnknownInterval()
-        #expect(machine.observeHeat(serious, now: at(90))?.alertPhase == .resolved)
-        #expect(machine.observeHeat(serious, now: at(299)) == nil)
-        #expect(machine.observeHeat(serious, now: at(300))?.thermalState == .serious)
+        #expect(machine.observeHeat(serious, exposure: .init(lidClosed: true, isBrewing: true), now: at(90))?.alertPhase == .resolved)
+        #expect(machine.observeHeat(serious, exposure: .init(lidClosed: true, isBrewing: true), now: at(299)) == nil)
+        #expect(machine.observeHeat(serious, exposure: .init(lidClosed: true, isBrewing: true), now: at(300))?.thermalState == .serious)
     }
 
     @Test func sleepAndUnknownIntervalResetHeatEvidence() {
         var machine = ReminderMachine()
         let start = Date(timeIntervalSince1970: 1_000)
         let serious = MacThermalReading(state: .serious, guardActive: true)
-        _ = machine.observeHeat(serious, now: start)
+        _ = machine.observeHeat(serious, exposure: .init(lidClosed: true, isBrewing: true), now: start)
         machine.observedSleep()
         #expect(!machine.noncriticalHeatActive)
-        #expect(machine.observeHeat(serious, now: start.addingTimeInterval(31)) == nil)
+        #expect(machine.observeHeat(serious, exposure: .init(lidClosed: true, isBrewing: true), now: start.addingTimeInterval(31)) == nil)
         machine.resumedAfterUnknownInterval()
         #expect(!machine.noncriticalHeatActive)
-        #expect(machine.observeHeat(serious, now: start.addingTimeInterval(62)) == nil)
+        #expect(machine.observeHeat(serious, exposure: .init(lidClosed: true, isBrewing: true), now: start.addingTimeInterval(62)) == nil)
     }
 
     @Test func journalSaveFailureDoesNotConvertUncertainMemoryToOK()throws{

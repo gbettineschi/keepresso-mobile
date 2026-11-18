@@ -400,7 +400,7 @@ private let connectionLog=Logger(subsystem:"local.keespresso.companion",category
         var events = reminders.observeAwake(reading.awake, now: now)
         if reading.awake.wake == .full {
             let hadNoncritical = reminders.noncriticalHeatActive
-            let warning = reminders.observeHeat(reading.thermal, now: now)
+            let warning = reminders.observeHeat(reading.thermal, exposure: .init(lidClosed: reading.awake.lidClosed, isBrewing: reading.awake.isBrewing), now: now)
             if hadNoncritical && !reminders.noncriticalHeatActive { resolveEvents(["thermal"]) }
             if let warning { events.append(warning) }
         }
