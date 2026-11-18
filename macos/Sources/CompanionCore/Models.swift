@@ -74,6 +74,7 @@ public struct CompanionEvent: Codable {
     public var thermalState: MacThermalState? = nil
     public var incidentId: String? = nil
     public var alertPhase: AlertPhase? = nil
+    public var awakeContext: MacAwakeContext? = nil
     public var deliveryLifetimeSeconds: Int { thermalSeverity == .critical && alertPhase != .resolved ? 60 : 300 }
     public var deliveryKind: String {
         kind == "thermal" && incidentId != nil && thermalSeverity == .critical ? "critical_episode" : kind

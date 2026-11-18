@@ -9,7 +9,7 @@ struct LidReminderTests {
         var object=try WireJSON.object(WireJSON.encoder.encode(r));object.removeValue(forKey:"awakeAlerts")
         var restored=try WireJSON.decoder.decode(ReminderMachine.self,from:WireJSON.data(object))
         XCTAssertEqual(restored.settings.intervalSeconds,7200);XCTAssertEqual(restored.snoozedUntil,t+21600)
-        let reading = MacAwakeReading(wake: .full, lidClosed: true, isBrewing: false, brew: nil, lastUserInputAt: nil)
+        let reading = MacAwakeReading(wake: .full, lidClosed: true, displayAvailability: .unavailable, isBrewing: false, brew: nil, lastUserInputAt: nil)
         XCTAssertTrue(restored.observeAwake(reading, now: t + 1).isEmpty)
     }
     @Test func resolvedLidEventCannotBeDeliveredLateWhileOtherWarningsSurvive()throws{

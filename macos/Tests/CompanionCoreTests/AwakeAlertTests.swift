@@ -7,11 +7,11 @@ struct AwakeAlertTests {
 
     func sample(
         lidClosed: Bool, now: Date, idle: TimeInterval = 0, brewing: Bool = true,
-        wake: MacAlertWakeState = .full
+        wake: MacAlertWakeState = .full, display: MacDisplayAvailability? = nil
     ) -> MacAwakeReading {
-        .init(wake: wake, lidClosed: lidClosed, isBrewing: brewing,
+        .init(wake: wake, lidClosed: lidClosed, displayAvailability: display ?? (lidClosed ? .unavailable : .available), isBrewing: brewing,
               brew: brewing ? .init(startedAt: start, mode: .manual,
-                                    endsAt: start + 10_800, returnsToAutomatic: true) : nil,
+                                    endsAt: start + 86_400, returnsToAutomatic: true) : nil,
               lastUserInputAt: now - idle)
     }
 
@@ -153,16 +153,105 @@ struct AwakeAlertTests {
             sample(lidClosed: false, now: start + 3_602, idle: 3_602), now: start + 3_602).isEmpty)
     }
 
-    @Test func initiallyClosedStatusIsSilentAndSleepResolvesIt() throws {
+    @Test func initiallyClosedWakeStartsAPhoneIncidentAndSleepResolvesIt() throws {
         var machine = ReminderMachine()
         _ = machine.observeAwake(sample(lidClosed: true, now: start), now: start)
         let status = machine.observeAwake(sample(lidClosed: true, now: start + 60), now: start + 60).first
         let alert = try #require(status)
-        #expect(alert.alertPhase == .updated)
+        #expect(alert.alertPhase == .active)
         let resolution = machine.observedSleep(now: start + 61)
         let removed = try #require(resolution)
         #expect(removed.alertPhase == .resolved)
         #expect(removed.incidentId == alert.incidentId)
+    }
+
+
+    @Test func screenOffSharesTheMinuteAndIncidentWithClosedLid() throws {
+        var machine = ReminderMachine()
+        _ = machine.observeAwake(sample(lidClosed: false, now: start), now: start)
+        _ = machine.observeAwake(sample(lidClosed: false, now: start + 1, display: .unavailable), now: start + 1)
+        _ = machine.observeAwake(sample(lidClosed: true, now: start + 30), now: start + 30)
+        #expect(machine.observeAwake(sample(lidClosed: true, now: start + 60), now: start + 60).isEmpty)
+        let first = try #require(machine.observeAwake(sample(lidClosed: true, now: start + 61), now: start + 61).first)
+        #expect(first.awakeContext == .lidClosed)
+        let changed = try #require(machine.observeAwake(sample(lidClosed: false, now: start + 62, display: .unavailable), now: start + 62).first)
+        #expect(changed.incidentId == first.incidentId)
+        #expect(changed.awakeContext == .screenOff)
+        #expect(changed.title == "Your Mac is running with the screen off")
+        #expect(changed.alertPhase == .updated)
+        #expect(machine.observeAwake(sample(lidClosed: false, now: start + 151, display: .unavailable), now: start + 151).isEmpty)
+        let refreshed = try #require(machine.observeAwake(sample(lidClosed: false, now: start + 152, display: .unavailable), now: start + 152).first)
+        #expect(refreshed.incidentId == first.incidentId)
+        let resolved = try #require(machine.observeAwake(sample(lidClosed: true, now: start + 153, display: .available), now: start + 153).first)
+        #expect(resolved.alertPhase == .resolved)
+        #expect(resolved.incidentId == first.incidentId)
+        _ = machine.observeAwake(sample(lidClosed: true, now: start + 154), now: start + 154)
+        let next = try #require(machine.observeAwake(sample(lidClosed: true, now: start + 214), now: start + 214).first)
+        #expect(next.incidentId != first.incidentId)
+    }
+
+    @Test func glassIgnoresExternalMonitorStandbyAndNeedsAPhysicalClosure() {
+        var machine = ReminderMachine()
+        _ = machine.observeAwake(sample(lidClosed: false, now: start, brewing: false), now: start)
+        _ = machine.observeAwake(sample(lidClosed: true, now: start + 1, brewing: false, display: .available), now: start + 1)
+        let dockingSound = machine.consumeLidClosureSound()
+        #expect(!dockingSound)
+        _ = machine.observeAwake(sample(lidClosed: true, now: start + 2, brewing: false), now: start + 2)
+        let standbySound = machine.consumeLidClosureSound()
+        #expect(!standbySound)
+        _ = machine.observeAwake(sample(lidClosed: false, now: start + 3, brewing: false, display: .unavailable), now: start + 3)
+        let openStandbySound = machine.consumeLidClosureSound()
+        #expect(!openStandbySound)
+        _ = machine.observeAwake(sample(lidClosed: true, now: start + 4, brewing: false), now: start + 4)
+        let closureSound = machine.consumeLidClosureSound()
+        #expect(closureSound)
+    }
+
+    @Test func unknownDisplayBreaksConfirmationButDoesNotInventResolution() throws {
+        var machine = ReminderMachine()
+        _ = machine.observeAwake(sample(lidClosed: false, now: start, display: .unavailable), now: start)
+        _ = machine.observeAwake(sample(lidClosed: false, now: start + 59, display: .unknown), now: start + 59)
+        _ = machine.observeAwake(sample(lidClosed: false, now: start + 60, display: .unavailable), now: start + 60)
+        #expect(machine.observeAwake(sample(lidClosed: false, now: start + 119, display: .unavailable), now: start + 119).isEmpty)
+        let first = try #require(machine.observeAwake(sample(lidClosed: false, now: start + 120, display: .unavailable), now: start + 120).first)
+        #expect(machine.observeAwake(sample(lidClosed: false, now: start + 121, display: .unknown), now: start + 121).isEmpty)
+        let resolved = try #require(machine.observeAwake(sample(lidClosed: false, now: start + 122), now: start + 122).first)
+        #expect(resolved.alertPhase == .resolved)
+        #expect(resolved.incidentId == first.incidentId)
+    }
+
+    @Test func normalDesktopPreservesTheHourReminder() throws {
+        var machine = ReminderMachine()
+        _ = machine.observeAwake(sample(lidClosed: false, now: start), now: start)
+        _ = machine.observeAwake(sample(lidClosed: true, now: start + 2_400, idle: 2_400, display: .available), now: start + 2_400)
+        let events = machine.observeAwake(sample(lidClosed: true, now: start + 3_600, idle: 3_600, display: .available), now: start + 3_600)
+        #expect(events.count == 1)
+        #expect(events.first?.kind == "unattended_brew")
+    }
+
+    @Test func nonVisibleTimeCountsButNeverRearmsAnAlreadySentHour() {
+        var machine = ReminderMachine()
+        _ = machine.observeAwake(sample(lidClosed: false, now: start), now: start)
+        _ = machine.observeAwake(sample(lidClosed: false, now: start + 2_400, idle: 2_400, display: .unavailable), now: start + 2_400)
+        _ = machine.observeAwake(sample(lidClosed: false, now: start + 2_460, idle: 2_460, display: .unavailable), now: start + 2_460)
+        let hour = machine.observeAwake(sample(lidClosed: false, now: start + 3_600, idle: 3_600), now: start + 3_600)
+        #expect(hour.filter { $0.kind == "unattended_brew" }.count == 1)
+        _ = machine.observeAwake(sample(lidClosed: true, now: start + 3_601, idle: 3_601), now: start + 3_601)
+        let later = machine.observeAwake(sample(lidClosed: false, now: start + 7_200, idle: 7_200), now: start + 7_200)
+        #expect(!later.contains { $0.kind == "unattended_brew" })
+        _ = machine.observedSleep(now: start + 8_000)
+        _ = machine.observeAwake(sample(lidClosed: false, now: start + 11_600, idle: 11_600), now: start + 11_600)
+        #expect(machine.observeAwake(sample(lidClosed: false, now: start + 15_200, idle: 15_200), now: start + 15_200).isEmpty)
+    }
+
+    @Test func restartNeverRestoresAnUnconsumedSoundCue() throws {
+        var machine = ReminderMachine()
+        _ = machine.observeAwake(sample(lidClosed: false, now: start), now: start)
+        _ = machine.observeAwake(sample(lidClosed: true, now: start + 1), now: start + 1)
+        machine = try WireJSON.decoder.decode(ReminderMachine.self, from: WireJSON.encoder.encode(machine))
+        machine.resumedAfterUnknownInterval()
+        let sound = machine.consumeLidClosureSound()
+        #expect(!sound)
     }
 
     @Test func criticalUpdatesAndRecoveryShareOneIncident() throws {
