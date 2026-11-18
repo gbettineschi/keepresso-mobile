@@ -13,6 +13,7 @@ data class AlertIncident(val id: String, val phase: AlertPhase, val createdAt: I
 
     companion object {
         fun fromEvent(event: JsonObject): AlertIncident? {
+            if (event.string("kind") == "lid_awake") AwakeWarningContext.fromEvent(event)
             val id = event.stringOrNull("incidentId")
             val phase = event.stringOrNull("alertPhase")
             if (id == null && phase == null) return null
