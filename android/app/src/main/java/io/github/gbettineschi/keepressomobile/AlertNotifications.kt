@@ -46,13 +46,14 @@ internal object AlertNotifications {
         c, key.hashCode(), Intent(c, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE,
     )
 
-    fun lid(c: Context, mac: String, incident: String, title: String, body: String, observed: Instant, silent: Boolean) {
+    fun lid(c: Context, mac: String, incident: String, title: String, body: String, observed: Instant, silent: Boolean, validForMillis: Long) {
         if (!canNotify(c)) return
         val manager = manager(c)
         manager.createNotificationChannel(NotificationChannel(LID_CHANNEL, "Lid closed while awake", NotificationManager.IMPORTANCE_DEFAULT))
         val tag = lidTag(mac, incident)
         val sleep = intent(c, MacAlertActivity.ACTION_SLEEP, mac, incident)
         val notification = builder(c, LID_CHANNEL, title, body).setOngoing(true).setShowWhen(true).setWhen(observed.toEpochMilli())
+            .setTimeoutAfter(validForMillis)
             .setSilent(silent).setOnlyAlertOnce(silent).setContentIntent(dashboard(c, incident))
             .addAction(0, "Sleep now", sleep)
         manager.notify(tag, ALERT_ID, notification.build())

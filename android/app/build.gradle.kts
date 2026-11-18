@@ -8,8 +8,8 @@ android {
     compileSdk = 35
     defaultConfig {
         applicationId = namespace; minSdk = 28; targetSdk = 35
-        versionCode = providers.gradleProperty("keepresso.releaseVersionCode").orElse("6010").get().toInt()
-        versionName = providers.gradleProperty("keepresso.releaseVersion").orElse("0.6.10").get()
+        versionCode = providers.gradleProperty("keepresso.releaseVersionCode").orElse("6011").get().toInt()
+        versionName = providers.gradleProperty("keepresso.releaseVersion").orElse("0.6.11").get()
     }
     defaultConfig { testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
     buildFeatures { compose = true; buildConfig = true }

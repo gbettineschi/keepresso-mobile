@@ -86,10 +86,19 @@ struct AwakeAlerts: Codable {
     private var closedSince: Date?
     private var lastLidClosed: Bool?
     private var observedClosure: Bool?
+    private var closureSoundPending: Bool?
+    private var brewedDuringDelay: Bool?
+
+    mutating func consumeLidClosureSound() -> Bool {
+        let pending = closureSoundPending == true
+        closureSoundPending = false
+        return pending
+    }
 
     mutating func observe(
         _ reading: MacAwakeReading, now: Date, routineEnabled: Bool
     ) -> [CompanionEvent] {
+        closureSoundPending = false
         guard reading.wake == .full, let closed = reading.lidClosed else {
             invalidateContinuity()
             return []
@@ -102,13 +111,16 @@ struct AwakeAlerts: Codable {
             if closedSince == nil {
                 closedSince = now
                 observedClosure = lidWasClosed == false
+                closureSoundPending = observedClosure
             }
-            // Ordinary lid sleep can be close behind the hardware edge.
-            guard let closedSince, now.timeIntervalSince(closedSince) >= 2 else { return [] }
+            if reading.isBrewing == true { brewedDuringDelay = true }
+            // Confirm a full minute awake so ordinary lid sleep never produces an alert.
+            guard let closedSince, now.timeIntervalSince(closedSince) >= 60 else { return [] }
             return observeClosedLid(reading, now: now).map { [$0] } ?? []
         }
 
         closedSince = nil
+        brewedDuringDelay = nil
         observedClosure = nil
         if openSince == nil { openSince = now }
         let events = resolveLid(now: now).map { [$0] } ?? []
@@ -144,7 +156,7 @@ struct AwakeAlerts: Codable {
     }
 
     private mutating func observeClosedLid(_ reading: MacAwakeReading, now: Date) -> CompanionEvent? {
-        let brewed = reading.isBrewing == true || lidIncident?.brewedWhileClosed == true
+        let brewed = reading.isBrewing == true || brewedDuringDelay == true || lidIncident?.brewedWhileClosed == true
         let body: String
         if let brew = reading.brew { body = brew.description }
         else if reading.isBrewing == false {
@@ -176,6 +188,8 @@ struct AwakeAlerts: Codable {
     }
 
     mutating func invalidateContinuity() {
+        closureSoundPending = false
+        brewedDuringDelay = nil
         openSince = nil
         closedSince = nil
         lastLidClosed = nil

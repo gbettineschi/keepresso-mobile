@@ -404,7 +404,7 @@ private let connectionLog=Logger(subsystem:"local.keespresso.companion",category
             if hadNoncritical && !reminders.noncriticalHeatActive { resolveEvents(["thermal"]) }
             if let warning { events.append(warning) }
         }
-        if events.contains(where: { $0.kind == "lid_awake" && $0.alertPhase == .active }) {
+        if reminders.consumeLidClosureSound() {
             lidWarningSound.play(evenIfMuted: UserDefaults.standard.bool(forKey: LidWarningSound.overrideMutePreference))
         }
         deliver(events)

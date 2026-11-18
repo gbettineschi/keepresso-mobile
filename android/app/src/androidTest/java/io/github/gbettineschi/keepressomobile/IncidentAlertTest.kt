@@ -60,6 +60,51 @@ class IncidentAlertTest {
         Assert.assertTrue(active("lid").isEmpty())
     }
 
+    @Test fun lidCardExpiresThroughAndroidWhenItsInProcessTimerIsLost() {
+        post("lid_awake", "Still awake", "active", age = -178)
+        val card = active("lid").single().notification
+        Assert.assertTrue(card.timeoutAfter in 1..2_000L)
+        LidAlert.clearTimer()
+        val deadline = SystemClock.elapsedRealtime() + 10_000
+        while (active("lid").isNotEmpty() && SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(100)
+        Assert.assertTrue("Android should expire the card without an app callback", active("lid").isEmpty())
+        LidAlert.restore(context)
+        Assert.assertTrue("Reopening must not restore an expired assertion", active("lid").isEmpty())
+    }
+
+    @Test fun expiredLidEvidenceNeverCreatesAnAwakeCard() {
+        post("lid_awake", "Old closed-lid reading", "active", age = -181)
+        Assert.assertTrue(active("lid").isEmpty())
+        LidAlert.restore(context)
+        Assert.assertTrue(active("lid").isEmpty())
+    }
+
+    @Test fun wallClockRollbackCannotRestoreAnExpiredLidCard() {
+        post("lid_awake", "Still awake", "active")
+        await { active("lid").size == 1 }
+        LidAlert.clearTimer()
+        val store = CredentialStore(context)
+        val record = Json.parseToJsonElement(requireNotNull(store.readPrivate(LID_INCIDENT_KEY))).jsonObject
+        // Simulate restoration after the monotonic deadline while wall time appears earlier.
+        store.writePrivate(LID_INCIDENT_KEY, JsonObject(record + mapOf(
+            "phoneObservedAt" to JsonPrimitive(Instant.now().plusSeconds(3_600).toString()),
+            "phoneExpiresAtElapsed" to JsonPrimitive(SystemClock.elapsedRealtime() - 1),
+        )).toString())
+        LidAlert.restore(context)
+        await { active("lid").isEmpty() }
+    }
+
+    @Test fun lidEvidenceFromAPreviousPhoneBootIsNotRestored() {
+        post("lid_awake", "Still awake", "active")
+        await { active("lid").size == 1 }
+        LidAlert.clearTimer()
+        val store = CredentialStore(context)
+        val record = Json.parseToJsonElement(requireNotNull(store.readPrivate(LID_INCIDENT_KEY))).jsonObject
+        store.writePrivate(LID_INCIDENT_KEY, JsonObject(record + ("phoneBootCount" to JsonPrimitive(-1))).toString())
+        LidAlert.restore(context)
+        await { active("lid").isEmpty() }
+    }
+
     @Test fun criticalHeartbeatDoesNotRepostTheAlarmAndRecoveredStatusIsQuiet() {
         post("thermal", "Critical", "active", state = "critical")
         await { active("critical").size == 1 }

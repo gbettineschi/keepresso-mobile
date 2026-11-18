@@ -86,8 +86,8 @@ Remote-control feasibility remains separate from preview feasibility: the public
 36. Rearm only after user input resumes or the continuous open-lid brewing period ends.
 37. Preserve the existing routine-snooze and reminder-enable preferences.
 38. Snoozing alerts changes only their presentation.
-39. Alert once when the lid is closed and the Mac stays fully awake. Play Glass from the same decision on the Mac.
-40. Keep a single ongoing Android status for this lid incident. Update it silently when brewing changes, and clear it when the lid opens or sleep begins.
+39. Play Glass once on the Mac at an observed open-to-closed lid transition during full wake. Send the phone alert only after one continuous minute fully awake with the lid closed. Waking already closed does not play Glass.
+40. Keep a single ongoing Android status for this lid incident. Update it silently when brewing changes, and clear it on received evidence that the lid opened or sleep began. Refresh evidence every 90 seconds while awake; Android also expires the card after three minutes without fresh evidence, even if the phone app is no longer running. Expiration does not prove the Mac slept.
 41. Include the brewing mode, end time and configured Automatic handover where applicable. If a closed-lid brew ends while the Mac stays on, show “Keepresso is no longer brewing.”
 42. All three alert flows require full wake. DarkWake never creates an alert.
 43. Use the same authenticated Sleep now action and result reporting from the critical alarm and both lid notifications.

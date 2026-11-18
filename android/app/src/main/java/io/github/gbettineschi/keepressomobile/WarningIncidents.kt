@@ -3,10 +3,11 @@ package io.github.gbettineschi.keepressomobile
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import android.provider.Settings
 import io.github.gbettineschi.keepressomobile.core.*
 import java.time.Duration
 import java.time.Instant
-import java.util.Date
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.*
@@ -16,6 +17,8 @@ internal const val CRITICAL_INCIDENT_KEY = "criticalAlertIncident"
 private const val RETIRED_INCIDENTS = "phoneRetiredIncidents"
 private const val OBSERVED_AT = "phoneObservedAt"
 private const val LID_HIDDEN_AT = "phoneDarkWakeAt"
+private const val LID_EXPIRES_ELAPSED = "phoneExpiresAtElapsed"
+private const val LID_BOOT_COUNT = "phoneBootCount"
 
 internal object LidAlert {
     private val handler = Handler(Looper.getMainLooper())
@@ -31,9 +34,12 @@ internal object LidAlert {
         if (hidden != null && incident.phase != AlertPhase.RESOLVED && incident.createdAt <= hidden) return
         val retiredIds = if (previous != null && previous.id != incident.id) (retired + previous.id).takeLast(32) else retired
         val observed = Instant.now().minus(Duration.between(incident.createdAt, serverNow).coerceAtLeast(Duration.ZERO))
+        val remaining = Duration.between(Instant.now(), observed.plusSeconds(180)).toMillis()
         val record = JsonObject(event + mapOf(
             RETIRED_INCIDENTS to JsonArray(retiredIds.map(::JsonPrimitive)),
             OBSERVED_AT to JsonPrimitive(observed.toString()),
+            LID_EXPIRES_ELAPSED to JsonPrimitive(SystemClock.elapsedRealtime() + remaining),
+            LID_BOOT_COUNT to JsonPrimitive(bootCount(c)),
         ))
         store.writePrivate(LID_INCIDENT_KEY, record.toString())
         if (previous != null && previous.id != incident.id) AlertNotifications.cancelLid(c, macId, previous.id)
@@ -48,20 +54,25 @@ internal object LidAlert {
         }
         val observed = record.stringOrNull(OBSERVED_AT)?.let(Instant::parse) ?: return
         val context = c.applicationContext
-        val freshFor = Duration.between(Instant.now(), observed.plusSeconds(180)).toMillis()
-        val body = record.string("body")
-        val text = if (freshFor > 0) body else {
-            val time = android.text.format.DateFormat.getTimeFormat(c).format(Date.from(observed))
-            "Last confirmed at $time. $body"
+        // Wall-clock corrections must not restore an expired assertion. A new phone
+        // boot (or an older record without this deadline) needs fresh Mac evidence.
+        val boot = bootCount(c)
+        val sameBoot = boot >= 0 && record[LID_BOOT_COUNT]?.jsonPrimitive?.intOrNull == boot
+        val freshFor = if (sameBoot) {
+            (record[LID_EXPIRES_ELAPSED]?.jsonPrimitive?.longOrNull ?: 0) - SystemClock.elapsedRealtime()
+        } else 0
+        if (freshFor <= 0) {
+            AlertNotifications.cancelLid(c, macId, incident.id)
+            return
         }
-        AlertNotifications.lid(c, macId, incident.id, record.string("title"), text, observed, silent || freshFor <= 0)
-        if (freshFor > 0) {
-            val expected = record.string("id")
-            val task = Runnable { runCatching { restore(context, expected) } }
-            pending = task
-            handler.postDelayed(task, freshFor)
-        }
+        AlertNotifications.lid(c, macId, incident.id, record.string("title"), record.string("body"), observed, silent, freshFor)
+        val expected = record.string("id")
+        val task = Runnable { runCatching { restore(context, expected) } }
+        pending = task
+        handler.postDelayed(task, freshFor)
     }
+
+    private fun bootCount(c: Context): Int = Settings.Global.getInt(c.contentResolver, Settings.Global.BOOT_COUNT, -1)
 
     @Synchronized fun clearTimer() {
         pending?.let(handler::removeCallbacks)
