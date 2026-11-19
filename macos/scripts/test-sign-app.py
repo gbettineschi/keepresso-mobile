@@ -26,16 +26,46 @@ if '--test-requirement' in sys.argv and os.environ.get('SIGN_TEST_UNSUPPORTED_TE
 if '--display' in sys.argv:
  if os.environ.get('SIGN_TEST_PATH'):print('Executable='+os.environ['SIGN_TEST_PATH'],file=sys.stderr)
  requirement='cdhash H"abcd"' if os.environ.get('SIGN_TEST_HASH') else 'identifier "local.keespresso.companion"' if os.environ.get('SIGN_TEST_BROAD_DR') else 'identifier "local.keespresso.companion" and anchor H"1234"'
+ if os.environ.get('SIGN_TEST_PROJECT_DR'):
+  requirement='identifier "local.keespresso.companion" and certificate leaf = H"1234567890abcdef1234567890abcdef12345678"'
+ if os.environ.get('SIGN_TEST_PROJECT_OR'):
+  requirement='identifier "local.keespresso.companion" or certificate leaf = H"1234567890abcdef1234567890abcdef12345678"'
+ if os.environ.get('SIGN_TEST_WRONG_PROJECT'):
+  requirement='identifier "different.app" and certificate leaf = H"1234567890abcdef1234567890abcdef12345678"'
  print('designated => '+requirement,file=sys.stderr)
 ''')
         fake.chmod(0o700)
-        self.env={k:v for k,v in os.environ.items() if not k.startswith('KEEPRESSO_CODESIGN_') and k!='KEEPRESSO_REQUIRE_STABLE_SIGNING'}
+        self.env={k:v for k,v in os.environ.items() if not k.startswith('KEEPRESSO_CODESIGN_') and k not in ('KEEPRESSO_REQUIRE_STABLE_SIGNING','KEEPRESSO_SIGNING_PROFILE')}
         self.env.update(PATH=str(self.root)+os.pathsep+self.env['PATH'],SIGN_TEST_LOG=str(self.log))
     def run_sign(self,**env):
         return subprocess.run(['bash',str(SCRIPT),str(self.root/'Companion.app')],env=self.env|env,text=True,capture_output=True)
     def calls(self):
         import json
         return [json.loads(x) for x in self.log.read_text().splitlines()] if self.log.exists() else []
+    def test_project_mode_refuses_missing_identity_without_fallback(self):
+        result=self.run_sign(KEEPRESSO_SIGNING_PROFILE='project')
+        self.assertEqual(result.returncode,2);self.assertEqual(self.calls(),[])
+    def test_unknown_signing_profile_fails_before_signing(self):
+        result=self.run_sign(KEEPRESSO_SIGNING_PROFILE='misspelled')
+        self.assertEqual(result.returncode,2);self.assertEqual(self.calls(),[])
+    def test_project_certificate_has_explicit_keychain_and_no_blanket_deep_signing(self):
+        keychain=self.root/'fixture.keychain-db';keychain.touch()
+        result=self.run_sign(KEEPRESSO_SIGNING_PROFILE='project',KEEPRESSO_CODESIGN_IDENTITY=IDENTITY,
+                             KEEPRESSO_CODESIGN_KEYCHAIN=str(keychain),SIGN_TEST_PROJECT_DR='1',SIGN_TEST_UNSUPPORTED_TEAM='1')
+        self.assertEqual(result.returncode,0,result.stderr)
+        signing=next(c for c in self.calls() if '--sign' in c)
+        self.assertNotIn('--deep',signing)
+        self.assertEqual(signing[signing.index('--keychain')+1],str(keychain))
+        self.assertTrue(any('--deep' in c and '--strict' in c and '--verify' in c for c in self.calls()))
+    def test_project_rejects_a_broad_or_requirement(self):
+        result=self.run_sign(KEEPRESSO_SIGNING_PROFILE='project',KEEPRESSO_CODESIGN_IDENTITY=IDENTITY,SIGN_TEST_PROJECT_OR='1')
+        self.assertEqual(result.returncode,2)
+    def test_project_rejects_wrong_designated_identifier(self):
+        result=self.run_sign(KEEPRESSO_SIGNING_PROFILE='project',KEEPRESSO_CODESIGN_IDENTITY=IDENTITY,SIGN_TEST_WRONG_PROJECT='1')
+        self.assertEqual(result.returncode,2)
+    def test_project_rejects_a_certificate_name_instead_of_an_exact_identity(self):
+        result=self.run_sign(KEEPRESSO_SIGNING_PROFILE='project',KEEPRESSO_CODESIGN_IDENTITY='Keepresso project')
+        self.assertEqual(result.returncode,2);self.assertEqual(self.calls(),[])
     def test_stable_mode_refuses_missing_identity_before_signing(self):
         result=self.run_sign(KEEPRESSO_REQUIRE_STABLE_SIGNING='1')
         self.assertEqual(result.returncode,2);self.assertEqual(self.calls(),[])
