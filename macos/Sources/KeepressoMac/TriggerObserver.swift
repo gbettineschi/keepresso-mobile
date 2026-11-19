@@ -22,8 +22,8 @@ private let triggerLog=Logger(subsystem:"local.keespresso.companion",category:"t
         let consent=CompanionObservationConsent.decode(folderConsent)
         let folderPolicy=TriggerFolderAccess(configuredFolders:settings.ruleSet.rules.compactMap { rule in
             if case .downloadInFolder(let folder)=rule { return folder };return nil
-        },buildIdentity:TriggerFolderBuildIdentity.current,consentData:consent?.folders)
-        let steam=CompanionSteamObservation(buildIdentity:TriggerFolderBuildIdentity.current,consentData:consent?.steam)
+        },buildIdentity:CompanionAuthorizationIdentity.current,consentData:consent?.folders)
+        let steam=CompanionSteamObservation(buildIdentity:CompanionAuthorizationIdentity.current,consentData:consent?.steam)
         let inputs=CompanionObservationInputs(hookRecords:{copies.read(now:$0)},hooksAvailable:{!copies.failed},folderApproved:folderPolicy.isApproved,steam:steam,steamAvailable:{steam.hasCompleteReading})
         let cpuDisabled = Set(settings.evidenceOnlyAgentRuleIndices)
         let rules = Array(settings.ruleSet.rules.enumerated())

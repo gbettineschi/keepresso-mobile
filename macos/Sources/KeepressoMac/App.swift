@@ -47,6 +47,12 @@ import OSLog
             }
             dispatchMain()
         }
+        if CommandLine.arguments.contains("--read-authorization-identity") {
+            // Read-only diagnostic before app model, credentials, startup or transports.
+            let identity = CompanionAuthorizationIdentity.current
+            if let data = try? WireJSON.data(["identity": identity]) { try? FileHandle.standardOutput.write(contentsOf: data) }
+            exit(identity.isEmpty ? 1 : 0)
+        }
         if CommandLine.arguments.contains("--self-check"){
             // Branch before NSApplication, Keychain, BLE, timers, native status,
             // observer or any control adapter is created.

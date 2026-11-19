@@ -1,9 +1,22 @@
 import Foundation
 import CryptoKit
 import Testing
+import CompanionCore
 @testable import KeepressoCore
 
 struct CompanionSteamObservationTests {
+    @Test func certificateUpdateKeepsSteamProofWhileAnotherSignerCannotUseIt() async throws {
+        let fixture = SteamFixture()
+        let first = PrivacyCertificateFixtures.authority("old-build")
+        let proof = try #require(await CompanionSteamObservation.prepareConsent(buildIdentity: first, driver: fixture.driver) { _ in true })
+        let updated = PrivacyCertificateFixtures.authority("new-build")
+        #expect(CompanionSteamObservation.isPrepared(proof, buildIdentity: updated, driver: fixture.driver))
+        let monitor = CompanionSteamObservation(buildIdentity: updated, consentData: proof, driver: fixture.driver)
+        #expect(monitor.hasCompleteReading)
+        let other = PrivacyCertificateFixtures.authority("new-build", certificate: PrivacyCertificateFixtures.b)
+        #expect(!CompanionSteamObservation.isPrepared(proof, buildIdentity: other, driver: fixture.driver))
+    }
+
     @Test func absentProofAndWrongIdentityNeverReadFilesystem() {
         let fixture = SteamFixture()
         let monitor = CompanionSteamObservation(buildIdentity: "test", consentData: nil, driver: fixture.driver)

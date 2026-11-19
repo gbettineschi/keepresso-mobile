@@ -14,14 +14,14 @@ private let connectionLog=Logger(subsystem:"local.keespresso.companion",category
     lazy var setup:CompanionSetup = CompanionSetup(
         eligible:{[weak self] in self?.setupEligible == true},
         rules:{[weak self] in self?.setupRules() ?? []},
-        buildIdentity:{TriggerFolderBuildIdentity.current},
+        buildIdentity:{CompanionAuthorizationIdentity.current},
         requestFolders:{[weak self] in
             guard let self else{return false}
             await self.triggerFolderSetup.allowAccess()
             return self.triggerFolderSetup.allConfiguredApproved
         },
-        requestSteam:{await CompanionSteamObservation.prepareConsent(buildIdentity:TriggerFolderBuildIdentity.current,folderProbe:TriggerFolderSetup.probe)},
-        steamReady:{CompanionSteamObservation.isPrepared($0,buildIdentity:TriggerFolderBuildIdentity.current)},
+        requestSteam:{await CompanionSteamObservation.prepareConsent(buildIdentity:CompanionAuthorizationIdentity.current,folderProbe:TriggerFolderSetup.probe)},
+        steamReady:{CompanionSteamObservation.isPrepared($0,buildIdentity:CompanionAuthorizationIdentity.current)},
         directTriggerControl:{[weak self] in self?.native.supportsDirectTriggerMode == true})
     private func setupRules()->[TriggerRule]{
         guard native.installedVersion == CompanionObserverSettings.supportedVersion,let defaults=UserDefaults(suiteName:"sh.gyorgy.keepresso"),let data=defaults.data(forKey:UserDefaultsSettingsStore.defaultKey),let settings=try? CompanionObserverSettings.decode(data) else{return []}

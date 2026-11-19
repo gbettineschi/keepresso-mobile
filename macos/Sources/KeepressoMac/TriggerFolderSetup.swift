@@ -1,22 +1,6 @@
 import AppKit
-import CryptoKit
 import CompanionCore
 import KeepressoCore
-
-/// Hash our own executable once. Re-signing/rebuilding changes the identity,
-/// even if someone reuses the displayed app version or bundle build number.
-/// This never reads a configured download folder or queries TCC databases.
-enum TriggerFolderBuildIdentity {
-    static let current: String = {
-        guard let executable = Bundle.main.executableURL,
-              let identifier = Bundle.main.bundleIdentifier,
-              let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
-              let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
-              let bytes = try? Data(contentsOf: executable) else { return "" }
-        let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
-        return "\(identifier)|\(version)|\(build)|\(digest)"
-    }()
-}
 
 @MainActor final class TriggerFolderSetup: ObservableObject {
     private static let consentKey = "triggerFolderLocalConsentV1"
@@ -45,7 +29,7 @@ enum TriggerFolderBuildIdentity {
             if case .downloadInFolder(let folder) = rule { return folder }
             return nil
         }
-        policy = TriggerFolderAccess(configuredFolders: configured, buildIdentity: TriggerFolderBuildIdentity.current,
+        policy = TriggerFolderAccess(configuredFolders: configured, buildIdentity: CompanionAuthorizationIdentity.current,
                                      consentData: UserDefaults.standard.data(forKey: Self.consentKey))
         folders = policy.configuredFolders
         updateStatus()
@@ -62,7 +46,7 @@ enum TriggerFolderBuildIdentity {
         refreshConfiguration()
         // Revalidation cannot reuse evidence from before a revoked/cancelled
         // local privacy choice. Persist empty evidence before the first await.
-        policy = TriggerFolderAccess(configuredFolders: policy.configuredFolders, buildIdentity: TriggerFolderBuildIdentity.current)
+        policy = TriggerFolderAccess(configuredFolders: policy.configuredFolders, buildIdentity: CompanionAuthorizationIdentity.current)
         saveAndUpdate()
         let startingPolicy = policy
         requesting = true
@@ -75,7 +59,7 @@ enum TriggerFolderBuildIdentity {
             self.refreshConfiguration()
             if self.policy.configurationValid {
                 self.policy = TriggerFolderAccess(configuredFolders: self.policy.configuredFolders,
-                    buildIdentity: TriggerFolderBuildIdentity.current, consentData: result.consentData)
+                    buildIdentity: CompanionAuthorizationIdentity.current, consentData: result.consentData)
             }
             self.lastRequestFailed = !self.policy.allConfiguredApproved
             self.saveAndUpdate()

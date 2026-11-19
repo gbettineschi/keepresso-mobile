@@ -30,6 +30,28 @@ import KeepressoCore
 }
 
 struct CompanionSetupFlowTests {
+    @Test @MainActor func certificateUpdateDoesNotRestartCompletedOrDeferredSetup() async {
+        let memory = SetupMemory(), driver = SetupDriver()
+        driver.states[.bluetooth] = .authorized
+        let first = PrivacyCertificateFixtures.authority("build-A")
+        var required = scope(build: first)
+        let flow = CompanionSetupFlow(scope: { required }, driver: driver, storage: memory)
+        flow.presentIfNeeded(); await flow.start(); flow.finish()
+        required = scope(build: PrivacyCertificateFixtures.authority("build-B"))
+        let updated = CompanionSetupFlow(scope: { required }, driver: driver, storage: memory)
+        updated.presentIfNeeded()
+        #expect(!updated.presented)
+        driver.states[.bluetooth] = .denied
+        updated.review(); await updated.start(); updated.deferSetup()
+        let deferred = CompanionSetupFlow(scope: { required }, driver: driver, storage: memory)
+        deferred.presentIfNeeded()
+        #expect(!deferred.presented)
+        #expect(driver.requests.isEmpty)
+        required = scope(build: PrivacyCertificateFixtures.authority("build-C", certificate: PrivacyCertificateFixtures.b))
+        deferred.presentIfNeeded()
+        #expect(deferred.presented)
+    }
+
     @MainActor private func settle(_ condition: @escaping () -> Bool) async {
         for _ in 0..<200 where !condition() { await Task.yield() }
         #expect(condition())
