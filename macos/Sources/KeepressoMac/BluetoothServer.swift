@@ -149,6 +149,9 @@ private let bluetoothLog=Logger(subsystem:"local.keespresso.companion",category:
             try peer.session.advance(to:.ready,now:ProcessInfo.processInfo.systemUptime)
             model.connectionCount=peers.values.filter{$0.session.ready}.count;model.bluetoothState="Available nearby"
             bluetoothLog.notice("Nearby phone subscription established")
+            let responseLimit=peer.peripheral.maximumWriteValueLength(for:.withResponse)
+            let singleWriteLimit=peer.peripheral.maximumWriteValueLength(for:.withoutResponse)
+            bluetoothLog.notice("Nearby write limits: withResponse=\(responseLimit,privacy:.public), singlePacket=\(singleWriteLimit,privacy:.public)")
             for record in peer.session.takeBufferedRecords(){try receive(record,peer:peer)}
         }catch{drop(peer.peripheral.identifier,ban:true)}
     }
@@ -265,7 +268,8 @@ private let bluetoothLog=Logger(subsystem:"local.keespresso.companion",category:
     private func send(_ object:[String:Any],peer:Peer)throws {try enqueue(WireJSON.data(object),peer:peer)}
     private func enqueue(_ data:Data,peer:Peer)throws{
         guard current(peer),peer.session.ready else{throw CompanionError.closed}
-        try peer.queue.enqueue(record:data,mtu:peer.peripheral.maximumWriteValueLength(for:.withResponse));flush(peer)
+        try peer.queue.enqueue(record:data,maximumWithResponse:peer.peripheral.maximumWriteValueLength(for:.withResponse),
+                               maximumWithoutResponse:peer.peripheral.maximumWriteValueLength(for:.withoutResponse));flush(peer)
     }
     private func flush(_ peer:Peer){
         guard current(peer),peer.session.ready,let output=peer.output,

@@ -44,6 +44,12 @@ public final class NearbyAcknowledgedWrites {
     private var closed=false
     public init(){}
     public var bytes:Int{queue.bytes}
+    /// A with-response value can use ATT prepared writes. Our framing peer
+    /// accepts ordinary writes only, so also respect the single-packet limit.
+    public func enqueue(record:Data,maximumWithResponse:Int,maximumWithoutResponse:Int)throws {
+        guard maximumWithResponse>0,maximumWithoutResponse>0 else{throw CompanionError.invalid}
+        try enqueue(record:record,mtu:min(512,min(maximumWithResponse,maximumWithoutResponse)))
+    }
     public func enqueue(record:Data,mtu:Int)throws {
         guard !closed else{throw CompanionError.closed}
         try queue.enqueue(record:record,mtu:mtu)

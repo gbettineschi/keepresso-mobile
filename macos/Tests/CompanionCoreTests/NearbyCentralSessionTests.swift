@@ -3,6 +3,35 @@ import Testing
 @testable import CompanionCore
 
 struct NearbyCentralSessionTests {
+    @Test(arguments: [(512, 20), (512, 182), (32, 182)])
+    func framedRecordsStayWithinSingleWriteCapacity(limits: (Int, Int)) throws {
+        let queue = NearbyAcknowledgedWrites(), receiver = FrameDecoder()
+        let payload = Data(repeating: 0x41, count: 1000)
+        try queue.enqueue(record: payload, maximumWithResponse: limits.0, maximumWithoutResponse: limits.1)
+        let acceptedCapacity = limits.0 == 32 ? 32 : limits.1
+        var received: [Data] = [], chunks = 0, now = 0.0
+        while let chunk = queue.take(now: now) {
+            // Simulate a peer which rejects CoreBluetooth's prepared long writes.
+            #expect(chunk.count <= acceptedCapacity)
+            #expect(queue.take(now: now) == nil)
+            received += try receiver.feed(chunk, now: now)
+            try queue.acknowledge(success: true, now: now + 0.001)
+            now += 0.002; chunks += 1
+            #expect(chunks < 1100)
+        }
+        #expect(chunks > 1)
+        #expect(received == [payload])
+        #expect(queue.bytes == 0)
+    }
+    @Test func invalidReportedWriteLimitsDoNotQueueAnyBytes() throws {
+        for limits in [(0, 20), (512, 0), (-1, 20)] {
+            let queue = NearbyAcknowledgedWrites()
+            #expect(throws: (any Error).self) {
+                try queue.enqueue(record: Data([1]), maximumWithResponse: limits.0, maximumWithoutResponse: limits.1)
+            }
+            #expect(queue.bytes == 0)
+        }
+    }
     // Premature readiness would let protocol bytes bypass subscription setup.
     @Test func discoveryMustFinishAndNotificationMustBeConfirmed() throws {
         let session=NearbyCentralSession(now:0)
