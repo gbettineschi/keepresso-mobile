@@ -2,7 +2,9 @@
 
 Keepresso Mobile can use one persistent, self-signed **project certificate** for Mac releases. Users install the app; they do not create or import a signing certificate. No paid Apple account is required for this signing method.
 
-**Rollout status (19 November 2026):** the three-year project identity is provisioned in the protected GitHub environment. Signed trial0.6.13 is installed and the owner completed its initial permissions. Trial0.6.14 is signed and verified; its installed permission-retention check is pending. The PR remains draft until that check succeeds. Public downloads through v0.6.12 remain ad-hoc; no new public release has been published yet.
+**Rollout verified on 19 November 2026:** the three-year project identity is provisioned in the protected GitHub environment. Signed trial0.6.13 received the owner's initial setup approvals; signed trial0.6.14 was then installed at the same path. Its automatic setup did not restart. An explicit review revalidated configured folders and showed Bluetooth, Wi-Fi name, folders and remote controls Ready without new OS permission dialogs. The setup record, pairing credentials and native Keepresso binary were preserved. Existing pairing also connected over Internet. Public downloads through v0.6.12 remain ad-hoc; no new public release has been published yet.
+
+This trial exercised the owner's configured features, not calendar/Steam or an intentionally revoked real grant. Automated tests cover denied-state preservation. A separate Nearby handshake/write failure was observed and is under investigation; permission readiness does not establish successful Bluetooth authentication.
 
 ## What this fixes
 

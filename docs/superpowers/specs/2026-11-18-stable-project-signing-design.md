@@ -1,12 +1,12 @@
 # Stable project signing and permission continuity
 
-Status: implementation approved and reviewed; on 19 November 2026 the owner authorized production activation with a three-year certificate and delegated reviewed signing-run approvals to this agent through the owner account. The protected GitHub identity is provisioned, signed trial0.6.13 installed and initially authorized, and signed trial0.6.14 ready for the final installed retention check. No new public release has been published.
+Status: implementation approved and reviewed; on 19 November 2026 the owner authorized production activation with a three-year certificate and delegated reviewed signing-run approvals to this agent through the owner account. The protected GitHub identity is provisioned, signed trial0.6.13 installed and initially authorized, and signed trial0.6.14 installed with configured permissions and setup scope retained without new OS prompts. No new public release has been published.
 
 ## Implementation status (19 November 2026)
 
 The certificate-scoped consent identity, strict archive signer, protected signing-only workflow and unpublished Mac trial path are implemented. A fresh whole-branch review found three Important issues (incoming signing identifier, eager archive-directory parsing, mandatory owner approval); each was covered by a failing test and corrected. Local checks pass: 323 Swift tests, 16 signer tests, 13 archive tests, 4 CI-wrapper tests and 17 script tests. Actual temporary-certificate integration passed against the release ZIP, including wrong-signer/identifier/tampering refusal and keychain cleanup.
 
-The initial tests established signature/identity behavior only. Production provisioning and the first installed permission setup have since completed under owner authorization. Real retention across the second installed update remains pending; keep the PR draft until it succeeds.
+The initial tests established signature/identity behavior only. Production provisioning and the first installed permission setup have since completed under owner authorization. Retention across the second installed update has now passed: no automatic setup restart, all four configured features Ready after explicit revalidation, stable authorization identity, unchanged pairing data and native binary, and live Internet reconnection. A separate Nearby write rejection remains under investigation; it is not claimed as resolved by signing.
 
 ## Intent and observed causes
 
