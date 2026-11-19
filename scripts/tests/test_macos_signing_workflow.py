@@ -69,6 +69,9 @@ class WorkflowBoundaryTests(unittest.TestCase):
         job = self.jobs['macos-sign']
         secret_steps = [s for s in job['steps'] if 'MACOS_SIGNING_PKCS12_BASE64' in s.get('env',{})]
         self.assertEqual(len(secret_steps),1)
+        protection = next(s for s in job['steps'] if s.get('name') == 'Verify owner approval protection before loading secrets')
+        self.assertLess(job['steps'].index(protection), job['steps'].index(secret_steps[0]))
+        self.assertEqual(protection['env']['GH_TOKEN'], '${{ github.token }}')
         step = secret_steps[0]
         self.assertEqual(step['run'], 'python3 macos/scripts/ci-project-signing.py candidate/KeepressoMobile.zip signed/KeepressoMobile.zip --source-sha "$SOURCE_SHA" > signed/signing.json')
         self.assertEqual(set(step['env']), {'SOURCE_SHA','MACOS_SIGNING_PKCS12_BASE64','MACOS_SIGNING_PKCS12_PASSWORD','MACOS_SIGNING_CERTIFICATE_SHA1'})

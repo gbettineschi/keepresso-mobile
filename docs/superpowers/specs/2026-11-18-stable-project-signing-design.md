@@ -2,6 +2,12 @@
 
 Status: design approved by the owner on 19 November 2026; production provisioning still requires approval of the concrete signing commit. No production key, GitHub signing secret, installed app or macOS privacy grant has been changed for this investigation.
 
+## Implementation status (19 November 2026)
+
+The certificate-scoped consent identity, strict archive signer, protected signing-only workflow and unpublished Mac trial path are implemented. A fresh whole-branch review found three Important issues (incoming signing identifier, eager archive-directory parsing, mandatory owner approval); each was covered by a failing test and corrected. Local checks pass: 323 Swift tests, 16 signer tests, 13 archive tests, 4 CI-wrapper tests and 17 script tests. Actual temporary-certificate integration passed against the release ZIP, including wrong-signer/identifier/tampering refusal and keychain cleanup.
+
+These results establish signature/identity behavior only. No production key/environment has been provisioned, no installed app or OS permission has been changed, and real two-update privacy acceptance remains pending. The PR must stay draft until that acceptance succeeds.
+
 ## Intent and observed causes
 
 The owner wants Keepresso Mobile updates to preserve ordinary macOS privacy permissions, with one atomic Mobile PR ready for review after a local trial. Native Keepresso and Android are outside this change. No paid Apple membership or personal Apple identity is wanted. The preferred candidate is one project signing identity for every public release, with the private key in GitHub rather than on the owner's Mac.

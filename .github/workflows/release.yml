@@ -96,6 +96,19 @@ jobs:
           path: candidate
           digest-mismatch: error
       - run: mkdir signed
+      - name: Verify owner approval protection before loading secrets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TRIAL_BRANCH: ${{ github.ref_type == 'branch' && github.ref_name || '' }}
+        run: |
+          gh api "repos/$GH_REPO" > "$RUNNER_TEMP/signing-repository.json"
+          gh api "repos/$GH_REPO/environments/macos-release" > "$RUNNER_TEMP/signing-environment.json"
+          gh api "repos/$GH_REPO/environments/macos-release/deployment-branch-policies?per_page=100" > "$RUNNER_TEMP/signing-refs.json"
+          python3 scripts/verify-macos-signing-environment.py \
+            --repository-json "$RUNNER_TEMP/signing-repository.json" \
+            --environment-json "$RUNNER_TEMP/signing-environment.json" \
+            --refs-json "$RUNNER_TEMP/signing-refs.json" --trial-branch "$TRIAL_BRANCH"
       - name: Sign only; never build or execute the candidate
         env:
           SOURCE_SHA: ${{ needs.plan.outputs.source_sha }}

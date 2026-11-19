@@ -7,6 +7,8 @@ import plistlib
 import stat
 import tempfile
 import unittest
+from unittest.mock import patch
+import struct
 import zipfile
 
 PATH = Path(__file__).with_name('sign-candidate.py')
@@ -133,6 +135,33 @@ class CandidateTests(unittest.TestCase):
             with self.subTest(kwargs=kwargs):
                 with self.assertRaises(ValueError):self.sign(**kwargs)
                 self.assertFalse(self.output.exists())
+
+    def test_wrong_incoming_signing_identifier_never_reaches_private_signer(self):
+        self.archive()
+        calls=[]
+        def checking(command, **kwargs):
+            calls.append(command)
+            if '--verify' in command and '--test-requirement' in command and 'certificate leaf' not in ' '.join(command):
+                raise ValueError('fixture incoming signing identifier does not match')
+            return self.runner(command, **kwargs)
+        with self.assertRaises(ValueError):
+            self.code.sign_candidate(self.input,self.output,IDENTITY,self.keychain,SOURCE,runner=checking)
+        self.assertFalse(any(command[0]=='bash' for command in calls))
+
+    def test_oversized_directory_or_unsupported_zip_is_refused_before_zipfile(self):
+        self.archive()
+        original=self.input.read_bytes()
+        marker=original.rfind(b'PK\x05\x06')
+        # The source file is otherwise a valid small package. Only its declared
+        # directory metadata is malicious; ZipFile must not enumerate it first.
+        cases=[(10,struct.pack('<H',4097)), (12,struct.pack('<I',2*1024*1024)),
+               (4,struct.pack('<H',1)), (16,struct.pack('<I',0xffffffff))]
+        for offset,value in cases:
+            mutated=bytearray(original);mutated[marker+offset:marker+offset+len(value)]=value
+            self.input.write_bytes(mutated)
+            with self.subTest(offset=offset), patch.object(self.code.zipfile,'ZipFile',side_effect=AssertionError('parsed before bounds')):
+                with self.assertRaises(ValueError): self.sign()
+        self.assertFalse(self.output.exists())
 
     def test_concurrently_created_output_is_never_overwritten(self):
         self.archive();self.output_race=True

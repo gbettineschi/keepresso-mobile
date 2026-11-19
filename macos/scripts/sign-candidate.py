@@ -8,6 +8,7 @@ from pathlib import Path, PurePosixPath
 import plistlib
 import re
 import stat
+import struct
 import subprocess
 import tempfile
 import unicodedata
@@ -28,9 +29,27 @@ def execute(command, *, env=None):
     return result.stdout + result.stderr
 
 
+def preflight_directory(archive):
+    # ZipFile eagerly allocates a ZipInfo per directory entry. Bound that input
+    # before asking it to parse anything, including a falsely small entry count.
+    size = archive.stat().st_size
+    with archive.open('rb') as source:
+        source.seek(max(0, size - 65_557))
+        tail = source.read(65_557)
+    position = tail.rfind(b'PK\x05\x06')
+    if position < 0 or position + 22 > len(tail): raise ValueError('Missing ZIP directory trailer')
+    _, disk, directory_disk, disk_entries, entries, length, offset, comment = struct.unpack_from('<4s4H2IH', tail, position)
+    trailer = size - len(tail) + position
+    if position + 22 + comment != len(tail) or disk or directory_disk or disk_entries != entries:
+        raise ValueError('Unsupported split or ambiguous ZIP archive')
+    if not 0 < entries <= 4096 or not 0 < length <= 1024 * 1024 or offset == 0xffffffff or offset + length != trailer:
+        raise ValueError('Oversized directory or unsupported ZIP64 archive')
+
+
 def extract_candidate(archive, directory):
     if archive.is_symlink() or not archive.is_file() or archive.stat().st_size > LIMIT:
         raise ValueError('Missing, linked or oversized candidate archive')
+    preflight_directory(archive)
     seen, total = set(), 0
     with zipfile.ZipFile(archive) as z:
         entries=z.infolist()
@@ -49,6 +68,8 @@ def extract_candidate(archive, directory):
             mode=item.external_attr >> 16
             if stat.S_IFMT(mode) not in (0,stat.S_IFREG,stat.S_IFDIR): raise ValueError('Linked or special archive member')
             if item.flag_bits & 1: raise ValueError('Encrypted candidate member')
+            if item.extract_version > 20 or item.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
+                raise ValueError('Unsupported ZIP member format')
             if path.parts and path.parts[0]=='__MACOSX': continue
             if not path.parts or path.parts[0]!=ROOT: raise ValueError('Expected one companion app')
             target=directory.joinpath(*path.parts)
@@ -96,7 +117,7 @@ def sign_candidate(input_zip, output_zip, certificate_sha1, keychain, source_sha
         with tempfile.TemporaryDirectory(prefix='keepresso-sign-only-') as temporary:
             root=Path(temporary);root.chmod(0o700)
             app,version,build=extract_candidate(input_zip,root)
-            runner(['codesign','--verify','--deep','--strict',str(app)])
+            runner(['codesign','--verify','--deep','--strict','--test-requirement', '=identifier "'+IDENTIFIER+'"',str(app)])
             env={k:v for k,v in os.environ.items() if not k.startswith('MACOS_SIGNING_') and k not in ('KEEPRESSO_SIGNING_PASSWORD','KEEPRESSO_SIGNING_KEY_PASSWORD')}
             env.update(KEEPRESSO_SIGNING_PROFILE='project',KEEPRESSO_REQUIRE_STABLE_SIGNING='1',KEEPRESSO_CODESIGN_IDENTITY=certificate_sha1,
                        KEEPRESSO_CODESIGN_KEYCHAIN=str(keychain))

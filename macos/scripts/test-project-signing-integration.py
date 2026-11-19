@@ -38,6 +38,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--allow-temporary-keychain-probe', action='store_true')
     parser.add_argument('--app', required=True, type=Path)
+    parser.add_argument('--candidate-zip', type=Path)
     args = parser.parse_args()
     if not args.allow_temporary_keychain_probe:
         parser.error('Explicit temporary-keychain probe consent is required')
@@ -101,13 +102,30 @@ def main():
             assert run(['codesign', '--verify', '--strict', '--test-requirement', '=' + requirement(a), str(c)], check=False).returncode != 0
             # Exercise the exact signing-only archive API with the real fixture key.
             source = root / 'input.zip'
-            with zipfile.ZipFile(source, 'w', zipfile.ZIP_DEFLATED) as archive:
-                for file in app.rglob('*'):
-                    if file.is_file():
-                        archive.write(file, 'KeepressoMobile.app/' + file.relative_to(app).as_posix())
+            if args.candidate_zip:
+                shutil.copyfile(args.candidate_zip, source)
+            else:
+                with zipfile.ZipFile(source, 'w', zipfile.ZIP_DEFLATED) as archive:
+                    for file in app.rglob('*'):
+                        if file.is_file():
+                            archive.write(file, 'KeepressoMobile.app/' + file.relative_to(app).as_posix())
             spec = importlib.util.spec_from_file_location('candidate', Path(__file__).with_name('sign-candidate.py'))
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
+            wrong = root / 'wrong/KeepressoMobile.app'
+            shutil.copytree(b, wrong)
+            run(['codesign', '--force', '--timestamp=none', '--keychain', str(keychain), '--sign', certs[0][0],
+                 '--identifier', 'different.app', str(wrong)])
+            run(['codesign', '--verify', '--deep', '--strict', str(wrong)])
+            wrong_zip = root / 'wrong.zip'
+            with zipfile.ZipFile(wrong_zip, 'w', zipfile.ZIP_DEFLATED) as archive:
+                for file in wrong.rglob('*'):
+                    if file.is_file(): archive.write(file, 'KeepressoMobile.app/' + file.relative_to(wrong).as_posix())
+            try:
+                module.sign_candidate(wrong_zip, root / 'wrong-signed.zip', certs[0][0], keychain, 'a' * 40)
+            except ValueError: pass
+            else: raise AssertionError('Valid signature with wrong incoming code identifier was accepted')
+            assert not (root / 'wrong-signed.zip').exists()
             output = root / 'signed.zip'
             receipt = module.sign_candidate(source, output, certs[0][0], keychain, 'a' * 40)
             assert receipt['sha256'] == hashlib.sha256(output.read_bytes()).hexdigest()
@@ -136,7 +154,7 @@ def main():
             assert run(['codesign', '--verify', '--deep', '--strict', str(a)], check=False).returncode != 0
             assert identity(a, check=False).returncode != 0, 'Tampered resources must invalidate reusable identity'
             record = dict(sameCertificateAcrossUpdates=True, changedSignedBytes=True, wrongCertificateRejected=True,
-                          tamperingRejected=True, realArchiveSignerPassed=True, actualPrivacyIdentityPassed=True, realCIWrapperPassed=True,
+                          tamperingRejected=True, realArchiveSignerPassed=True, actualPrivacyIdentityPassed=True, realCIWrapperPassed=True, wrongIncomingSigningIDRejected=True,
                           tccGranted=False, trustChanged=False)
         finally:
             if keychain.exists():

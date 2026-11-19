@@ -28,7 +28,7 @@ Use a dedicated **macos-release** GitHub Actions environment with these secrets:
 | `MACOS_SIGNING_PKCS12_PASSWORD` | Its password: minimum 8 characters; generate 32+ random characters |
 | `MACOS_SIGNING_CERTIFICATE_SHA1` | Exact 40-hex signing certificate fingerprint; this fingerprint is public |
 
-Environment secrets remain private in a public repository. Configure allowed deployment refs: version tags and, temporarily, the exact approved trial branch. Use an owner approval rule for signing jobs where available. An owner-operated repository can allow self-approval; do not mistake it for independent review. Review the workflow and exact commit before approval. [GitHub documents these controls](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments).
+Environment secrets remain private in a public repository. **Before uploading any key, require GitHub-enforced approval exclusively from the repository owner and disable administrator bypass.** Allow only `v*` version tags and, temporarily, the exact approved trial branch. Remove that branch rule after acceptance. Self-approval can remain enabled for this owner-operated repository: the owner must inspect the exact source commit before approving its signing job. The typed SHA binds a dispatch to a commit; it is not evidence of owner review. If these protection rules cannot be configured, stop provisioning; there is no unprotected fallback. The signing job verifies the environment metadata before its private-key step. [GitHub documents these controls](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments).
 
 The private key must never be committed, bundled with the app, printed, attached to a PR, stored in Actions artifacts or passed to ordinary build jobs. Generate it only after explicit maintainer approval. Proposed initial setup: a project-only RSA code-signing certificate with ten-year validity, generated in a private temporary directory, exported as encrypted PKCS12 and uploaded through standard input to the three environment secrets. Record the public certificate/fingerprints. Remove temporary files after successful upload; do not retain the private identity in the Mac's login keychain.
 
@@ -37,7 +37,7 @@ GitHub is the primary key store, not a recoverable download archive: secret valu
 ## The release boundary
 
 1. A **keyless build job** checks out the exact commit, runs tests, packages the app ad-hoc and runs its safe self-check.
-2. A **fresh signing runner** waits for the `macos-release` rules. It downloads only the named candidate from that same workflow run and verifies the checkout SHA.
+2. A **fresh signing runner** waits for the mandatory owner approval in `macos-release`. It downloads only the named candidate from that same workflow run and verifies the checkout SHA.
 3. The signer imports the configured identity into a temporary keychain accessible to `codesign`. It validates a bounded single-app archive, rejects nested executables and key material, signs without running candidate code, and verifies the exact certificate and default designated requirement.
 4. Only the signed ZIP and public signing receipt are uploaded. Temporary key files and keychain are removed even after errors; artifacts expire after one day.
 
@@ -48,6 +48,8 @@ Ordinary PR CI stays keyless. Local development remains ad-hoc unless an identit
 ## Unpublished Mac trial
 
 In **Release development preview**, choose the approved branch, `mode: mac-trial`, a new numeric version such as `v0.6.13`, and its full reviewed commit in `expected_sha`. A moved branch fails the check. The workflow path already exists on `main`, so the trial can run before merging its implementation branch.
+
+Use `scripts/verify-macos-signing-environment.py` with the repository, environment and deployment-ref JSON returned by the GitHub API to verify these protection settings before key upload; the workflow repeats that check before signing.
 
 The trial creates only a signed Mac artifact, retained for one day. It does not run Android signing, publish a GitHub release or update Homebrew. Download `Keepresso-Mac-release`, verify the ZIP against `signing.json`, then verify the certificate and strict signature. Replace only `/Applications/Keepresso Mobile.app`; keep pairing, settings and Application Support.
 
