@@ -15,7 +15,7 @@
 - Only Keepresso Mobile Mac is changed; official Keepresso and all 114 pinned source files stay unchanged. Android identity/settings are preserved.
 - Canonical installation `/Applications/Keepresso Mobile.app`, identifier `local.keespresso.companion`, Apple silicon/macOS14.5+ unchanged.
 - No paid Apple account, production key creation/import, GitHub secret changes, certificate trust changes, real permission grants or power commands during code/tests. Production provisioning follows a concrete reviewed signing commit and owner authorization.
-- One project self-signed identity, proposed ten-year validity. PKCS12 password at least eight characters; provisioning will generate 32+ random characters and never display it.
+- One project self-signed identity, three-year validity approved by the owner. PKCS12 password at least eight characters; provisioning will generate 32+ random characters and never display it.
 - Private key never enters repo, package, ordinary PR CI, artifact or log. GitHub environment is the primary store; no independent backup is presumed to exist.
 - Keep legacy Apple/Keychain partition guarantees separate. A self-signed privacy identity is not notarization or a Keychain partition fix.
 - Missing/invalid configured signer fails closed; never silently replace it or fall back to ad-hoc in project mode.

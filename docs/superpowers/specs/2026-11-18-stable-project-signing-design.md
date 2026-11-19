@@ -1,12 +1,12 @@
 # Stable project signing and permission continuity
 
-Status: design approved by the owner on 19 November 2026; production provisioning still requires approval of the concrete signing commit. No production key, GitHub signing secret, installed app or macOS privacy grant has been changed for this investigation.
+Status: implementation approved and reviewed; on 19 November 2026 the owner authorized production activation with a three-year certificate and delegated reviewed signing-run approvals to this agent through the owner account. The protected GitHub identity is provisioned, signed trial0.6.13 installed and initially authorized, and signed trial0.6.14 ready for the final installed retention check. No new public release has been published.
 
 ## Implementation status (19 November 2026)
 
 The certificate-scoped consent identity, strict archive signer, protected signing-only workflow and unpublished Mac trial path are implemented. A fresh whole-branch review found three Important issues (incoming signing identifier, eager archive-directory parsing, mandatory owner approval); each was covered by a failing test and corrected. Local checks pass: 323 Swift tests, 16 signer tests, 13 archive tests, 4 CI-wrapper tests and 17 script tests. Actual temporary-certificate integration passed against the release ZIP, including wrong-signer/identifier/tampering refusal and keychain cleanup.
 
-These results establish signature/identity behavior only. No production key/environment has been provisioned, no installed app or OS permission has been changed, and real two-update privacy acceptance remains pending. The PR must stay draft until that acceptance succeeds.
+The initial tests established signature/identity behavior only. Production provisioning and the first installed permission setup have since completed under owner authorization. Real retention across the second installed update remains pending; keep the PR draft until it succeeds.
 
 ## Intent and observed causes
 
@@ -27,7 +27,7 @@ An isolated macOS experiment used a temporary keychain and a one-day test-only s
 
 ## Signing and custody
 
-Use one project-only code-signing certificate, with a proposed ten-year validity, normal signature validation and the existing companion identifier. Use the signer-generated certificate-anchored designated requirement; never substitute a broad identifier-only requirement. Sign nested executable code before the enclosing app where applicable.
+Use one project-only code-signing certificate, with a three-year validity approved by the owner, normal signature validation and the existing companion identifier. Use the signer-generated certificate-anchored designated requirement; never substitute a broad identifier-only requirement. Sign nested executable code before the enclosing app where applicable.
 
 Keep an encrypted PKCS12 identity and its password in a dedicated GitHub environment. Keep the public certificate/fingerprints available for verification. The private key must never enter the repository, app, artifacts, logs or normal PR CI. A missing or mismatched configured key fails signing rather than falling back to ad-hoc or generating a replacement identity. The current Apple-certificate/legacy-Keychain signing checks remain separate; a self-signed certificate is not claimed to fix Keychain partition identity. Current paired connections already use the approved private credential file.
 
@@ -60,4 +60,4 @@ Investigation and writing conducted by an LLM. The project-wide free identity an
 
 ## Builder check and remaining owner approval
 
-A fresh builder review required separate keyless build and signing-only jobs, a Mac-only unpublished trial route, validated running-code identity, and a real two-candidate privacy check. These are incorporated above. Ten-year validity and temporary local generation remain proposed setup choices. The owner must approve the concrete provisioning/signing commit before any production identity, environment secret or live permission trial is created. No Apple account or global trust changes are included.
+A fresh builder review required separate keyless build and signing-only jobs, a Mac-only unpublished trial route, validated running-code identity, and a real two-candidate privacy check. These are incorporated above. Three-year validity and temporary local generation remain proposed setup choices. The owner must approve the concrete provisioning/signing commit before any production identity, environment secret or live permission trial is created. No Apple account or global trust changes are included.

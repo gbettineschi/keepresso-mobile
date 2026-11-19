@@ -2,7 +2,7 @@
 
 Keepresso Mobile can use one persistent, self-signed **project certificate** for Mac releases. Users install the app; they do not create or import a signing certificate. No paid Apple account is required for this signing method.
 
-**Rollout status:** the implementation and temporary-certificate tests are prepared. The production certificate, GitHub environment and real two-update permission check still require the maintainer's approval. Current downloaded previews remain ad-hoc until that rollout is completed. Do not read this guide as evidence that existing releases already use the new signer.
+**Rollout status (19 November 2026):** the three-year project identity is provisioned in the protected GitHub environment. Signed trial0.6.13 is installed and the owner completed its initial permissions. Trial0.6.14 is signed and verified; its installed permission-retention check is pending. The PR remains draft until that check succeeds. Public downloads through v0.6.12 remain ad-hoc; no new public release has been published yet.
 
 ## What this fixes
 
@@ -18,6 +18,14 @@ Self-signing is **not Developer ID signing or notarization**. macOS may still bl
 
 Historical pairing builds used Keychain items with a separate per-app partition check. A self-signed certificate is not a fix for that check. Current connections use the approved private credential file; an update with a valid file does not reload old Keychain items. Signing never resets phone pairing.
 
+## Public project certificate
+
+The [public certificate](signing/keepresso-mobile-project.pem) identifies this project's Mac signer. It contains no private key and is supplied for verification, not to install global certificate trust.
+
+- Valid from 19 November 2026 through 19 November 2029, 12:59:23 UTC (three calendar years).
+- Certificate SHA-1: `8945c703d1ab6a3d21e80feab6c8a0292449ed52`.
+- Certificate SHA-256: `9c1cf1889b0b5a67f2e4ab642c82cbae16f6fea78be40f18d3e2aa6782ff24bf`.
+
 ## Where the private key lives
 
 Use a dedicated **macos-release** GitHub Actions environment with these secrets:
@@ -28,11 +36,11 @@ Use a dedicated **macos-release** GitHub Actions environment with these secrets:
 | `MACOS_SIGNING_PKCS12_PASSWORD` | Its password: minimum 8 characters; generate 32+ random characters |
 | `MACOS_SIGNING_CERTIFICATE_SHA1` | Exact 40-hex signing certificate fingerprint; this fingerprint is public |
 
-Environment secrets remain private in a public repository. **Before uploading any key, require GitHub-enforced approval exclusively from the repository owner and disable administrator bypass.** Allow only `v*` version tags and, temporarily, the exact approved trial branch. Remove that branch rule after acceptance. Self-approval can remain enabled for this owner-operated repository: the owner must inspect the exact source commit before approving its signing job. The typed SHA binds a dispatch to a commit; it is not evidence of owner review. If these protection rules cannot be configured, stop provisioning; there is no unprotected fallback. The signing job verifies the environment metadata before its private-key step. [GitHub documents these controls](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments).
+Environment secrets remain private in a public repository. **Before uploading any key, require GitHub-enforced approval exclusively from the repository owner and disable administrator bypass.** Allow only `v*` version tags and, temporarily, the exact approved trial branch. Remove that branch rule after acceptance. Self-approval can remain enabled for this owner-operated repository: the owner or an explicitly authorized agent acting through the owner account must verify the exact source commit before approving its signing job. The typed SHA binds a dispatch to a commit; it is not evidence of owner review. If these protection rules cannot be configured, stop provisioning; there is no unprotected fallback. The signing job verifies the environment metadata before its private-key step. [GitHub documents these controls](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments).
 
-The private key must never be committed, bundled with the app, printed, attached to a PR, stored in Actions artifacts or passed to ordinary build jobs. Generate it only after explicit maintainer approval. Proposed initial setup: a project-only RSA code-signing certificate with ten-year validity, generated in a private temporary directory, exported as encrypted PKCS12 and uploaded through standard input to the three environment secrets. Record the public certificate/fingerprints. Remove temporary files after successful upload; do not retain the private identity in the Mac's login keychain.
+The private key must never be committed, bundled with the app, printed, attached to a PR, stored in Actions artifacts or passed to ordinary build jobs. Generate it only after explicit maintainer approval. The current identity is a project-only RSA-3072/SHA-256 code-signing certificate with three-year validity. It was generated in a private temporary directory, exported as encrypted PKCS12 and uploaded through standard input to the three environment secrets. Record the public certificate/fingerprints. Remove temporary files after successful upload; do not retain the private identity in the Mac's login keychain.
 
-GitHub is the primary key store, not a recoverable download archive: secret values cannot be read back from its UI. Keep an independent encrypted backup if the maintainer chooses a destination. **No backup has yet been created or selected.** Losing a Mac does not affect signing while GitHub retains the key. Losing the only key requires a deliberate signer replacement and users may need to approve permissions again. Never generate a replacement silently.
+GitHub is the primary key store, not a recoverable download archive: secret values cannot be read back from its UI. Keep an independent encrypted backup if the maintainer chooses a destination. **No independent private-key backup has yet been created or selected.** The public certificate is not a signing-key backup. Losing a Mac does not affect signing while GitHub retains the key. Losing the only key requires a deliberate signer replacement and users may need to approve permissions again. Never generate a replacement silently.
 
 ## The release boundary
 
@@ -59,6 +67,12 @@ For acceptance:
 - Build candidate B with a different version/bytes and the **same certificate**, then update the same installed path.
 - Confirm the two designated requirements and read-only authorization identities match; setup does not restart unnecessarily; granted features still work and declined features remain declined; saved pairing still reconnects.
 - If macOS still rejects permission or demands extra certificate trust, stop and report it. Do not clear TCC, auto-grant permissions or add trust to make the trial pass.
+
+## In-place update and the managed process
+
+Keep one installed app at `/Applications/Keepresso Mobile.app`. Before replacing it, stop both its foreground app and its exact per-user managed job, `local.keepresso.mobile.follow`. That job's process name is just `KeepressoMac`; matching only an absolute command path can miss it. An old registered job can otherwise restart the previous executable while the bundle is moving.
+
+The new canonical app automatically rebinds an already-authorized stale registration. Do not override revoked Login Items consent, erase pairing, reset TCC or launch an old copy from Trash to repair the transition. This procedure changes startup registration, not the user's permission decisions.
 
 ## Developer checks
 
