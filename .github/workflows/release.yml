@@ -5,9 +5,19 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Version to verify without publishing (vX.Y.Z)
+        description: Version to build (vX.Y.Z)
         required: true
-        default: v0.4.7
+        default: v0.6.13
+        type: string
+      mode:
+        description: Verify both platforms or create an unpublished signed Mac trial
+        required: true
+        default: verify
+        type: choice
+        options: [verify, mac-trial]
+      expected_sha:
+        description: Exact reviewed 40-hex commit (required for mac-trial)
+        required: false
         type: string
 permissions:
   contents: read
@@ -15,32 +25,98 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      sign_mac: ${{ steps.policy.outputs.sign_mac }}
+      build_android: ${{ steps.policy.outputs.build_android }}
+      publish: ${{ steps.policy.outputs.publish }}
+      source_sha: ${{ steps.policy.outputs.source_sha }}
+      tag: ${{ steps.policy.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: policy
+        run: python3 scripts/release-policy.py >> "$GITHUB_OUTPUT"
+      - name: Release routing and workflow boundary tests
+        run: python3 -m unittest discover -s scripts/tests -v
   macos:
+    needs: plan
     runs-on: xcode-27
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.source_sha }}
+          persist-credentials: false
       - name: Verify Swift toolchain and tagged implementation
         run: |
-          test -f macos/scripts/package-release.sh
           swift --version | grep 'Swift version 6.4'
           python3 scripts/verify-upstream.py
-      - name: Mac helper tests
-      # Process cancellation and Keychain mocks compete for deadlines on the shared runner.
-        run: swift test --package-path macos --no-parallel
-      - name: Package Apple silicon helper
+      - name: Mac helper tests (keyless)
+        run: |
+          swift test --package-path macos --no-parallel
+          python3 macos/scripts/test-sign-app.py
+          python3 macos/scripts/test-sign-candidate.py
+          python3 macos/scripts/test-ci-project-signing.py
+      - name: Package and self-check Apple silicon helper (keyless)
         env:
-          TAG: ${{ inputs.tag || github.ref_name }}
+          TAG: ${{ needs.plan.outputs.tag }}
         run: bash macos/scripts/package-release.sh "$TAG"
-      - if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+      - if: needs.plan.outputs.sign_mac == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: Keepresso-Mac-release
+          name: Keepresso-Mac-keyless-${{ github.sha }}
           path: macos/artifacts/KeepressoMobile.zip
           retention-days: 1
           if-no-files-found: error
+  macos-sign:
+    needs: [plan, macos]
+    if: needs.plan.outputs.sign_mac == 'true'
+    runs-on: xcode-27
+    timeout-minutes: 10
+    environment: macos-release
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.source_sha }}
+          persist-credentials: false
+      - name: Verify immutable signing source before loading secrets
+        env:
+          SOURCE_SHA: ${{ needs.plan.outputs.source_sha }}
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: Keepresso-Mac-keyless-${{ github.sha }}
+          path: candidate
+          digest-mismatch: error
+      - run: mkdir signed
+      - name: Sign only; never build or execute the candidate
+        env:
+          SOURCE_SHA: ${{ needs.plan.outputs.source_sha }}
+          MACOS_SIGNING_PKCS12_BASE64: ${{ secrets.MACOS_SIGNING_PKCS12_BASE64 }}
+          MACOS_SIGNING_PKCS12_PASSWORD: ${{ secrets.MACOS_SIGNING_PKCS12_PASSWORD }}
+          MACOS_SIGNING_CERTIFICATE_SHA1: ${{ secrets.MACOS_SIGNING_CERTIFICATE_SHA1 }}
+        run: python3 macos/scripts/ci-project-signing.py candidate/KeepressoMobile.zip signed/KeepressoMobile.zip --source-sha "$SOURCE_SHA" > signed/signing.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Keepresso-Mac-release
+          path: |
+            signed/KeepressoMobile.zip
+            signed/signing.json
+          retention-days: 1
+          if-no-files-found: error
+      - name: Remove temporary signing identity even after failure
+        if: always()
+        run: python3 macos/scripts/ci-project-signing.py --cleanup-only
   android:
-    if: github.repository == 'gbettineschi/keepresso-mobile'
+    needs: plan
+    if: needs.plan.outputs.build_android == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: android-release
@@ -111,8 +187,8 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/keepresso-release.p12"
   publish:
-    needs: [macos, android]
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    needs: [plan, macos-sign, android]
+    if: needs.plan.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -142,10 +218,10 @@ jobs:
           if [[ -f "$notes_file" ]]; then
             notes=(--notes-file "$notes_file")
           else
-            notes=(--notes 'Personal development preview. Signed Android APK and ad-hoc signed Apple silicon Mac helper.')
+            notes=(--notes 'Personal development preview. Signed Android APK and project-signed Apple silicon Mac helper (not notarized).')
           fi
           cd dist
-          gh release create "$TAG" KeepressoMobile.zip ./*.apk SHA256SUMS release.json \
+          gh release create "$TAG" KeepressoMobile.zip ./*.apk SHA256SUMS release.json signing.json \
             --verify-tag --prerelease --title "Keepresso Mobile ${TAG#v} (preview)" \
             "${notes[@]}"
   tap:

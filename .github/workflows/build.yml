@@ -39,6 +39,10 @@ jobs:
           filters: |
             contract:
               - '.github/workflows/build.yml'
+              - '.github/workflows/release.yml'
+              - 'scripts/release-policy.py'
+              - 'scripts/release-version.py'
+              - 'scripts/tests/**'
               - 'scripts/verify-upstream.py'
               - 'scripts/generate-*.mjs'
               - 'shared/**'
@@ -65,6 +69,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: python3 scripts/verify-upstream.py
+      - run: python3 -m unittest discover -s scripts/tests -v
       - name: Reproduce independent crypto fixtures
         run: |
           node scripts/generate-vectors.mjs
@@ -103,7 +108,10 @@ jobs:
       # Process cancellation and Keychain mocks compete for deadlines on the shared runner.
       - run: swift test --package-path macos --no-parallel
       - name: Check signing policy without Keychain access
-        run: python3 macos/scripts/test-sign-app.py
+        run: |
+          python3 macos/scripts/test-sign-app.py
+          python3 macos/scripts/test-sign-candidate.py
+          python3 macos/scripts/test-ci-project-signing.py
       - name: Package helper
         run: bash macos/scripts/build-app.sh
       - name: Safe packaged self-check

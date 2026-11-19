@@ -21,7 +21,7 @@ macOS can retain an enabled entry while refusing access to a newly signed develo
 2. In Privacy & Security, find the companion's Accessibility entry (called **Device Control and Data Access** on the tested macOS27). If it remains unusable, remove only **Keepresso Mobile**, add `/Applications/Keepresso Mobile.app` again, and approve it locally.
 3. Return to the companion and press **Recheck**. If macOS still reports the old result, use **Restart app** once, then recheck. Restart closes the setup sheet and preserves its summary; it does not grant permission itself.
 
-Keep the official Keepresso entry separate. Reapproval does not require new phone pairing. Development signature changes can require renewed OS approval; pairing keys and other saved settings remain independent.
+Keep the official Keepresso entry separate. Reapproval does not require new phone pairing. Ad-hoc development signature changes can require renewed OS approval; pairing keys and other saved settings remain independent. The project signing rollout aims to retain privacy identity across updates with the same certificate; check its actual rollout/acceptance status in [MAC_SIGNING.md](MAC_SIGNING.md). An enabled Settings entry is still not proof of usable access. Never erase pairing or reset all permissions to recover a signing mismatch.
 
 ## Replace a sender key
 
@@ -67,3 +67,9 @@ Legacy Keychain entries are not kept in sync after private-file migration and ca
 ## Clean reconstruction
 
 Install the canonical Mac app and Android package, restore native Keepresso independently, pair the phone, and create/import your own Spark/FCM setup. No Vercel deployment, Firestore database or original backup text file is needed. Keep payment/billing disabled. Verify status, explicit trigger checks and locked-phone alerts before relying on it.
+
+## Lost Mac release signing configuration
+
+This is a maintainer task, separate from pairing and Firebase. A lost Mac does not require a new signing identity: the dedicated `macos-release` GitHub environment retains the encrypted project identity/password. Run the reviewed Mac-only trial workflow from a replacement Mac or GitHub's UI; do not copy a private key into a public issue or the repository.
+
+GitHub cannot reveal an existing secret for download. If an environment secret is deleted, restore **the same** PKCS12 identity and password from an independent encrypted backup, if one was made. Check the public certificate fingerprint before approving another signing job. If the only identity is genuinely lost, stop release signing and explicitly plan a new signer/permission transition; never silently create a fresh certificate or publish ad-hoc as a substitute. Phone authorization does not need to be removed.

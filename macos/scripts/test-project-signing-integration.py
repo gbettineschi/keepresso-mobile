@@ -115,12 +115,28 @@ def main():
                 assert all(name.startswith('KeepressoMobile.app/') for name in archive.namelist())
                 archive.extractall(root / 'checked')
             run(['codesign', '--verify', '--deep', '--strict', str(root / 'checked/KeepressoMobile.app')])
+            # Exercise the CI import/cleanup wrapper with fixture secrets only.
+            spec = importlib.util.spec_from_file_location('ci_signing', Path(__file__).with_name('ci-project-signing.py'))
+            ci = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(ci)
+            runner_temp = root / 'runner-temp'
+            runner_temp.mkdir(mode=0o700)
+            event = root / 'event.json'
+            event.write_text(json.dumps({'inputs': {'tag': 'v0.0.3', 'mode': 'mac-trial', 'expected_sha': 'a' * 40}}))
+            import base64
+            environment = {'RUNNER_TEMP': str(runner_temp), 'GITHUB_REPOSITORY': 'gbettineschi/keepresso-mobile',
+                           'GITHUB_EVENT_NAME': 'workflow_dispatch', 'GITHUB_REF': 'refs/heads/fixture',
+                           'GITHUB_SHA': 'a' * 40, 'GITHUB_EVENT_PATH': str(event),
+                           'MACOS_SIGNING_PKCS12_BASE64': base64.b64encode((root / 'cert1/fixture.p12').read_bytes()).decode(),
+                           'MACOS_SIGNING_PKCS12_PASSWORD': password, 'MACOS_SIGNING_CERTIFICATE_SHA1': certs[0][0]}
+            ci.sign(source, root / 'ci-signed.zip', 'a' * 40, environment)
+            assert not (runner_temp / 'keepresso-project-signing').exists()
             info = a / 'Contents/Info.plist'
             info.write_bytes(info.read_bytes() + b'\n')
             assert run(['codesign', '--verify', '--deep', '--strict', str(a)], check=False).returncode != 0
             assert identity(a, check=False).returncode != 0, 'Tampered resources must invalidate reusable identity'
             record = dict(sameCertificateAcrossUpdates=True, changedSignedBytes=True, wrongCertificateRejected=True,
-                          tamperingRejected=True, realArchiveSignerPassed=True, actualPrivacyIdentityPassed=True,
+                          tamperingRejected=True, realArchiveSignerPassed=True, actualPrivacyIdentityPassed=True, realCIWrapperPassed=True,
                           tccGranted=False, trustChanged=False)
         finally:
             if keychain.exists():

@@ -30,6 +30,21 @@ import KeepressoCore
 }
 
 struct CompanionSetupFlowTests {
+    @Test @MainActor func missingValidatedIdentityNeverPersistsOrReusesSetup() async {
+        let memory = SetupMemory(), driver = SetupDriver()
+        driver.states[.bluetooth] = .authorized
+        let invalid = scope(build: "")
+        let flow = CompanionSetupFlow(scope: { invalid }, driver: driver, storage: memory)
+        flow.presentIfNeeded(); await flow.start()
+        #expect(!flow.checkpointForRestart())
+        flow.finish()
+        #expect(memory.data == nil)
+        memory.data = Data(#"{"version":1,"scope":{"buildIdentity":"","requirements":["nearby"],"steps":["bluetooth"]},"deferred":false,"outcomes":[],"resumeSummary":false}"#.utf8)
+        let next = CompanionSetupFlow(scope: { invalid }, driver: driver, storage: memory)
+        next.presentIfNeeded()
+        #expect(next.presented)
+    }
+
     @Test @MainActor func certificateUpdateDoesNotRestartCompletedOrDeferredSetup() async {
         let memory = SetupMemory(), driver = SetupDriver()
         driver.states[.bluetooth] = .authorized
