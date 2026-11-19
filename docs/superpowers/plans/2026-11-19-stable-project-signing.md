@@ -33,7 +33,7 @@
 
 ---
 
-### Task1: Validated consent identity across builds
+### Task 1: Validated consent identity across builds
 
 **Files:** create `macos/Sources/CompanionCore/CompanionPrivacyIdentity.swift`, `macos/Sources/KeepressoMac/CompanionAuthorizationIdentity.swift`, `macos/Tests/CompanionCoreTests/CompanionPrivacyIdentityTests.swift`; modify `TriggerFolderSetup.swift`, `TriggerObserver.swift`, `CompanionModel.swift`, `App.swift`; extend `CompanionSetupFlowTests.swift` / `TriggerFolderAccessTests.swift` / `CompanionSteamObservationTests.swift` as needed.
 
@@ -45,7 +45,7 @@
 - [ ] Add coverage that setup/folder/Steam consent carries across a same-certificate update but a changed folder/root/config/authority does not; prior ad-hoc records do not silently migrate to certificate identity.
 - [ ] Run `swift test --package-path macos --no-parallel` (all pass), `swift build --package-path macos --product KeepressoMac`, upstream verification; commit.
 
-### Task2: Strict project signer and signing-only packaging
+### Task 2: Strict project signer and signing-only packaging
 
 **Files:** modify `macos/scripts/sign-app.sh`, `test-sign-app.py`; create `macos/scripts/sign-candidate.py`, `macos/scripts/test-sign-candidate.py`, `macos/scripts/test-project-signing-integration.py`.
 
@@ -57,7 +57,7 @@
 - [ ] Add an explicit opt-in real integration fixture using only a temporary test keychain/one-day certificate. Build A/B with different bytes/versions, require mutual default-DR validation and equal read-only privacy identity, reject wrong signer and tampering, clean temporary material/search-list changes. Never grant TCC or trust.
 - [ ] Run Python signer/package suites and the opt-in real fixture against a hidden staged keyless Mac bundle. Existing package self-check stays in the keyless build path. Commit.
 
-### Task3: Isolated release signing and Mac-only candidate delivery
+### Task 3: Isolated release signing and Mac-only candidate delivery
 
 **Files:** modify `.github/workflows/release.yml`; create `macos/scripts/ci-project-signing.py`, `scripts/tests/test_macos_signing_workflow.py`; update `docs/MAC_SIGNING.md`, `docs/releasing.md`, `docs/RECOVERY.md`.
 
@@ -69,7 +69,7 @@
 - [ ] Document public self-signed/Gatekeeper limitations, one-time transition, secrets/backup custody, lost-key behavior, stable consent scope and exact trial acceptance. No production secrets or public tag is created by this task.
 - [ ] Run contract + signer suites and workflow syntax validation with available tooling, plus keyless package/self-check. Commit.
 
-### Task4: Final review, provisioning handoff and local acceptance
+### Task 4: Final review, provisioning handoff and local acceptance
 
 **Files:** add local/private verification record and update the design status; one final PR description with generic LLM disclosure.
 
