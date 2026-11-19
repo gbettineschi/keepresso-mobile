@@ -1,6 +1,6 @@
 # Stable project signing and permission continuity
 
-Status: proposed for owner approval. No production key, GitHub signing secret, installed app or macOS privacy grant has been changed for this investigation.
+Status: design approved by the owner on 19 November 2026; production provisioning still requires approval of the concrete signing commit. No production key, GitHub signing secret, installed app or macOS privacy grant has been changed for this investigation.
 
 ## Intent and observed causes
 
@@ -50,7 +50,7 @@ Prepare one signed candidate from trusted CI for `/Applications/Keepresso Mobile
 - GitHub environments: https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments
 - yabai development signing: https://github.com/asmvik/yabai/wiki/Installing-yabai-(from-HEAD)
 
-Investigation and writing conducted by an LLM. The project-wide free identity and GitHub custody are the owner's preferred candidate; details above remain a proposal until approved.
+Investigation and writing conducted by an LLM. The project-wide free identity and GitHub custody are the owner's preferred candidate; the owner approved implementation on 19 November 2026.
 
 ## Builder check and remaining owner approval
 
