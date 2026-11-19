@@ -1,50 +1,97 @@
-# Mac signing and repeated Keychain prompts
+# Mac signing and permissions across updates
 
-## Owner decision: no paid signing prerequisite
+Keepresso Mobile can use one persistent, self-signed **project certificate** for Mac releases. Users install the app; they do not create or import a signing certificate. No paid Apple account is required for this signing method.
 
-On 28 October, the owner declined paid Developer ID membership and asked to proceed with the free/open-source development build, accepting remaining macOS approval prompts. Apple-account setup is no longer a prerequisite for connection fixes or local trial updates. The Apple-certificate path below is optional background documentation, not the selected deployment plan. Do not publish builds using the owner's Apple identity without a separate instruction.
+**Rollout verified on 19 November 2026:** the three-year project identity is provisioned in the protected GitHub environment. Signed trial0.6.13 received the owner's initial setup approvals; signed trial0.6.14 was then installed at the same path. Its automatic setup did not restart. An explicit review revalidated configured folders and showed Bluetooth, Wi-Fi name, folders and remote controls Ready without new OS permission dialogs. The setup record, pairing credentials and native Keepresso binary were preserved. Existing pairing also connected over Internet. Public downloads through v0.6.12 remain ad-hoc; no new public release has been published yet.
 
-The owner subsequently approved an owner-only private credential file and the reversed BLE transport for0.5.0. Existing Keychain entries are read once under the existing silent/explicit approval policy, then validated, atomically saved and reloaded before connecting. A valid file bypasses all Keychain APIs on later launches and updates. No paid membership is required for this storage choice. See [Recovery](RECOVERY.md). The file has less per-app isolation: other apps running as the same Mac user may read it. Other OS approval dialogs may still occur with ad-hoc updates; this does not claim notarization or a stable macOS privacy identity.
+This trial exercised the owner's configured features, not calendar/Steam or an intentionally revoked real grant. Automated tests cover denied-state preservation. A separate Nearby handshake/write failure was observed and is under investigation; permission readiness does not establish successful Bluetooth authentication.
 
-## Privacy permission mismatch observed on 29 October
+## What this fixes
 
-The canonical 0.5.5/17 app still reported Accessibility denied after a manual Quit/reopen and after the owner toggled its enabled switch off/on. System logs confirmed a code-requirement mismatch: the off/on operation saved the current build's requirement, but the subsequent permission check still compared against an older ad-hoc requirement. A separate read-only Security framework check confirmed that the running process matched the installed executable. This was an OS permission identity mismatch, not evidence of lost pairing. Do not add private entitlements or treat the enabled Settings switch as proof of usable access.
+Ad-hoc signing identifies a particular build. Changing the executable can make macOS stop recognizing an old privacy authorization. Separately, the companion previously bound its setup and local trigger-preparation records to the executable's version and bytes, reopening setup on every build.
 
-With explicit owner approval, `tccutil reset Accessibility local.keespresso.companion` succeeded. This resets only this companion's Accessibility decision. After approving the current app in System Settings and selecting Recheck, the owner confirmed that Remote trigger controls showed Ready. This verifies recovery for this build, without a pairing reset; it does not establish permission persistence across future ad-hoc updates. A successful reset or enabled switch alone would not establish acceptance. Do not reset all permissions, restart the privacy daemon, clear pairing or repeat resets automatically. The built-in Restart app action also failed in this trial; its real-process failure remains unresolved despite passing injected sequencing tests.
+A validated certificate-signed build now uses the exact companion identifier and signing certificate for those records. The same certificate can keep that identity across updates. A different certificate, invalid signature or changed folder/Steam configuration does not inherit the old preparation. The saved record never grants an OS permission: current framework permission checks still apply.
 
-The companion's own setup record and folder/Steam preparation proofs are bound to the executable build identity. An update can therefore reopen the guided setup even when macOS retains a permission. Reopening setup is separate from revoking an OS grant: already-authorized framework steps are skipped, while explicit local preparation is revalidated. Current ad-hoc trial updates do not promise privacy permission persistence across builds, and no paid signing or Apple-account setup is required by the selected deployment plan.
+The first move from an ad-hoc build may require one final approval. Test two consecutive project-signed builds before promising persistence. Revoked permissions remain revoked.
 
-The incident and optional certificate discussion below describe the old Keychain-based builds and remain background evidence. No Keychain ACL widening, signing private-key sharing or credential reset is used.
+## What this does not fix
 
-## Confirmed incident
+Self-signing is **not Developer ID signing or notarization**. macOS may still block a downloaded app until the user explicitly opens it. Do not install global certificate trust, weaken Gatekeeper or reset privacy permissions automatically.
 
-After the owner installed Mac 0.4.4 (8), saved-pairing unlock produced four password prompts. Read-only OS logs show exactly four prompt/approval pairs in the same managed process: decrypt authorization (`24`) and partition authorization (`65538`) for each of the two existing credential entries. The installed signature is ad-hoc, its designated requirement is a build hash, and its TeamIdentifier is absent. Old ACLs referenced earlier build hashes. No duplicate loader, incorrect password attempt, missing pairing or credential reset is inferred from these logs.
+Historical pairing builds used Keychain items with a separate per-app partition check. A self-signed certificate is not a fix for that check. Current connections use the approved private credential file; an update with a valid file does not reload old Keychain items. Signing never resets phone pairing.
 
-There are two identity checks. A consistent designated requirement lets the ordinary ACL recognize an update. The Keychain partition must also recognize its signer. [Apple's securityd source](https://github.com/apple-oss-distributions/Security/blob/main/securityd/src/clientid.cpp) assigns supported Apple-issued developer/distribution certificates a `teamid:` partition and other signed code a `cdhash:` partition. A self-signed certificate alone is therefore not a complete fix. The SDK constants are in `Security.framework/Headers/cssmapple.h`; [Apple TN3127](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements) explains designated requirements and ad-hoc identity changes.
+## Public project certificate
 
-On 26 October, a metadata-only inspection confirmed both existing items still present and the login Keychain unlocked. Their partition entries did not include the current installed ad-hoc build: devices retained an earlier build hash and relay allowed apple:. Consequently a same-build process restart can ask again if the earlier approvals were not retained. This is not loss of pairing and is not evidence that a new QR setup is needed. No credential values were read by that inspection and no ACLs were changed.
+The [public certificate](signing/keepresso-mobile-project.pem) identifies this project's Mac signer. It contains no private key and is supplied for verification, not to install global certificate trust.
 
-## Prepared owner-build path
+- Valid from 19 November 2026 through 19 November 2029, 12:59:23 UTC (three calendar years).
+- Certificate SHA-1: `8945c703d1ab6a3d21e80feab6c8a0292449ed52`.
+- Certificate SHA-256: `9c1cf1889b0b5a67f2e4ab642c82cbae16f6fea78be40f18d3e2aa6782ff24bf`.
 
-The packaging script accepts an explicitly chosen Apple Development, Mac Distribution or Developer ID Application certificate. Use its exact 40-hex SHA-1 fingerprint from the owner's installed signing identity. The fingerprint identifies a certificate; it is not a secret or the private key.
+## Where the private key lives
+
+Use a dedicated **macos-release** GitHub Actions environment with these secrets:
+
+| Secret | Value |
+|---|---|
+| `MACOS_SIGNING_PKCS12_BASE64` | Base64 of the password-encrypted project PKCS12 identity |
+| `MACOS_SIGNING_PKCS12_PASSWORD` | Its password: minimum 8 characters; generate 32+ random characters |
+| `MACOS_SIGNING_CERTIFICATE_SHA1` | Exact 40-hex signing certificate fingerprint; this fingerprint is public |
+
+Environment secrets remain private in a public repository. **Before uploading any key, require GitHub-enforced approval exclusively from the repository owner and disable administrator bypass.** Allow only `v*` version tags and, temporarily, the exact approved trial branch. Remove that branch rule after acceptance. Self-approval can remain enabled for this owner-operated repository: the owner or an explicitly authorized agent acting through the owner account must verify the exact source commit before approving its signing job. The typed SHA binds a dispatch to a commit; it is not evidence of owner review. If these protection rules cannot be configured, stop provisioning; there is no unprotected fallback. The signing job verifies the environment metadata before its private-key step. [GitHub documents these controls](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments).
+
+The private key must never be committed, bundled with the app, printed, attached to a PR, stored in Actions artifacts or passed to ordinary build jobs. Generate it only after explicit maintainer approval. The current identity is a project-only RSA-3072/SHA-256 code-signing certificate with three-year validity. It was generated in a private temporary directory, exported as encrypted PKCS12 and uploaded through standard input to the three environment secrets. Record the public certificate/fingerprints. Remove temporary files after successful upload; do not retain the private identity in the Mac's login keychain.
+
+GitHub is the primary key store, not a recoverable download archive: secret values cannot be read back from its UI. Keep an independent encrypted backup if the maintainer chooses a destination. **No independent private-key backup has yet been created or selected.** The public certificate is not a signing-key backup. Losing a Mac does not affect signing while GitHub retains the key. Losing the only key requires a deliberate signer replacement and users may need to approve permissions again. Never generate a replacement silently.
+
+## The release boundary
+
+1. A **keyless build job** checks out the exact commit, runs tests, packages the app ad-hoc and runs its safe self-check.
+2. A **fresh signing runner** waits for the mandatory owner approval in `macos-release`. It downloads only the named candidate from that same workflow run and verifies the checkout SHA.
+3. The signer imports the configured identity into a temporary keychain accessible to `codesign`. It validates a bounded single-app archive, rejects nested executables and key material, signs without running candidate code, and verifies the exact certificate and default designated requirement.
+4. Only the signed ZIP and public signing receipt are uploaded. Temporary key files and keychain are removed even after errors; artifacts expire after one day.
+
+A missing key, wrong fingerprint or invalid app fails the job. There is no ad-hoc fallback in project mode. Never call `build-app.sh`, `package-release.sh`, an app self-check or the candidate executable in the production signing job.
+
+Ordinary PR CI stays keyless. Local development remains ad-hoc unless an identity is explicitly supplied. The older `apple` signing profile retains its stricter Apple-chain/legacy-Keychain checks; the new `project` profile stabilizes privacy identity without claiming those Apple-chain guarantees.
+
+## Unpublished Mac trial
+
+In **Release development preview**, choose the approved branch, `mode: mac-trial`, a new numeric version such as `v0.6.13`, and its full reviewed commit in `expected_sha`. A moved branch fails the check. The workflow path already exists on `main`, so the trial can run before merging its implementation branch.
+
+Use `scripts/verify-macos-signing-environment.py` with the repository, environment and deployment-ref JSON returned by the GitHub API to verify these protection settings before key upload; the workflow repeats that check before signing.
+
+The trial creates only a signed Mac artifact, retained for one day. It does not run Android signing, publish a GitHub release or update Homebrew. Download `Keepresso-Mac-release`, verify the ZIP against `signing.json`, then verify the certificate and strict signature. Replace only `/Applications/Keepresso Mobile.app`; keep pairing, settings and Application Support.
+
+For acceptance:
+
+- Install candidate A and handle any initial privacy approvals locally. Check the actual usable permissions, including existing allowed and deliberately denied features, not just enabled switches in Settings.
+- Build candidate B with a different version/bytes and the **same certificate**, then update the same installed path.
+- Confirm the two designated requirements and read-only authorization identities match; setup does not restart unnecessarily; granted features still work and declined features remain declined; saved pairing still reconnects.
+- If macOS still rejects permission or demands extra certificate trust, stop and report it. Do not clear TCC, auto-grant permissions or add trust to make the trial pass.
+
+## In-place update and the managed process
+
+Keep one installed app at `/Applications/Keepresso Mobile.app`. Before replacing it, stop both its foreground app and its exact per-user managed job, `local.keepresso.mobile.follow`. That job's process name is just `KeepressoMac`; matching only an absolute command path can miss it. An old registered job can otherwise restart the previous executable while the bundle is moving.
+
+The new canonical app automatically rebinds an already-authorized stale registration. Do not override revoked Login Items consent, erase pairing, reset TCC or launch an old copy from Trash to repair the transition. This procedure changes startup registration, not the user's permission decisions.
+
+## Developer checks
 
 ```sh
-KEEPRESSO_CODESIGN_IDENTITY=YOUR_40_HEX_CERTIFICATE_FINGERPRINT \
-KEEPRESSO_REQUIRE_STABLE_SIGNING=1 \
-KEEPRESSO_APP_DESTINATION=/absolute/hidden-staging/Keepresso\ Mobile.app \
-bash macos/scripts/build-app.sh
+python3 macos/scripts/test-sign-app.py
+python3 macos/scripts/test-sign-candidate.py
+python3 macos/scripts/test-ci-project-signing.py
+python3 -m unittest discover -s scripts/tests -v
 ```
 
-Stable mode fails when no identity is supplied. An explicit identity never falls back to ad-hoc if unavailable or signing fails. The signer checks the exact certificate and bundle identifier, an Apple certificate chain matching securityd's stable-team classification, signature validity, and a certificate-based designated requirement. A development build without an identity remains ad-hoc and prints a warning; CI artifacts are development fixtures and should not be treated as the owner signing path.
+The tests above use injected tools and do not access real signing keys. An additional **opt-in** integration fixture uses one-day temporary test certificates/keychains, verifies actual signing and running-code identity across changed builds, rejects wrong signers/tampering, and checks cleanup. It never grants TCC or changes trust:
 
-This preparation does not provision a certificate. At investigation time there are zero valid code-signing identities in the owner's file-based Keychains. The owner does not want paid membership. [Xcode's signing workflow](https://help.apple.com/xcode/mac/current/en.lproj/dev60b6fbbc7.html) supports a free Personal Team; [Apple DTS demonstrated a local Mac app using a non-paying Personal Team](https://developer.apple.com/forums/thread/787500?answerId=861714022). The practical next step is Xcode → Settings → Apple Accounts → the owner's Personal Team → Manage Certificates → Apple Development. The owner handles Apple sign-in and two-factor authentication. Certificate issuance, compatible chain and actual cross-update Keychain behavior must be verified before declaring the fix enabled.
+```sh
+KEEPRESSO_APP_DESTINATION="$PWD/macos/.build/privacy-fixture/KeepressoMobile.app" bash macos/scripts/build-app.sh
+python3 macos/scripts/test-project-signing-integration.py \
+  --allow-temporary-keychain-probe \
+  --app macos/.build/privacy-fixture/KeepressoMobile.app
+```
 
-Xcode 27.1 is installed as of 26 October following the owner's authorization of the free setup. On 28 October, the owner completed Apple Account sign-in and the Personal Team is visible in Xcode. No code-signing identity is installed yet; certificate creation remains the next owner-controlled step. For reproducible repo checks, an explicit `DEVELOPER_DIR=/Library/Developer/CommandLineTools` keeps using the previous toolchain without changing the system's selection. Account/certificate setup does not require downloading mobile simulators or enrolling in a paid plan.
-
-The installed companion has no entitlement payload or embedded provisioning profile. [Apple TN3125](https://developer.apple.com/documentation/technotes/tn3125-inside-code-signing-provisioning-profiles) says a Mac app without restricted entitlements needs no provisioning profile. Thus the Personal Team's seven-day **profile** lifetime should not impose a weekly profile renewal on this app as currently built; this is an inference to verify during signing setup, not a claim that a certificate never expires.
-
-Once a suitable identity is available, keep the same signing team and compatible designated requirement for future builds. The first switch from the existing ad-hoc build may require a final owner Keychain approval. Stable signing does not bypass a locked Keychain, revoked consent or OS policy. Verify the actual next-update behavior before claiming the prompts are eliminated. Keep the signing private key under owner control, and export it only to an owner-approved secure backup if needed. Changing/loss of signing identity is separate from loss of phone pairing; never delete pairing to work around signature approval.
-
-## Verification boundary
-
-`python3 macos/scripts/test-sign-app.py` uses a fake signer and temporary app fixture, without real Keychain access. It verifies required-certificate gating, exact signer/identifier verification, unsupported-team rejection, no silent fallback, failure propagation and rejection of build-hash-based requirements. A normal real ad-hoc package/self-check can verify that development packaging still works; it cannot prove a persistent Apple certificate is present or that the owner has granted access across an update. No installed app is replaced merely to reproduce the four prompts.
+These signature checks do not replace the real permission acceptance above. See [Apple's designated-requirement explanation](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements) and [code-signing guidance](https://developer.apple.com/library/archive/technotes/tn2206/).

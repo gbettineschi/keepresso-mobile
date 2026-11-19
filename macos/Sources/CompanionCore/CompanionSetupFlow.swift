@@ -71,7 +71,7 @@ public struct CompanionSetupScope: Codable, Equatable, Sendable {
         let outcomes: [CompanionSetupKind: CompanionSetupStatus]
         let resumeSummary: Bool?
         func covers(_ candidate: CompanionSetupScope) -> Bool {
-            version == 1 && scope.buildIdentity == candidate.buildIdentity &&
+            version == 1 && !candidate.buildIdentity.isEmpty && scope.buildIdentity == candidate.buildIdentity &&
                 Set(candidate.requirements).isSubset(of: Set(scope.requirements))
         }
     }
@@ -98,7 +98,7 @@ public struct CompanionSetupScope: Codable, Equatable, Sendable {
             if record.resumeSummary == true {
                 // Restart is a one-shot continuation, never a new consent grant.
                 // Exact scope, including step ordering, is required here.
-                if record.version == 1, record.scope == candidate {
+                if record.version == 1, !candidate.buildIdentity.isEmpty, record.scope == candidate {
                     activeScope = candidate
                     outcomes = record.outcomes.filter { candidate.steps.contains($0.key) }
                     phase = .summary
@@ -299,7 +299,7 @@ public struct CompanionSetupScope: Codable, Equatable, Sendable {
     }
 
     @discardableResult private func persist(deferred: Bool, resumeSummary: Bool = false) -> Bool {
-        guard let activeScope else { return false }
+        guard let activeScope, !activeScope.buildIdentity.isEmpty else { return false }
         let record = Record(version: 1, scope: activeScope, deferred: deferred, outcomes: outcomes, resumeSummary: resumeSummary)
         guard let data = try? JSONEncoder().encode(record), data.count <= 65_536 else { return false }
         storage.save(data)

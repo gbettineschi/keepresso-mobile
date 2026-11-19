@@ -30,6 +30,43 @@ import KeepressoCore
 }
 
 struct CompanionSetupFlowTests {
+    @Test @MainActor func missingValidatedIdentityNeverPersistsOrReusesSetup() async {
+        let memory = SetupMemory(), driver = SetupDriver()
+        driver.states[.bluetooth] = .authorized
+        let invalid = scope(build: "")
+        let flow = CompanionSetupFlow(scope: { invalid }, driver: driver, storage: memory)
+        flow.presentIfNeeded(); await flow.start()
+        #expect(!flow.checkpointForRestart())
+        flow.finish()
+        #expect(memory.data == nil)
+        memory.data = Data(#"{"version":1,"scope":{"buildIdentity":"","requirements":["nearby"],"steps":["bluetooth"]},"deferred":false,"outcomes":[],"resumeSummary":false}"#.utf8)
+        let next = CompanionSetupFlow(scope: { invalid }, driver: driver, storage: memory)
+        next.presentIfNeeded()
+        #expect(next.presented)
+    }
+
+    @Test @MainActor func certificateUpdateDoesNotRestartCompletedOrDeferredSetup() async {
+        let memory = SetupMemory(), driver = SetupDriver()
+        driver.states[.bluetooth] = .authorized
+        let first = PrivacyCertificateFixtures.authority("build-A")
+        var required = scope(build: first)
+        let flow = CompanionSetupFlow(scope: { required }, driver: driver, storage: memory)
+        flow.presentIfNeeded(); await flow.start(); flow.finish()
+        required = scope(build: PrivacyCertificateFixtures.authority("build-B"))
+        let updated = CompanionSetupFlow(scope: { required }, driver: driver, storage: memory)
+        updated.presentIfNeeded()
+        #expect(!updated.presented)
+        driver.states[.bluetooth] = .denied
+        updated.review(); await updated.start(); updated.deferSetup()
+        let deferred = CompanionSetupFlow(scope: { required }, driver: driver, storage: memory)
+        deferred.presentIfNeeded()
+        #expect(!deferred.presented)
+        #expect(driver.requests.isEmpty)
+        required = scope(build: PrivacyCertificateFixtures.authority("build-C", certificate: PrivacyCertificateFixtures.b))
+        deferred.presentIfNeeded()
+        #expect(deferred.presented)
+    }
+
     @MainActor private func settle(_ condition: @escaping () -> Bool) async {
         for _ in 0..<200 where !condition() { await Task.yield() }
         #expect(condition())
