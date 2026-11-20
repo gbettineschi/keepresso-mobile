@@ -374,7 +374,9 @@ internal enum class MacConnectionStatus(val label: String) {
         }
     }
     Text(if (reachable && caps.flag(if (manual) "stopManual" else "startManual") != true) "Manual control unavailable. Check Keepresso and the Mac helper." else "", style = MaterialTheme.typography.labelSmall, minLines=2, maxLines=2)
-    TextButton(onClick = { confirm("sleep_now") }, enabled = can("sleepNow"), modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Bedtime, null); Spacer(Modifier.width(8.dp)); Text("Sleep now") }
+    // This opens confirmation, not a power command. The shared sleep flow
+    // verifies a fresh authorized route and reports failure instead of queuing.
+    TextButton(onClick = { confirm("sleep_now") }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Bedtime, null); Spacer(Modifier.width(8.dp)); Text("Sleep now") }
     Text(when { state.localSnoozedUntil?.isAfter(now) == true -> "Reminders snoozed on this phone until ${time(state.localSnoozedUntil)}"; reminders.text("snoozedUntil") != null -> "Reminders snoozed until ${time(parsed(reminders.text("snoozedUntil")))}"; reminders.flag("enabled") == false -> "Unattended brewing alert off"; reminders.flag("enabled") == true -> "Unattended brewing alert on"; else -> "Reminder status unknown" }, style = MaterialTheme.typography.labelSmall, minLines=2, maxLines=2)
 }
 

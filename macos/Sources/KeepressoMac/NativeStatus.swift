@@ -122,7 +122,7 @@ private struct NativeTriggerModeRequest: Encodable {
         let running = app != nil
         let kind = sessionKind(status, reported: record?.alerts?.brewingMode)
         let thermal = MacThermalReading(system: .current, report: record?.thermal, writtenAt: status?.writtenAt, now: now)
-        let sleepPort=running && status != nil ? IOPMFindPowerManagement(mach_task_self_):0
+        let sleepPort=running && status != nil ? SystemSleepConnection.open():0
         if sleepPort != 0{IOServiceClose(sleepPort)}
         let brewingAvailable = thermal.state != .critical && thermal.brewingPaused != true
         let directModeControl = record?.triggerMode?.supportsTriggerModeControl == true
@@ -277,7 +277,7 @@ private struct NativeTriggerModeRequest: Encodable {
         guard authorized(), !Task.isCancelled, status.fullWake else {
             return transition.observed ? .willSleep : .unconfirmed
         }
-        let port = IOPMFindPowerManagement(mach_task_self_)
+        let port = SystemSleepConnection.open()
         guard port != 0 else { return transition.observed ? .willSleep : .rejected }
 
         let accepted: Bool = {
