@@ -47,7 +47,7 @@ Current scope: retain official Keepresso updates and avoid maintaining a persona
 29. Respect Keepresso's separately configured end action. Do not describe allowing normal sleep as equivalent to issuing an immediate sleep command.
 30. Stopping a manual session and pausing automatic triggers are separate controls with separate effects.
 31. Sleep now confirms its consequences, stops relevant Keepresso holds/pauses triggers as required, and requests macOS sleep. Show command progress and the last acknowledged result; disconnection alone is not confirmation of completed sleep.
-32. Keep remote wake outside the initial scope. While asleep/unreachable, show last-known status and disable Mac-control actions.
+32. Keep remote wake outside the initial scope. While asleep/unreachable, show last-known status and disable Mac-control actions. Keep the Sleep now confirmation available, including during status refreshes. Its existing result flow may prepare a fresh authenticated connection, but never queues a power command for a future reconnect.
 33. Never replay an old power command automatically when the Mac reconnects.
 34. Do not blindly retry a command whose execution outcome is uncertain.
 

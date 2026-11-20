@@ -5,6 +5,7 @@ import CompanionCore
 import KeepressoCore
 import Darwin
 import OSLog
+import IOKit
 
 @main struct Entry {
     @MainActor static func main(){
@@ -52,6 +53,15 @@ import OSLog
             let identity = CompanionAuthorizationIdentity.current
             if let data = try? WireJSON.data(["identity": identity]) { try? FileHandle.standardOutput.write(contentsOf: data) }
             exit(identity.isEmpty ? 1 : 0)
+        }
+        if CommandLine.arguments.contains("--read-sleep-capability") {
+            // Discovery only, before app model, credentials or any power request.
+            let connection = SystemSleepConnection.open()
+            if connection != 0 { IOServiceClose(connection) }
+            if let data = try? WireJSON.data(["available": connection != 0]) {
+                try? FileHandle.standardOutput.write(contentsOf: data)
+            }
+            exit(connection == 0 ? 1 : 0)
         }
         if CommandLine.arguments.contains("--self-check"){
             // Branch before NSApplication, Keychain, BLE, timers, native status,
